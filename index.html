@@ -632,54 +632,13 @@ window.SGM_CONFIG = {
   SPREADSHEET_ID:    '',
   HOJA_BITACORA:     'BITACORA',
   HOJA_CLIENTES:     'CLIENTES',
-  PIN_ADMIN: '071288',
   NUMERO_EDUARDO: '525547977723',
 
-  // ── PINs DE AGENTES (3 dígitos) ─────────────────────────
-  // Formato: 'NOMBRE': 'PIN'
-  PINES_AGENTE: {
-    'RIGO':      '101',
-    'RAFAEL':    '102',
-    'ANGÉLICA':  '103',
-    'LUIS':      '104',
-    'MARCO':     '105',
-    'JAQUELINE': '106',
-    'ANTONIO':   '107',
-    'ALBERTO':   '108',
-    'CALEB':     '109',
-    'JUANJOSE':  '110',
-  },
+  // F1b: PIN_ADMIN, PINES_AGENTE y CLAVES_CLIENTE se movieron a env vars de
+  // Netlify (ADMIN_PIN, AGENT_PINS, CLIENT_CODES). Las valida server-side
+  // /.netlify/functions/auth. Los nombres de agentes y la lista de clientes
+  // (C.CLIENTES) siguen en el HTML porque son públicos, no son credenciales.
 
-  // ── CLAVES DE ACCESO POR CLIENTE ─────────────────────────
-  // Formato: 'PREFIX': 'CLAVE'
-  // Cada cliente entra con su empresa + esta clave
-  CLAVES_CLIENTE: {
-    'TGIO':     'TGIO2026',
-    'TALF':     'TALF2026',
-    'GAJ':      'GAJ2026',
-    'DEH':      'DEH2026',
-    'DHAR':     'DHAR2026',
-    'RECA':     'RECA2026',
-    'MAC':      'MAC2026',
-    'ATZ':      'ATZ2026',
-    'SERI':     'SERI2026',
-    'DEL':      'DEL2026',
-    'ECOM':     'ECOM2026',
-    'LMAN':     'LMAN2026',
-    'LTOL':     'LTOL2026',
-    'PANF':     'PANF2026',
-    'CEMI':     'CEMI2026',
-    'PORTUR':   'PORTUR2026',
-    'TECNO':    'TECNO2026',
-    'PUROSON':  'PUROSON2026',
-    'AST':      'AST2026',
-    'GZAR':     'GZAR2026',
-    'GRUV':     'GRUV2026',
-    'ISM':      'ISM2026',
-    'ROG':      'ROG2026',
-    'VENETIAMOT': 'VENETIA2026',
-    'TOLUT':      'TOLUT2026',
-  },
   PRECIOS: {
     'DIESEL':   26.50,
     'EXTRA':    24.80,
@@ -2057,23 +2016,22 @@ window.SGM_CONFIG = {
 
           <hr class="divider">
 
-          <!-- ── PINs DE AGENTES ────────────────────────── -->
+          <!-- ── F1b: LOGIN SERVER-SIDE ───────────────── -->
           <hr class="divider">
-          <div class="h3 mb-8">🔐 PINs de Agentes</div>
-          <div class="label mb-12" style="font-size:10px;color:var(--fg-4);">
-            PIN de 3 dígitos que cada despachador usa para entrar. Solo números.
+          <div class="h3 mb-8">🔐 Credenciales</div>
+          <div class="msg msg-info" style="font-size:12px;line-height:1.7;">
+            El login ahora se valida en <code>/.netlify/functions/auth</code>. Las credenciales viven en Netlify → <strong>Site config → Environment variables</strong>, marcadas como <em>Secret</em>:
+            <ul style="margin:8px 0 0 18px;padding:0;">
+              <li><code>ADMIN_PIN</code> — PIN maestro de administrador</li>
+              <li><code>AGENT_PINS</code> — JSON con PIN por agente</li>
+              <li><code>CLIENT_CODES</code> — JSON con clave por cliente</li>
+              <li><code>AUTH_SECRET</code> — clave aleatoria que firma los tokens</li>
+            </ul>
+            Para cambiar un PIN o clave: edita el valor de la env var y redeploya. Las credenciales nunca regresan al navegador.
           </div>
-          <div id="cfg-pines-lista" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;"></div>
-          <button class="btn btn-ghost btn-sm mb-20" onclick="renderPinesConfig()">🔄 Ver / editar PINs</button>
 
-          <!-- ── CLAVES DE CLIENTES ─────────────────────── -->
-          <hr class="divider">
-          <div class="h3 mb-8">🔑 Claves de Acceso por Cliente</div>
-          <div class="label mb-12" style="font-size:10px;color:var(--fg-4);">
-            Clave que cada cliente usa para entrar a su portal. Mínimo 4 caracteres.
-          </div>
-          <div id="cfg-claves-lista" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;"></div>
-          <button class="btn btn-ghost btn-sm mb-20" onclick="renderClavesConfig()">🔄 Ver / editar claves</button>
+          <div id="cfg-pines-lista" class="hidden"></div>
+          <div id="cfg-claves-lista" class="hidden"></div>
 
           <hr class="divider">
 
@@ -2098,11 +2056,8 @@ window.SGM_CONFIG = {
 
           <hr class="divider">
 
-          <div class="h3 mb-16">Cambiar PIN de Admin</div>
-          <div class="grid-2">
-            <input id="new-pin" class="inp inp-sm" type="password" placeholder="Nuevo PIN">
-            <button class="btn btn-ghost" onclick="changePin()">CAMBIAR PIN</button>
-          </div>
+          <!-- F1b: input dejado solo por compat si otro código lo referencia -->
+          <input id="new-pin" type="hidden">
 
           <hr class="divider">
           <div class="h3 mb-16">Gestión de Saldos</div>
@@ -2737,33 +2692,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Cargar config guardada en localStorage
-  // NOTA: Los valores hardcodeados en SGM_CONFIG tienen prioridad sobre localStorage
-  // para SHEETS_API_KEY y APPS_SCRIPT_URL (evita que se pierdan al cambiar navegador)
-  const lsPin = localStorage.getItem('sgm_PIN_ADMIN');
-  if(lsPin) C.PIN_ADMIN = lsPin;
-
   // API Key de Google: siempre usar hardcodeada (más confiable)
   C.SHEETS_API_KEY = window.SGM_CONFIG.SHEETS_API_KEY;
 
-  // Claves cliente: combinar hardcodeadas con las que admin haya personalizado
-  try {
-    const savedClaves = JSON.parse(localStorage.getItem('sgm_claves_cliente') || '{}');
-    if(Object.keys(savedClaves).length > 0) {
-      C.CLAVES_CLIENTE = { ...window.SGM_CONFIG.CLAVES_CLIENTE, ...savedClaves };
-    }
-  } catch(e) {}
-
-  // PINs de agentes: combinar hardcodeados con los personalizados
-  try {
-    const savedPines = JSON.parse(localStorage.getItem('sgm_pines_agente') || '{}');
-    if(Object.keys(savedPines).length > 0) {
-      C.PINES_AGENTE = { ...window.SGM_CONFIG.PINES_AGENTE, ...savedPines };
-    }
-  } catch(e) {}
-
   // Apps Script URL: siempre usar hardcodeada
   C.APPS_SCRIPT_URL = window.SGM_CONFIG.APPS_SCRIPT_URL;
+
+  // F1b: limpiar cualquier residuo de credenciales que haya quedado en
+  // localStorage antes de mover el login al server. Ya no sirven.
+  localStorage.removeItem('sgm_PIN_ADMIN');
+  localStorage.removeItem('sgm_pines_agente');
+  localStorage.removeItem('sgm_claves_cliente');
 
   // F0: las keys de IA ya no viven en el cliente. La API corre por /.netlify/functions/ia.
   // Limpiar cualquier key vieja guardada en localStorage para no dejar restos.
@@ -2879,70 +2818,73 @@ function toggleTheme() {
   }
 })();
 
-function doLogin() {
-  const val = ($('login-input')?.value||'').trim().toUpperCase();
-  $('login-err')?.classList.add('hidden');
+// F1b: login server-side. La función /.netlify/functions/auth valida las
+// credenciales contra env vars de Netlify y regresa un token firmado.
+async function doLogin() {
+  const errEl = $('login-err');
+  errEl?.classList.add('hidden');
+
+  const body = { tipo: loginType };
 
   if(loginType === 'agente') {
     const nombre = $('login-agente-select')?.value;
     const isla   = $('login-isla')?.value || '1';
     const pin    = ($('agente-pin')?.value || '').trim();
+    if(!nombre) return showMsg('login-err','⚠️ Selecciona tu nombre antes de entrar.','err');
+    if(!pin)    return showMsg('login-err','⚠️ Ingresa tu PIN de 3 dígitos.','err');
+    Object.assign(body, { nombre, isla, pin });
 
-    if(!nombre) { showMsg('login-err','⚠️ Selecciona tu nombre antes de entrar.','err'); return; }
-    if(!pin)    { showMsg('login-err','⚠️ Ingresa tu PIN de 3 dígitos.','err'); return; }
+  } else if(loginType === 'admin') {
+    const pin = ($('login-input')?.value || '').trim();
+    if(!pin) return showMsg('login-err','⚠️ Ingresa el PIN maestro.','err');
+    body.pin = pin;
 
-    // Validar PIN
-    const pinEsperado = C.PINES_AGENTE?.[nombre] || '';
-    if(!pinEsperado || pin !== pinEsperado) {
-      showMsg('login-err','❌ PIN incorrecto. Contacta al administrador.','err');
-      const pinInp = $('agente-pin');
-      if(pinInp) { pinInp.value = ''; pinInp.focus(); }
-      const lcard = document.querySelector('.login-card');
-      if(lcard) { lcard.classList.remove('shake'); void lcard.offsetWidth; lcard.classList.add('shake'); }
-      return;
-    }
+  } else if(loginType === 'cliente') {
+    const prefijo = $('cliente-select')?.value;
+    const clave   = ($('cliente-clave')?.value || '').trim();
+    if(!prefijo) return showMsg('login-err','⚠️ Selecciona tu empresa','err');
+    if(!clave)   return showMsg('login-err','⚠️ Ingresa tu clave de acceso','err');
+    Object.assign(body, { prefijo, clave });
+  }
 
-    STATE.session = { tipo: 'agente', nombre, isla };
-    enterApp();
+  const btnLogin = document.querySelector('.btn-red.btn-full');
+  const btnLabel = btnLogin?.textContent;
+  if(btnLogin) { btnLogin.disabled = true; btnLogin.textContent = 'ENTRANDO...'; }
+
+  let res, data;
+  try {
+    res = await fetch('/.netlify/functions/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    data = await res.json().catch(() => ({}));
+  } catch(e) {
+    if(btnLogin) { btnLogin.disabled = false; btnLogin.textContent = btnLabel; }
+    return showMsg('login-err','❌ Sin conexión con el servidor. Intenta de nuevo.','err');
+  }
+
+  if(btnLogin) { btnLogin.disabled = false; btnLogin.textContent = btnLabel; }
+
+  if(!res.ok || !data.ok) {
+    showMsg('login-err','❌ ' + (data.error || 'Credenciales incorrectas'), 'err');
+    ['agente-pin','login-input','cliente-clave'].forEach(id => {
+      const inp = $(id); if(inp && inp === document.activeElement) inp.value = '';
+    });
+    const lcard = document.querySelector('.login-card');
+    if(lcard) { lcard.classList.remove('shake'); void lcard.offsetWidth; lcard.classList.add('shake'); }
     return;
   }
 
-  if(loginType === 'admin') {
-    const pinGuardado = localStorage.getItem('sgm_PIN_ADMIN') || C.PIN_ADMIN || '071288';
-    // Comparación simple: evitar timing attacks con comparación de longitud primero
-    const match = val.length === pinGuardado.length && val === pinGuardado;
-    if(match) {
-      STATE.session = { tipo: 'admin' };
-      enterApp();
-    } else {
-      showMsg('login-err', 'PIN incorrecto', 'err');
-      const lcard = document.querySelector('.login-card');
-      if(lcard) { lcard.classList.remove('shake'); void lcard.offsetWidth; lcard.classList.add('shake'); }
-    }
-    return;
+  // Sesión aceptada — guardar sesión + token y entrar a la app
+  STATE.session = { ...data.session };
+  if(STATE.session.tipo === 'cliente' && STATE.session.prefijo) {
+    STATE.session.nombre = C.CLIENTES[STATE.session.prefijo] || STATE.session.prefijo;
   }
+  try { localStorage.setItem('sgm_session_token', data.token); } catch(_) {}
+  try { localStorage.setItem('sgm_session', JSON.stringify(STATE.session)); } catch(_) {}
 
-  if(loginType === 'cliente') {
-    const pref  = $('cliente-select')?.value;
-    const clave = ($('cliente-clave')?.value || '').trim().toUpperCase();
-    if(!pref)  { showMsg('login-err', '⚠️ Selecciona tu empresa', 'err'); return; }
-    if(!clave) { showMsg('login-err', '⚠️ Ingresa tu clave de acceso', 'err'); return; }
-
-    // Validar clave contra el config
-    const claveEsperada = (C.CLAVES_CLIENTE?.[pref] || '').toUpperCase();
-    if(!claveEsperada || clave !== claveEsperada) {
-      showMsg('login-err', '❌ Clave incorrecta. Contacta a Morgan Gasolineros.', 'err');
-      const inp = $('cliente-clave');
-      if(inp) { inp.value = ''; inp.focus(); }
-      const lcard = document.querySelector('.login-card');
-      if(lcard) { lcard.classList.remove('shake'); void lcard.offsetWidth; lcard.classList.add('shake'); }
-      return;
-    }
-
-    STATE.session = { tipo: 'cliente', prefijo: pref, nombre: C.CLIENTES[pref] };
-    enterApp();
-    return;
-  }
+  enterApp();
 }
 
 function enterApp() {
@@ -3080,6 +3022,9 @@ function doLogout() {
   closeLowMemoryCamera_(true);
   stopAutoRefresh();
   STATE.session = null;
+  // F1b: limpiar token de sesión server-side
+  try { localStorage.removeItem('sgm_session_token'); } catch(_) {}
+  try { localStorage.removeItem('sgm_session'); } catch(_) {}
   $('login-screen').classList.remove('hidden');
   $('app-shell').classList.add('hidden');
   $('login-input').value = '';
@@ -3102,86 +3047,19 @@ function getClienteSheets() {
   return merged;
 }
 
+// F1b: PINs y claves ahora viven en env vars de Netlify (ADMIN_PIN,
+// AGENT_PINS, CLIENT_CODES). Las funciones siguen aquí como no-ops para
+// que los botones viejos no revienten, pero muestran aviso al operador.
 function renderPinesConfig() {
   const el = $('cfg-pines-lista');
-  if(!el) return;
-  const agentes = Object.keys(C.PINES_AGENTE || {});
-  el.innerHTML = agentes.map(nombre => {
-    const pinActual = C.PINES_AGENTE?.[nombre] || '';
-    return `
-      <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:12px;">
-        <div style="font-size:11px;font-weight:700;color:var(--fg-2);margin-bottom:8px;">${nombre}</div>
-        <div style="display:flex;gap:6px;align-items:center;">
-          <input id="pin-inp-${nombre}" type="text" class="inp" value="${pinActual}"
-            maxlength="3"
-            style="width:70px;font-size:18px;letter-spacing:6px;text-align:center;padding:6px 8px;font-family:monospace;font-weight:700;"
-            placeholder="000"
-            oninput="this.value=this.value.replace(/[^0-9]/g,'')"
-            onkeydown="if(event.key==='Enter')cambiarPin('${nombre}')">
-          <button class="btn btn-ghost btn-sm" onclick="cambiarPin('${nombre}')" style="font-size:10px;padding:6px 10px;">✅</button>
-        </div>
-      </div>`;
-  }).join('');
+  if(el) el.innerHTML = `<div class="msg msg-info" style="grid-column:1/-1;font-size:12px;line-height:1.6;">Los PINs de agentes se gestionan desde <strong>Netlify → Site config → Environment variables → <code>AGENT_PINS</code></strong> (JSON). Para cambiar uno, edita el JSON y redeploya. Los valores nunca regresan al navegador.</div>`;
 }
-
-function cambiarPin(nombre) {
-  const inp = $(`pin-inp-${nombre}`);
-  const nuevoPin = inp?.value?.trim();
-  if(!nuevoPin || nuevoPin.length !== 3 || !/^[0-9]{3}$/.test(nuevoPin)) {
-    alert('El PIN debe ser exactamente 3 dígitos numéricos');
-    return;
-  }
-  if(!C.PINES_AGENTE) C.PINES_AGENTE = {};
-  C.PINES_AGENTE[nombre] = nuevoPin;
-  // Persistir en localStorage
-  try {
-    const saved = JSON.parse(localStorage.getItem('sgm_pines_agente') || '{}');
-    saved[nombre] = nuevoPin;
-    localStorage.setItem('sgm_pines_agente', JSON.stringify(saved));
-  } catch(e) {}
-  if(inp) { inp.style.borderColor = '#22c55e'; setTimeout(() => { if(inp) inp.style.borderColor = ''; }, 2000); }
-  console.log(`[SGM] PIN de ${nombre} actualizado`);
-}
-
 function renderClavesConfig() {
   const el = $('cfg-claves-lista');
-  if(!el) return;
-  el.innerHTML = Object.entries(C.CLIENTES).sort((a,b)=>a[1].localeCompare(b[1])).map(([pref, nom]) => {
-    const claveActual = C.CLAVES_CLIENTE?.[pref] || '';
-    return `
-      <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:12px;">
-        <div style="font-size:10px;font-weight:700;color:var(--fg-4);margin-bottom:4px;">${pref}</div>
-        <div style="font-size:11px;color:var(--fg-2);margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${nom}">${nom}</div>
-        <div style="display:flex;gap:6px;">
-          <input id="clave-inp-${pref}" type="text" class="inp" value="${claveActual}"
-            style="flex:1;font-size:11px;padding:6px 8px;font-family:monospace;letter-spacing:1px;"
-            placeholder="Nueva clave"
-            onkeydown="if(event.key==='Enter')cambiarClave('${pref}')">
-          <button class="btn btn-ghost btn-sm" onclick="cambiarClave('${pref}')" style="font-size:10px;padding:6px 10px;">✅</button>
-        </div>
-      </div>`;
-  }).join('');
+  if(el) el.innerHTML = `<div class="msg msg-info" style="grid-column:1/-1;font-size:12px;line-height:1.6;">Las claves de cliente se gestionan desde <strong>Netlify → Site config → Environment variables → <code>CLIENT_CODES</code></strong> (JSON). Para cambiar una, edita el JSON y redeploya.</div>`;
 }
-
-function cambiarClave(pref) {
-  const inp = $(`clave-inp-${pref}`);
-  const nuevaClave = inp?.value?.trim().toUpperCase();
-  if(!nuevaClave || nuevaClave.length < 4) {
-    alert('La clave debe tener al menos 4 caracteres');
-    return;
-  }
-  if(!C.CLAVES_CLIENTE) C.CLAVES_CLIENTE = {};
-  C.CLAVES_CLIENTE[pref] = nuevaClave;
-  // Guardar en localStorage para persistencia
-  try {
-    const saved = JSON.parse(localStorage.getItem('sgm_claves_cliente') || '{}');
-    saved[pref] = nuevaClave;
-    localStorage.setItem('sgm_claves_cliente', JSON.stringify(saved));
-  } catch(e) {}
-  // Feedback visual
-  if(inp) { inp.style.borderColor = '#22c55e'; setTimeout(() => { if(inp) inp.style.borderColor = ''; }, 2000); }
-  console.log(`[SGM] Clave de ${pref} actualizada`);
-}
+function cambiarPin()   { alert('Este valor ahora se gestiona desde Netlify (AGENT_PINS).'); }
+function cambiarClave() { alert('Este valor ahora se gestiona desde Netlify (CLIENT_CODES).'); }
 
 function resetSheetConfig() {
   if(!confirm('¿Restablecer configuración de hojas a los valores originales?\n\nEsto limpia el localStorage y vuelve a usar la configuración del sistema.')) return;
@@ -6580,11 +6458,9 @@ async function testConnection() {
 }
 
 function changePin() {
-  const newPin = $('new-pin').value.trim();
-  if(newPin.length < 4) { alert('El PIN debe tener al menos 4 caracteres.'); return; }
-  saveConfig('PIN_ADMIN', newPin);
-  $('new-pin').value = '';
-  alert('PIN actualizado correctamente.');
+  // F1b: ya no se edita localmente. Hay que cambiar la env var ADMIN_PIN en Netlify.
+  alert('El PIN admin ahora se cambia desde Netlify → Site config → Environment variables → ADMIN_PIN. Después de editarlo hay que redeployar.');
+  const ni = $('new-pin'); if(ni) ni.value = '';
 }
 
 function ajustarSaldo(pref, nom) {
