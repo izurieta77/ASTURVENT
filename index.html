@@ -4066,6 +4066,39 @@ function applyFilters() {
   if(tipo === 'admin') renderAdminDash();
 }
 
+// ── F1a: helpers de scope de datos ─────────────────────────
+// Evitan el bug donde "0 resultados" caía de vuelta a todos los registros.
+function hasActiveAdminFilters_() {
+  return !!(($('filter-start')?.value   || '').trim() ||
+            ($('filter-end')?.value     || '').trim() ||
+            ($('filter-cliente')?.value || '').trim());
+}
+function hasActiveClientFilters_() {
+  return !!(($('cli-filter-start')?.value || '').trim() ||
+            ($('cli-filter-end')?.value   || '').trim());
+}
+function getAdminData_() {
+  return hasActiveAdminFilters_() ? [...STATE.filtered] : [...STATE.registros];
+}
+function getClientData_(pref) {
+  pref = pref || STATE.session?.prefijo;
+  if(!pref) return [];
+  let data = STATE.registros.filter(r => r.prefix === pref);
+  const start = $('cli-filter-start')?.value;
+  const end   = $('cli-filter-end')?.value;
+  if(start) {
+    const [sy, sm, sd] = start.split('-').map(Number);
+    const st = new Date(sy, sm - 1, sd, 0, 0, 0).getTime();
+    data = data.filter(r => (r.timestamp || parseDateToTs(r.fecha) || 0) >= st);
+  }
+  if(end) {
+    const [ey, em, ed] = end.split('-').map(Number);
+    const en = new Date(ey, em - 1, ed, 23, 59, 59).getTime();
+    data = data.filter(r => (r.timestamp || parseDateToTs(r.fecha) || 0) <= en);
+  }
+  return data;
+}
+
 // ── ADMIN DASHBOARD ────────────────────────────────────────
 function adminTab(tab) {
   document.querySelectorAll('#view-admin .tab').forEach(t => {
@@ -4115,7 +4148,7 @@ function renderBarras(containerId, groups, total, color, limit) {
 }
 
 function renderAdminDash() {
-  const data = STATE.filtered;
+  const data = getAdminData_();
   const totalL = data.reduce((a,b) => a + b.litros, 0);
   const totalM = data.reduce((a,b) => a + b.monto, 0);
   const clientes = new Set(data.map(r => r.prefix)).size;
@@ -4297,7 +4330,7 @@ function renderBitacora(data) {
 }
 
 function renderGraficas() {
-  const data = STATE.filtered;
+  const data = getAdminData_();
   if(!data.length) {
     const nt = $('narrative-text');
     if(nt) nt.textContent = 'Sin datos en el período seleccionado. Ajusta los filtros de fecha.';
@@ -4649,20 +4682,9 @@ function renderLine(id, labels, data) {
 function renderClienteView() {
   if(!STATE.session || STATE.session.tipo !== 'cliente') return;
   const pref = STATE.session.prefijo;
-  
-  let data = STATE.registros.filter(r => r.prefix === pref);
 
-  // Filtros fecha
-  const start = $('cli-filter-start')?.value;
-  const end   = $('cli-filter-end')?.value;
-  if(start) {
-    const [sy,sm,sd] = start.split('-').map(Number);
-    data = data.filter(r => r.timestamp >= new Date(sy,sm-1,sd,0,0,0).getTime());
-  }
-  if(end) {
-    const [ey,em,ed] = end.split('-').map(Number);
-    data = data.filter(r => r.timestamp <= new Date(ey,em-1,ed,23,59,59).getTime());
-  }
+  // F1a: helper unificado (prefix + filtros de fecha)
+  const data = getClientData_(pref);
 
   const totalL = data.reduce((a,b) => a + b.litros, 0);
   const totalM = data.reduce((a,b) => a + b.monto, 0);
@@ -4762,25 +4784,19 @@ function scanFrame() {
   }
   canvas.width  = video.videoWidth;
   canvas.height = video.videoHeight;
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
   if(code && code.data) {
-    const raw = code.data.trim();
-    const parts = raw.split('|');
-    const primera = parts[0].toUpperCase();
-    // Si el primer segmento tiene guion (TGIO-0001) es un vale físico
-    // Si no tiene guion (K7MNP2) es un código de autorización digital
-    if(primera.includes('-')) {
-      // Vale físico
-      $('folio-input').value = primera;
-    } else {
-      // Autorización digital — poner el código directamente
-      $('folio-input').value = primera;
-    }
+    // F1a: pasar el payload crudo a validateFolio para que pueda verificar el hash
+    const raw = String(code.data).trim();
+    const parsed = parseQrVale(raw);
+    const folioInp = $('folio-input');
+    folioInp.dataset.qrRaw = raw;
+    folioInp.value = String(parsed.folio || raw).trim().toUpperCase();
     stopScanner();
-    validateFolio();
+    validateFolio(raw);
     return;
   }
   qrAnimFrame = requestAnimationFrame(scanFrame);
@@ -4794,12 +4810,28 @@ function stopScanner() {
   STATE.scannerActive = false;
 }
 
-function validateFolio() {
-  const input = $('folio-input').value.trim().toUpperCase();
+function validateFolio(rawFromQr) {
+  const folioInp = $('folio-input');
+  // F1a: si viene del escáner, usamos el payload crudo del QR para verificar hash
+  const raw = String(rawFromQr || folioInp?.dataset.qrRaw || folioInp?.value || '').trim();
+  if(!raw) return;
+
+  const parsed = parseQrVale(raw);
+  const folioFromQr = String(parsed?.folio || '').trim().toUpperCase();
+  const hashFromQr  = String(parsed?.hash  || '').trim().toUpperCase();
+  const inputManual = String(folioInp?.value || '').trim().toUpperCase();
+  const input = folioFromQr || inputManual;
   if(!input) return;
 
-  // ¿Es un código de autorización digital? (sin guion, 6 chars alfanuméricos)
-  const esAutz = !input.includes('-') && input.length >= 5 && input.length <= 8;
+  // Si el QR trae hash, verificarlo contra el vale registrado
+  if(hashFromQr && !validateValeHash(raw)) {
+    showMsg('folio-status', '❌ QR inválido o alterado. Genera nuevamente el vale.', 'err');
+    $('step2-card').classList.add('hidden');
+    return;
+  }
+
+  // ¿Es un código de autorización digital? (sin guion, 5-8 chars alfanuméricos)
+  const esAutz = !input.includes('-') && /^[A-Z0-9]{5,8}$/.test(input);
   if(esAutz) {
     const result = validateAutorizacion(input);
     if(!result.ok) {
@@ -5759,7 +5791,8 @@ function cancelForm() {
   $('step3-card').classList.add('hidden');
   $('step1-card').classList.remove('hidden');
   setStepDots(1);
-  $('folio-input').value = '';
+  const folioInp = $('folio-input');
+  if(folioInp) { folioInp.value = ''; delete folioInp.dataset.qrRaw; }
   $('folio-status').classList.add('hidden');
   $('f-litros').value = '';
   $('f-monto').value = '';
@@ -6430,7 +6463,7 @@ function eliminarCorte(id) {
 
 
 function exportCSV() {
-  const data = STATE.filtered;
+  const data = getAdminData_();
   const header = 'Fecha,Hora,Ticket,Folio Vale,Cliente,Chofer,Placas,Producto,Litros,Monto,Odometro';
   const rows = data.map(r =>
     [r.fecha, r.hora||'', r.ticket||'', r.folio_vale||'', r.cliente, r.chofer, r.placas||r.unidad, r.producto, r.litros, r.monto, r.odometro||''].join(',')
@@ -6605,7 +6638,9 @@ function saveVales(vales) {
 }
 
 function selectValeProducto(btn) {
-  document.querySelectorAll('#admin-vales .btn-producto').forEach(b => b.classList.remove('active'));
+  // F1a: scopeada al tab individual para no pisar el selector del tab masivo
+  const scope = btn.closest('#vales-individual') || document;
+  scope.querySelectorAll('.btn-producto[data-prod]').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   $('vale-producto').value = btn.dataset.prod;
 }
@@ -7095,11 +7130,13 @@ function renderAutorizacionesHistorial() {
 function validateAutorizacion(codigo) {
   const autz  = getAutorizaciones();
   const found = autz.find(a => a.codigo === codigo.toUpperCase());
-  if(!found)                   return { ok: false, msg: '❌ Código no encontrado.' };
-  if(found.estado === 'USADO') return { ok: false, msg: `⛔ Ya fue utilizado por ${found.agente || 'agente'}.` };
+  if(!found)                         return { ok: false, msg: '❌ Código no encontrado.' };
+  if(found.estado === 'SOLICITADO')  return { ok: false, msg: '⏳ La autorización aún no ha sido aprobada por SGM.' };
+  if(found.estado === 'USADO')       return { ok: false, msg: `⛔ Ya fue utilizada por ${found.agente || 'agente'}.` };
   if(found.estado === 'VENCIDO' || Date.now() > found.vence)
-                               return { ok: false, msg: '⏱ Autorización vencida.' };
-  if(found.estado === 'RECHAZADO') return { ok: false, msg: '✗ Autorización rechazada por admin.' };
+                                     return { ok: false, msg: '⏱ Autorización vencida.' };
+  if(found.estado === 'RECHAZADO')   return { ok: false, msg: '✗ Autorización rechazada por admin.' };
+  if(found.estado !== 'PENDIENTE')   return { ok: false, msg: `⚠️ Estado inválido para despacho: ${found.estado}` };
   return { ok: true, autz: found };
 }
 
@@ -7407,9 +7444,7 @@ function detectarAlertas(unidades, choferes, data) {
 }
 
 function renderRendimiento() {
-  // Si hay filtros activos y dan 0 resultados, mostrar vacío (no caer a todos los registros)
-  const hayFiltroActivo = $('filter-start')?.value || $('filter-end')?.value || $('filter-cliente')?.value;
-  const data = (hayFiltroActivo && STATE.filtered.length === 0) ? [] : (STATE.filtered.length > 0 ? STATE.filtered : STATE.registros);
+  const data = getAdminData_();
   if(!data.length) {
     $('rend-kpis').innerHTML = `<div class="msg msg-warn">Sin datos cargados. Ve a Resumen y actualiza primero.</div>`;
     return;
@@ -7823,7 +7858,7 @@ function renderAlertasInteligentes() {
   const el = $('alertas-inteligentes');
   if(!el) return;
 
-  const data = STATE.filtered.length > 0 ? STATE.filtered : STATE.registros;
+  const data = getAdminData_();
   if(!data.length) {
     el.innerHTML = `<div class="msg msg-warn">Sin datos. Actualiza primero en la pestaña Resumen.</div>`;
     return;
@@ -7933,14 +7968,20 @@ function initIATab() {
 
 // Construye el contexto de datos para la IA
 function buildIAContext() {
-  const data = STATE.filtered.length > 0 ? STATE.filtered : STATE.registros;
+  const data = getAdminData_();
   if(!data.length) return 'No hay datos de despacho cargados actualmente.';
 
   // Estadísticas generales
   const totalL  = data.reduce((a,b) => a+b.litros, 0);
   const totalM  = data.reduce((a,b) => a+b.monto,  0);
-  const fechas  = data.map(r => r.fecha).filter(Boolean);
-  const periodo = fechas.length ? `${fechas[fechas.length-1]} al ${fechas[0]}` : 'período actual';
+  // F1a: ordenar cronológicamente antes de tomar primera/última
+  const fechasOrdenadas = data
+    .map(r => r.fecha)
+    .filter(Boolean)
+    .sort((a, b) => parseDateToTs(a) - parseDateToTs(b));
+  const periodo = fechasOrdenadas.length
+    ? `${fechasOrdenadas[0]} al ${fechasOrdenadas[fechasOrdenadas.length - 1]}`
+    : 'período actual';
 
   // Por cliente
   const porCliente = {};
@@ -8368,24 +8409,11 @@ function renderGraficasCliente() {
   const pref = STATE.session?.prefijo;
   if(!pref) return;
 
-  // Usar datos filtrados del cliente
-  let data = STATE.registros.filter(r => r.prefix === pref);
-  const start = $('cli-filter-start')?.value;
-  const end   = $('cli-filter-end')?.value;
-  if(start) {
-    const [sy,sm,sd] = start.split('-').map(Number);
-    const st = new Date(sy,sm-1,sd,0,0,0).getTime();
-    data = data.filter(r => (r.timestamp||0) >= st);
-  }
-  if(end) {
-    const [ey,em,ed] = end.split('-').map(Number);
-    const en = new Date(ey,em-1,ed,23,59,59).getTime();
-    data = data.filter(r => (r.timestamp||0) <= en);
-  }
-
+  // F1a: helper unificado
+  const data = getClientData_(pref);
   if(!data.length) return;
 
-  const TOP = Number.POSITIVE_INFINITY;
+  const TOP = 10;
 
   function destroyCliChart(id) {
     const key = 'cli-' + id;
@@ -8520,29 +8548,9 @@ function renderCliBitacora() {
   const prefix = STATE.session?.prefijo;
   if(!prefix) return;
   const search = ($('cli-bita-search')?.value || '').toLowerCase();
-  const start  = $('cli-filter-start')?.value;
-  const end    = $('cli-filter-end')?.value;
 
-  let data = STATE.registros.filter(r => r.prefix === prefix);
-
-  if(start) {
-    const [sy,sm,sd] = start.split('-').map(Number);
-    const st = new Date(sy,sm-1,sd,0,0,0).getTime();
-    data = data.filter(r => {
-      const ts = r.timestamp || 0;
-      if(ts > 0) return ts >= st;
-      return parseDateToTs(r.fecha) >= st;
-    });
-  }
-  if(end) {
-    const [ey,em,ed] = end.split('-').map(Number);
-    const en = new Date(ey,em-1,ed,23,59,59).getTime();
-    data = data.filter(r => {
-      const ts = r.timestamp || 0;
-      if(ts > 0) return ts <= en;
-      return parseDateToTs(r.fecha) <= en;
-    });
-  }
+  // F1a: helper unificado aplica prefix + filtros de fecha
+  let data = getClientData_(prefix);
   if(search) {
     data = data.filter(r =>
       (r.chofer||'').toLowerCase().includes(search) ||
@@ -8602,7 +8610,8 @@ function renderCliBitacora() {
 function exportCSVCliente() {
   const prefix = STATE.session?.prefijo;
   if(!prefix) return;
-  const data = STATE.registros.filter(r => r.prefix === prefix);
+  // F1a: exporta lo que el usuario realmente tiene en pantalla (con filtros aplicados)
+  const data = getClientData_(prefix);
   if(!data.length) { alert('Sin datos para exportar'); return; }
   const headers = ['Fecha','Hora','Ticket','Folio Vale','Chofer','Placas','Producto','Litros','Monto','Odometro'];
   const rows = data.map(r => [r.fecha,r.hora||'',r.ticket||'',r.folio_vale||'',r.chofer,r.placas,r.producto,r.litros||r.cantidad,r.monto,r.odometro||''].join(','));
@@ -8620,7 +8629,8 @@ let CLI_IA_HISTORY = [];
 function buildCliIAContext() {
   const prefix  = STATE.session?.prefijo;
   const nombre  = STATE.session?.nombre || prefix;
-  const data    = STATE.filtered.filter(r => r.prefix === prefix);
+  // F1a: helper respeta los filtros de fecha del cliente
+  const data    = getClientData_(prefix);
   if(!data.length) return `Cliente: ${nombre}
 Sin datos en el período seleccionado.`;
 
@@ -8801,9 +8811,8 @@ function renderCliRendimiento() {
   const prefix = STATE.session?.prefijo;
   if(!prefix) return;
 
-  // Registros del cliente en el período
-  const registros = (STATE.filtered.length > 0 ? STATE.filtered : STATE.registros)
-    .filter(r => r.prefix === prefix);
+  // F1a: usa getClientData_ para que no se reinyecten registros de otros períodos
+  const registros = getClientData_(prefix);
 
   const cierres = getCierresCliente();
 
