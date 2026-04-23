@@ -2089,19 +2089,12 @@ window.SGM_CONFIG = {
 
           <hr class="divider">
 
-          <div class="h3 mb-12">🤖 Analítica IA — Gemini API Key</div>
-          <div class="label mb-8" style="font-size:10px;">API KEY DE GOOGLE GEMINI (RECOMENDADO)</div>
-          <div class="grid-2 mb-8">
-            <input id="cfg-gemini-key" class="inp inp-sm" type="password" placeholder="AIzaSy...">
-            <button class="btn btn-ghost" onclick="saveGeminiKey()">💾 GUARDAR</button>
+          <div class="h3 mb-12">🤖 Analítica IA</div>
+          <div class="msg msg-info" style="font-size:12px;line-height:1.6;">
+            Las llamadas a IA ahora corren por el proxy seguro <code>/.netlify/functions/ia</code> usando <strong>OpenAI gpt-4o-mini</strong>.
+            La clave se configura en Netlify → Site settings → Environment variables como <code>OPENAI_API_KEY</code> (marcada como Secret).
+            Ya no hay que pegar API keys en el navegador.
           </div>
-          <div style="font-size:11px;color:var(--fg-4);margin-bottom:16px;">Obtén tu API Key gratis en <strong>aistudio.google.com</strong> → Get API Key. Se guarda localmente en tu dispositivo.</div>
-          <div class="label mb-8" style="font-size:10px;">API KEY DE ANTHROPIC (CLAUDE) — ALTERNATIVA</div>
-          <div class="grid-2 mb-8">
-            <input id="cfg-claude-key" class="inp inp-sm" type="password" placeholder="sk-ant-api03-...">
-            <button class="btn btn-ghost" onclick="saveClaudeKey()">💾 GUARDAR</button>
-          </div>
-          <div style="font-size:11px;color:var(--fg-4);">Alternativa: usa la API de Claude vía proxy Apps Script.</div>
 
           <hr class="divider">
 
@@ -2772,9 +2765,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Apps Script URL: siempre usar hardcodeada
   C.APPS_SCRIPT_URL = window.SGM_CONFIG.APPS_SCRIPT_URL;
 
-  // API Key de Claude: viene del localStorage (personal de cada admin)
-  const lsClaudeKey = localStorage.getItem('sgm_claude_key');
-  if(lsClaudeKey) C.CLAUDE_KEY = lsClaudeKey;
+  // F0: las keys de IA ya no viven en el cliente. La API corre por /.netlify/functions/ia.
+  // Limpiar cualquier key vieja guardada en localStorage para no dejar restos.
+  localStorage.removeItem('sgm_claude_key');
+  localStorage.removeItem('sgm_gemini_key');
 
   // Rellenar campos de config
   setInputVal('cfg-apikey', C.SHEETS_API_KEY || '');
@@ -7883,32 +7877,12 @@ function renderAlertasInteligentes() {
 
 
 
-function getClaudeKey() {
-  // Hardcodeada en SGM_CONFIG — funciona en cualquier navegador sin configurar nada
-  return window.SGM_CONFIG.CLAUDE_API_KEY || localStorage.getItem('sgm_claude_key') || '';
-}
-
-function saveClaudeKey() {
-  const key = $('cfg-claude-key')?.value?.trim();
-  if(!key) { alert('Ingresa una API Key válida.'); return; }
-  localStorage.setItem('sgm_claude_key', key);
-  $('cfg-claude-key').value = '';
-  $('cfg-claude-key').placeholder = '✅ API Key guardada';
-  setTimeout(() => { if($('cfg-claude-key')) $('cfg-claude-key').placeholder = 'sk-ant-api03-...'; }, 3000);
-}
-
-function getGeminiKey() {
-  return window.SGM_CONFIG.GEMINI_API_KEY || localStorage.getItem('sgm_gemini_key') || '';
-}
-
-function saveGeminiKey() {
-  const key = $('cfg-gemini-key')?.value?.trim();
-  if(!key) { alert('Ingresa una API Key válida.'); return; }
-  localStorage.setItem('sgm_gemini_key', key);
-  $('cfg-gemini-key').value = '';
-  $('cfg-gemini-key').placeholder = '✅ API Key guardada';
-  setTimeout(() => { if($('cfg-gemini-key')) $('cfg-gemini-key').placeholder = 'AIzaSy...'; }, 3000);
-}
+// F0: keys movidas a Netlify env vars. Los helpers quedan como no-ops para no
+// romper referencias existentes; la UI de admin-config ya no expone inputs.
+function getClaudeKey() { return ''; }
+function saveClaudeKey() {}
+function getGeminiKey() { return ''; }
+function saveGeminiKey() {}
 
 // ── Dashboard alerts panel ─────────────────────────────────
 function renderDashAlertas(data) {
@@ -7947,15 +7921,14 @@ function renderDashAlertas(data) {
 }
 
 function initIATab() {
-  const hasKey = getGeminiKey() || getClaudeKey();
+  // F0: IA siempre vía proxy server-side. El aviso de "sin key" ya no aplica.
   const warn = $('ia-apikey-warn');
-  if(warn) warn.style.display = hasKey ? 'none' : 'block';
-  const engine = getGeminiKey() ? '🟢 Gemini' : getClaudeKey() ? '🔵 Claude' : '⚠️ Sin API Key';
+  if(warn) warn.style.display = 'none';
   const n = STATE.registros.length;
   const status = $('ia-status');
   if(status) status.textContent = n > 0
-    ? `${engine} · ${n.toLocaleString()} registros`
-    : `${engine} · Sin datos — actualiza primero`;
+    ? `🟢 IA lista · ${n.toLocaleString()} registros`
+    : `🟢 IA lista · Sin datos — actualiza primero`;
 }
 
 // Construye el contexto de datos para la IA
@@ -8138,61 +8111,8 @@ CONTEXTO DE LA OPERACIÓN:
 - Tienen 27 clientes corporativos activos`;
 }
 
-async function iaCallGemini(userMessage) {
-  const key = getGeminiKey();
-  if(!key) return null; // sin key → fallback a Claude
-
-  const contextFull = buildIAContext();
-  const context = contextFull.length > 8000 ? contextFull.slice(0, 8000) + '\n...[contexto truncado]' : contextFull;
-  const systemPrompt = iaSystemPrompt() + '\n\nCONTEXTO DE DATOS ACTUAL:\n' + context;
-
-  // Construir historial de conversación para Gemini
-  const contents = [];
-  for(let i = 0; i < IA_HISTORY.length; i += 2) {
-    if(IA_HISTORY[i]) contents.push({ role: 'user',  parts: [{ text: IA_HISTORY[i].content }] });
-    if(IA_HISTORY[i+1]) contents.push({ role: 'model', parts: [{ text: IA_HISTORY[i+1].content }] });
-  }
-  contents.push({ role: 'user', parts: [{ text: userMessage }] });
-
-  const body = {
-    system_instruction: { parts: [{ text: systemPrompt }] },
-    contents,
-    generationConfig: { maxOutputTokens: 1500, temperature: 0.4 }
-  };
-
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${key}`,
-    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-  );
-  if(!res.ok) throw new Error(`Gemini HTTP ${res.status}`);
-  const data = await res.json();
-  const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Sin respuesta de Gemini.';
-
-  IA_HISTORY.push({ role: 'user', content: userMessage });
-  IA_HISTORY.push({ role: 'assistant', content: reply });
-  if(IA_HISTORY.length > 20) IA_HISTORY = IA_HISTORY.slice(-20);
-  return reply;
-}
-
 async function iaCall(userMessage) {
-  // Intentar Gemini primero (llamada directa, sin proxy)
-  const geminiKey = getGeminiKey();
-  if(geminiKey) {
-    try {
-      const reply = await iaCallGemini(userMessage);
-      if(reply !== null) return reply;
-    } catch(e) {
-      console.warn('[SGM] Gemini error, fallback a Claude:', e.message);
-    }
-  }
-
-  // Fallback: Claude via Apps Script proxy
-  const key = getClaudeKey();
-  if(!key) {
-    return '⚠️ Configura tu **Gemini API Key** en Config → sección IA para activar el análisis. Es gratis en aistudio.google.com';
-  }
-
-  // Limitar contexto a 8000 chars para no exceder límites del request
+  // F0: proxy server-side en /.netlify/functions/ia (OpenAI gpt-4o-mini).
   const contextFull = buildIAContext();
   const context = contextFull.length > 8000 ? contextFull.slice(0, 8000) + '\n...[contexto truncado]' : contextFull;
 
@@ -8200,33 +8120,26 @@ async function iaCall(userMessage) {
     ? [{ role:'user', content: userMessage }]
     : [...IA_HISTORY, { role:'user', content: userMessage }];
 
-  // Usar Apps Script como proxy para evitar CORS
-  const proxyUrl = C.APPS_SCRIPT_URL;
-  if(!proxyUrl) return '❌ Apps Script URL no configurada.';
-
   let res;
   try {
-    res = await fetch(proxyUrl, {
+    res = await fetch('/.netlify/functions/ia', {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        action:     'claudeProxy',
-        model:      'claude-haiku-4-5-20251001',
-        max_tokens: 1500,
-        system:     iaSystemPrompt() + '\n\nCONTEXTO DE DATOS ACTUAL:\n' + context,
-        messages
+        system: iaSystemPrompt() + '\n\nCONTEXTO DE DATOS ACTUAL:\n' + context,
+        messages,
+        max_tokens: 800
       })
     });
   } catch(netErr) {
     return '❌ Error de red: ' + netErr.message;
   }
 
-  if(!res.ok) return `❌ Error proxy ${res.status}`;
-
-  const data = await res.json();
-  if(!data.ok) return '❌ ' + (data.error || 'Error desconocido');
+  let data = {};
+  try { data = await res.json(); } catch(_) {}
+  if(!res.ok || !data.ok) return '❌ ' + (data.error || `HTTP ${res.status}`);
   const reply = data.content?.[0]?.text || 'Sin respuesta.';
 
-  // Actualizar historial (máximo 10 turnos para no exceder tokens)
   IA_HISTORY.push({ role:'user', content: userMessage });
   IA_HISTORY.push({ role:'assistant', content: reply });
   if(IA_HISTORY.length > 20) IA_HISTORY = IA_HISTORY.slice(-20);
@@ -8343,16 +8256,6 @@ async function iaQuick(tipo) {
   }
   await iaSend();
 }
-
-// Cargar API keys guardadas en campos de config
-document.addEventListener('DOMContentLoaded', () => {
-  if(localStorage.getItem('sgm_claude_key') && $('cfg-claude-key')) {
-    $('cfg-claude-key').placeholder = '✅ API Key configurada';
-  }
-  if(localStorage.getItem('sgm_gemini_key') && $('cfg-gemini-key')) {
-    $('cfg-gemini-key').placeholder = '✅ API Key configurada';
-  }
-});
 
 // ══════════════════════════════════════════════════════════
 // MÓDULO: RENDIMIENTO CLIENTE + CIERRE OPERATIVO
@@ -8768,11 +8671,9 @@ ${data.slice(0,10).map(r=>`  ${r.fecha} | ${r.chofer} | ${r.placas} | ${fmtL(r.l
 }
 
 async function cliIaCall(userMessage) {
-  const key = getClaudeKey();
-  if(!key) return '⚠️ La API Key de Claude no está configurada. Pide al administrador que la configure en Admin → Config → sección IA.';
-
-  const prefix = STATE.session?.prefijo;
-  const nombre = STATE.session?.nombre || prefix;
+  // F0: proxy server-side en /.netlify/functions/ia (OpenAI gpt-4o-mini).
+  const prefix  = STATE.session?.prefijo;
+  const nombre  = STATE.session?.nombre || prefix;
   const context = buildCliIAContext();
 
   const system = `Eres el analista de inteligencia artificial de SGM Morgan Gasolineros.
@@ -8789,41 +8690,27 @@ ${context}`;
     ? [{ role:'user', content: userMessage }]
     : [...CLI_IA_HISTORY, { role:'user', content: userMessage }];
 
+  let res;
   try {
-    const proxyUrl = C.APPS_SCRIPT_URL;
-    if(!proxyUrl) return '❌ Apps Script URL no configurada.';
-
-    let res;
-    try {
-      res = await fetch(proxyUrl, {
-        method: 'POST',
-        body: JSON.stringify({
-          action:     'claudeProxy',
-          model:      'claude-haiku-4-5-20251001',
-          max_tokens: 1500,
-          system,
-          messages
-        })
-      });
-    } catch(netErr) {
-      return '❌ Error de red: ' + netErr.message;
-    }
-
-    if(!res.ok) return `❌ Error proxy ${res.status}`;
-    const proxyData = await res.json();
-    if(!proxyData.ok) return '❌ ' + (proxyData.error || 'Error desconocido');
-
-    const reply = proxyData.content?.[0]?.text || '(sin respuesta)';
-
-    // Guardar historial
-    CLI_IA_HISTORY.push({ role:'user', content: userMessage });
-    CLI_IA_HISTORY.push({ role:'assistant', content: reply });
-    if(CLI_IA_HISTORY.length > 20) CLI_IA_HISTORY = CLI_IA_HISTORY.slice(-20);
-
-    return reply;
-  } catch(e) {
-    return '❌ Error de conexión: ' + e.message;
+    res = await fetch('/.netlify/functions/ia', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ system, messages, max_tokens: 800 })
+    });
+  } catch(netErr) {
+    return '❌ Error de red: ' + netErr.message;
   }
+
+  let data = {};
+  try { data = await res.json(); } catch(_) {}
+  if(!res.ok || !data.ok) return '❌ ' + (data.error || `HTTP ${res.status}`);
+  const reply = data.content?.[0]?.text || '(sin respuesta)';
+
+  CLI_IA_HISTORY.push({ role:'user', content: userMessage });
+  CLI_IA_HISTORY.push({ role:'assistant', content: reply });
+  if(CLI_IA_HISTORY.length > 20) CLI_IA_HISTORY = CLI_IA_HISTORY.slice(-20);
+
+  return reply;
 }
 
 function cliIaAddMsg(role, text) {
