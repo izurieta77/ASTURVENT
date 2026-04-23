@@ -10,6 +10,7 @@ const MODEL       = 'gpt-4o-mini';
 const MAX_TOKENS  = 800;              // techo por turno para controlar costo
 const MAX_CONTEXT = 16000;            // chars de contexto; trunca si viene más
 const ALLOWED_ORIGINS = [
+  'https://appsgm.netlify.app',
   'https://jade-semolina-ece7ce.netlify.app',
   'http://localhost:8888',
   'http://localhost:3000',
