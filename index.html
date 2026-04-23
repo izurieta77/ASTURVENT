@@ -651,7 +651,7 @@ window.SGM_CONFIG = {
     "TGIO":     { sheetId: "1xLF7C5A6p7dxlXDx7EiuQiR1MtEnwGeWRargX0tL5qE", hoja: "Despachos_SGM_APP" },
     "TALF":     { sheetId: "1gvG1BLhADJsfh1HiSrzoLGrOqcOgS-MEnLOn6NPpHb0", hoja: "Despachos_SGM_APP" },
     "GAJ":      { sheetId: "1yGDhpQtC_jIH7DbQQZd-oxwsGcS3q6hLM0OJ3lQjYQs", hoja: "Despachos_SGM_APP" },
-    "DEH":      { sheetId: "1N5nIQd3zJDh-_tJidXBjD7VHJSv_7W0FhzF9WimhsOs", hoja: "Despachos_SGM_APP" },
+    "DEH":      { sheetId: "1N5nIQd3zJDh-_tJidXBjD7VHJSv_7W0FhzF9WimhsOs", hoja: "Despachos_SGM_APP", tabs: ["Historico_Backup", "Despachos_SGM_APP"] },
     "DHAR":     { sheetId: "1tbtLrtW4m_uGvt7niyU6RtBzAS5vl8yYBB2mNj-YlVw", hoja: "Despachos_SGM_APP" },
     "RECA":     { sheetId: "1x1wxGCjtH7h1mFZBYZH3YC09lUrahE4W6YgwGeQKzMs", hoja: "Despachos_SGM_APP" },
     "MAC":      { sheetId: "1EblV9OeZNbv8JV72C2Ebahe9PsPsJCDy7-QU-FzCdqc", hoja: "Despachos_SGM_APP" },
@@ -3177,6 +3177,14 @@ function buildBatchTabsFromMeta_(metaSheets, cfg) {
         .map(p => String(p.title || '').trim())
         .filter(Boolean)
     : [];
+
+  // Override explícito: si el cliente define cfg.tabs como array, úsalo tal cual.
+  // Si hay metadata, filtramos solo a las que realmente existen.
+  if(cfg && Array.isArray(cfg.tabs) && cfg.tabs.length) {
+    const wanted = cfg.tabs.map(t => String(t || '').trim()).filter(Boolean);
+    const existing = titles.length ? wanted.filter(t => titles.includes(t)) : wanted;
+    return Array.from(new Set(existing.length ? existing : wanted));
+  }
 
   // Tomar SOLO la primera pestaña histórica real del spreadsheet
   // y SIEMPRE agregar Despachos_SGM_APP.
