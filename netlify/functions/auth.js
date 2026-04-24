@@ -7,9 +7,9 @@
 // Env vars requeridas (en Netlify → Site config → Environment variables,
 // marcadas como "Contains secret values" + Production/Deploy previews/Branch
 // deploys):
-//   ADMIN_PIN       — string, ej "071288"
-//   AGENT_PINS      — JSON, ej {"RIGO":"101","RAFAEL":"102",...}
-//   CLIENT_CODES    — JSON, ej {"TGIO":"TGIO2026","TALF":"TALF2026",...}
+//   ADMIN_PIN       — string con el PIN numérico del admin
+//   AGENT_PINS      — JSON {"NOMBRE":"pin", ...}
+//   CLIENT_CODES    — JSON {"PREFIJO":"codigo", ...}
 //   AUTH_SECRET     — string aleatorio ≥32 chars, para firmar los tokens
 //
 // Respuesta en éxito:
