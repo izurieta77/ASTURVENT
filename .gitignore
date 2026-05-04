@@ -4,3 +4,8 @@ node_modules/
 .netlify/
 .DS_Store
 *.log
+
+# Local exports of source spreadsheets (sensitive raw data)
+data/raw/
+data/master/parte*.xlsx
+__pycache__/
