@@ -4,3 +4,9 @@ node_modules/
 .netlify/
 .DS_Store
 *.log
+# Archivos locales — no van al repo
+apps_script_v4.gs
+generar_manual_sgm.py
+Manual_SGM_Flotillas.pdf
+CONTEXTO_APP_FLOTILLAS.md
+van_small.jpg

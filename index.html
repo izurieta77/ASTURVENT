@@ -398,7 +398,7 @@ body.light td {border-top-color:rgba(0,0,0,0.05);}
 #login-screen .tab.active::after {display:none;}
 
 /* ISLAS */
-.btn-isla {flex:1;aspect-ratio:1;min-width:58px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,0.13);background:rgba(255,255,255,0.03);color:var(--text-muted);font-family:var(--font);font-weight:700;font-size:13px;cursor:pointer;transition:all 0.15s;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;}
+.btn-isla {flex:1;aspect-ratio:1;min-width:58px;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,0.13);background:rgba(255,255,255,0.03);color:var(--text-muted);font-family:var(--font);font-weight:700;font-size:13px;cursor:pointer;transition:all 0.15s;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
 .btn-isla .isla-num  {font-size:20px;font-weight:800;font-family:var(--font-d);}
 .btn-isla .isla-label {font-size:8px;letter-spacing:1px;color:#64748B;}
 .btn-isla.active {background:rgba(237,27,45,0.12);border-color:var(--mobil-red);color:var(--text-primary);box-shadow:0 0 0 1px var(--mobil-red),0 12px 36px rgba(237,27,45,0.30);}
@@ -632,13 +632,56 @@ window.SGM_CONFIG = {
   SPREADSHEET_ID:    '',
   HOJA_BITACORA:     'BITACORA',
   HOJA_CLIENTES:     'CLIENTES',
+  PIN_ADMIN: '071288',
   NUMERO_EDUARDO: '525547977723',
 
-  // F1b: PIN_ADMIN, PINES_AGENTE y CLAVES_CLIENTE se movieron a env vars de
-  // Netlify (ADMIN_PIN, AGENT_PINS, CLIENT_CODES). Las valida server-side
-  // /.netlify/functions/auth. Los nombres de agentes y la lista de clientes
-  // (C.CLIENTES) siguen en el HTML porque son públicos, no son credenciales.
+  // ── PINs DE AGENTES (3 dígitos) ─────────────────────────
+  // Formato: 'NOMBRE': 'PIN'
+  PINES_AGENTE: {
+    'RIGO':      '101',
+    'RAFAEL':    '102',
+    'ANGÉLICA':  '103',
+    'LUIS':      '104',
+    'MARCO':     '105',
+    'JAQUELINE': '106',
+    'ANTONIO':   '107',
+    'ALBERTO':   '108',
+    'CALEB':     '109',
+    'JUANJOSE':  '110',
+  },
 
+  // ── CLAVES DE ACCESO POR CLIENTE ─────────────────────────
+  // Formato: 'PREFIX': 'CLAVE'
+  // Cada cliente entra con su empresa + esta clave
+  CLAVES_CLIENTE: {
+    'TGIO':     'TGIO2026',
+    'TALF':     'TALF2026',
+    'GAJ':      'GAJ2026',
+    'DEH':      'DEH2026',
+    'DHAR':     'DHAR2026',
+    'RECA':     'RECA2026',
+    'MAC':      'MAC2026',
+    'ATZ':      'ATZ2026',
+    'SERI':     'SERI2026',
+    'DEL':      'DEL2026',
+    'ECOM':     'ECOM2026',
+    'LMAN':     'LMAN2026',
+    'LTOL':     'LTOL2026',
+    'PANF':     'PANF2026',
+    'CEMI':     'CEMI2026',
+    'PORTUR':   'PORTUR2026',
+    'TECNO':    'TECNO2026',
+    'PUROSON':  'PUROSON2026',
+    'AST':      'AST2026',
+    'GZAR':     'GZAR2026',
+    'GRUV':     'GRUV2026',
+    'ISM':      'ISM2026',
+    'ROG':      'ROG2026',
+    'VENETIAMOT': 'VENETIA2026',
+    'TOLUT':      'TOLUT2026',
+    'AMSC':       'AMSC2026',
+    'ISA':        'ISA2026',
+  },
   PRECIOS: {
     'DIESEL':   26.50,
     'EXTRA':    24.80,
@@ -651,7 +694,7 @@ window.SGM_CONFIG = {
     "TGIO":     { sheetId: "1xLF7C5A6p7dxlXDx7EiuQiR1MtEnwGeWRargX0tL5qE", hoja: "Despachos_SGM_APP" },
     "TALF":     { sheetId: "1gvG1BLhADJsfh1HiSrzoLGrOqcOgS-MEnLOn6NPpHb0", hoja: "Despachos_SGM_APP" },
     "GAJ":      { sheetId: "1yGDhpQtC_jIH7DbQQZd-oxwsGcS3q6hLM0OJ3lQjYQs", hoja: "Despachos_SGM_APP" },
-    "DEH":      { sheetId: "1N5nIQd3zJDh-_tJidXBjD7VHJSv_7W0FhzF9WimhsOs", hoja: "Despachos_SGM_APP", tabs: ["Historico_Backup", "Despachos_SGM_APP"] },
+    "DEH":      { sheetId: "1N5nIQd3zJDh-_tJidXBjD7VHJSv_7W0FhzF9WimhsOs", hoja: "Despachos_SGM_APP" },
     "DHAR":     { sheetId: "1tbtLrtW4m_uGvt7niyU6RtBzAS5vl8yYBB2mNj-YlVw", hoja: "Despachos_SGM_APP" },
     "RECA":     { sheetId: "1x1wxGCjtH7h1mFZBYZH3YC09lUrahE4W6YgwGeQKzMs", hoja: "Despachos_SGM_APP" },
     "MAC":      { sheetId: "1EblV9OeZNbv8JV72C2Ebahe9PsPsJCDy7-QU-FzCdqc", hoja: "Despachos_SGM_APP" },
@@ -674,6 +717,7 @@ window.SGM_CONFIG = {
     "ROG":       { sheetId: "1wK8cYumTqCvsYD4-esHwJbLoHxKjnNSO0GdtMxpyEQc", hoja: "Despachos_SGM_APP" },
     "VENETIAMOT": { sheetId: "1kmSyj5MJHQTcMKbvO0epfKBvYCZB_PuHjiPyY9l6Vbg", hoja: "Despachos_SGM_APP" },
     "TOLUT":      { sheetId: "101Oe1Ud9rzGWIPNoc8b_xIcbR4be4WeqOqjzDyNVlHE",     hoja: "Despachos_SGM_APP" },
+    "AMSC":       { sheetId: "1mrc-VBY1_kKLUcK3A052kRuVzikVGJMcN9PW72Omfbc",     hoja: "Despachos_SGM_APP" },
   },
   CLIENTES: {
     "DEH":       "TRANSPORTES DEHUI SA DE CV",
@@ -761,10 +805,10 @@ window.SGM_CONFIG = {
 
       <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:var(--fg-3);text-transform:uppercase;margin-bottom:8px;">¿En qué isla?</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;">
-        <button class="btn-isla active" id="isla-1" onclick="selectIsla(1)"><span class="isla-num">1</span><span class="isla-label">ISLA</span></button>
-        <button class="btn-isla" id="isla-2" onclick="selectIsla(2)"><span class="isla-num">2</span><span class="isla-label">ISLA</span></button>
-        <button class="btn-isla" id="isla-3" onclick="selectIsla(3)"><span class="isla-num">3</span><span class="isla-label">ISLA</span></button>
-        <button class="btn-isla" id="isla-4" onclick="selectIsla(4)"><span class="isla-num">4</span><span class="isla-label">ISLA</span></button>
+        <button class="btn-isla active" id="isla-1" onclick="selectIsla(1)" ontouchstart="selectIsla(1);event.preventDefault()"><span class="isla-num">1</span><span class="isla-label">ISLA</span></button>
+        <button class="btn-isla" id="isla-2" onclick="selectIsla(2)" ontouchstart="selectIsla(2);event.preventDefault()"><span class="isla-num">2</span><span class="isla-label">ISLA</span></button>
+        <button class="btn-isla" id="isla-3" onclick="selectIsla(3)" ontouchstart="selectIsla(3);event.preventDefault()"><span class="isla-num">3</span><span class="isla-label">ISLA</span></button>
+        <button class="btn-isla" id="isla-4" onclick="selectIsla(4)" ontouchstart="selectIsla(4);event.preventDefault()"><span class="isla-num">4</span><span class="isla-label">ISLA</span></button>
       </div>
       <input type="hidden" id="login-isla" value="1">
     </div>
@@ -2016,22 +2060,23 @@ window.SGM_CONFIG = {
 
           <hr class="divider">
 
-          <!-- ── F1b: LOGIN SERVER-SIDE ───────────────── -->
+          <!-- ── PINs DE AGENTES ────────────────────────── -->
           <hr class="divider">
-          <div class="h3 mb-8">🔐 Credenciales</div>
-          <div class="msg msg-info" style="font-size:12px;line-height:1.7;">
-            El login ahora se valida en <code>/.netlify/functions/auth</code>. Las credenciales viven en Netlify → <strong>Site config → Environment variables</strong>, marcadas como <em>Secret</em>:
-            <ul style="margin:8px 0 0 18px;padding:0;">
-              <li><code>ADMIN_PIN</code> — PIN maestro de administrador</li>
-              <li><code>AGENT_PINS</code> — JSON con PIN por agente</li>
-              <li><code>CLIENT_CODES</code> — JSON con clave por cliente</li>
-              <li><code>AUTH_SECRET</code> — clave aleatoria que firma los tokens</li>
-            </ul>
-            Para cambiar un PIN o clave: edita el valor de la env var y redeploya. Las credenciales nunca regresan al navegador.
+          <div class="h3 mb-8">🔐 PINs de Agentes</div>
+          <div class="label mb-12" style="font-size:10px;color:var(--fg-4);">
+            PIN de 3 dígitos que cada despachador usa para entrar. Solo números.
           </div>
+          <div id="cfg-pines-lista" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;"></div>
+          <button class="btn btn-ghost btn-sm mb-20" onclick="renderPinesConfig()">🔄 Ver / editar PINs</button>
 
-          <div id="cfg-pines-lista" class="hidden"></div>
-          <div id="cfg-claves-lista" class="hidden"></div>
+          <!-- ── CLAVES DE CLIENTES ─────────────────────── -->
+          <hr class="divider">
+          <div class="h3 mb-8">🔑 Claves de Acceso por Cliente</div>
+          <div class="label mb-12" style="font-size:10px;color:var(--fg-4);">
+            Clave que cada cliente usa para entrar a su portal. Mínimo 4 caracteres.
+          </div>
+          <div id="cfg-claves-lista" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;"></div>
+          <button class="btn btn-ghost btn-sm mb-20" onclick="renderClavesConfig()">🔄 Ver / editar claves</button>
 
           <hr class="divider">
 
@@ -2047,17 +2092,27 @@ window.SGM_CONFIG = {
 
           <hr class="divider">
 
-          <div class="h3 mb-12">🤖 Analítica IA</div>
-          <div class="msg msg-info" style="font-size:12px;line-height:1.6;">
-            Las llamadas a IA ahora corren por el proxy seguro <code>/.netlify/functions/ia</code> usando <strong>OpenAI gpt-4o-mini</strong>.
-            La clave se configura en Netlify → Site settings → Environment variables como <code>OPENAI_API_KEY</code> (marcada como Secret).
-            Ya no hay que pegar API keys en el navegador.
+          <div class="h3 mb-12">🤖 Analítica IA — Gemini API Key</div>
+          <div class="label mb-8" style="font-size:10px;">API KEY DE GOOGLE GEMINI (RECOMENDADO)</div>
+          <div class="grid-2 mb-8">
+            <input id="cfg-gemini-key" class="inp inp-sm" type="password" placeholder="AIzaSy...">
+            <button class="btn btn-ghost" onclick="saveGeminiKey()">💾 GUARDAR</button>
           </div>
+          <div style="font-size:11px;color:var(--fg-4);margin-bottom:16px;">Obtén tu API Key gratis en <strong>aistudio.google.com</strong> → Get API Key. Se guarda localmente en tu dispositivo.</div>
+          <div class="label mb-8" style="font-size:10px;">API KEY DE ANTHROPIC (CLAUDE) — ALTERNATIVA</div>
+          <div class="grid-2 mb-8">
+            <input id="cfg-claude-key" class="inp inp-sm" type="password" placeholder="sk-ant-api03-...">
+            <button class="btn btn-ghost" onclick="saveClaudeKey()">💾 GUARDAR</button>
+          </div>
+          <div style="font-size:11px;color:var(--fg-4);">Alternativa: usa la API de Claude vía proxy Apps Script.</div>
 
           <hr class="divider">
 
-          <!-- F1b: input dejado solo por compat si otro código lo referencia -->
-          <input id="new-pin" type="hidden">
+          <div class="h3 mb-16">Cambiar PIN de Admin</div>
+          <div class="grid-2">
+            <input id="new-pin" class="inp inp-sm" type="password" placeholder="Nuevo PIN">
+            <button class="btn btn-ghost" onclick="changePin()">CAMBIAR PIN</button>
+          </div>
 
           <hr class="divider">
           <div class="h3 mb-16">Gestión de Saldos</div>
@@ -2692,22 +2747,37 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  // Cargar config guardada en localStorage
+  // NOTA: Los valores hardcodeados en SGM_CONFIG tienen prioridad sobre localStorage
+  // para SHEETS_API_KEY y APPS_SCRIPT_URL (evita que se pierdan al cambiar navegador)
+  const lsPin = localStorage.getItem('sgm_PIN_ADMIN');
+  if(lsPin) C.PIN_ADMIN = lsPin;
+
   // API Key de Google: siempre usar hardcodeada (más confiable)
   C.SHEETS_API_KEY = window.SGM_CONFIG.SHEETS_API_KEY;
+
+  // Claves cliente: combinar hardcodeadas con las que admin haya personalizado
+  try {
+    const savedClaves = JSON.parse(localStorage.getItem('sgm_claves_cliente') || '{}');
+    if(Object.keys(savedClaves).length > 0) {
+      C.CLAVES_CLIENTE = { ...window.SGM_CONFIG.CLAVES_CLIENTE, ...savedClaves };
+    }
+  } catch(e) {}
+
+  // PINs de agentes: combinar hardcodeados con los personalizados
+  try {
+    const savedPines = JSON.parse(localStorage.getItem('sgm_pines_agente') || '{}');
+    if(Object.keys(savedPines).length > 0) {
+      C.PINES_AGENTE = { ...window.SGM_CONFIG.PINES_AGENTE, ...savedPines };
+    }
+  } catch(e) {}
 
   // Apps Script URL: siempre usar hardcodeada
   C.APPS_SCRIPT_URL = window.SGM_CONFIG.APPS_SCRIPT_URL;
 
-  // F1b: limpiar cualquier residuo de credenciales que haya quedado en
-  // localStorage antes de mover el login al server. Ya no sirven.
-  localStorage.removeItem('sgm_PIN_ADMIN');
-  localStorage.removeItem('sgm_pines_agente');
-  localStorage.removeItem('sgm_claves_cliente');
-
-  // F0: las keys de IA ya no viven en el cliente. La API corre por /.netlify/functions/ia.
-  // Limpiar cualquier key vieja guardada en localStorage para no dejar restos.
-  localStorage.removeItem('sgm_claude_key');
-  localStorage.removeItem('sgm_gemini_key');
+  // API Key de Claude: viene del localStorage (personal de cada admin)
+  const lsClaudeKey = localStorage.getItem('sgm_claude_key');
+  if(lsClaudeKey) C.CLAUDE_KEY = lsClaudeKey;
 
   // Rellenar campos de config
   setInputVal('cfg-apikey', C.SHEETS_API_KEY || '');
@@ -2818,73 +2888,70 @@ function toggleTheme() {
   }
 })();
 
-// F1b: login server-side. La función /.netlify/functions/auth valida las
-// credenciales contra env vars de Netlify y regresa un token firmado.
-async function doLogin() {
-  const errEl = $('login-err');
-  errEl?.classList.add('hidden');
-
-  const body = { tipo: loginType };
+function doLogin() {
+  const val = ($('login-input')?.value||'').trim().toUpperCase();
+  $('login-err')?.classList.add('hidden');
 
   if(loginType === 'agente') {
     const nombre = $('login-agente-select')?.value;
     const isla   = $('login-isla')?.value || '1';
     const pin    = ($('agente-pin')?.value || '').trim();
-    if(!nombre) return showMsg('login-err','⚠️ Selecciona tu nombre antes de entrar.','err');
-    if(!pin)    return showMsg('login-err','⚠️ Ingresa tu PIN de 3 dígitos.','err');
-    Object.assign(body, { nombre, isla, pin });
 
-  } else if(loginType === 'admin') {
-    const pin = ($('login-input')?.value || '').trim();
-    if(!pin) return showMsg('login-err','⚠️ Ingresa el PIN maestro.','err');
-    body.pin = pin;
+    if(!nombre) { showMsg('login-err','⚠️ Selecciona tu nombre antes de entrar.','err'); return; }
+    if(!pin)    { showMsg('login-err','⚠️ Ingresa tu PIN de 3 dígitos.','err'); return; }
 
-  } else if(loginType === 'cliente') {
-    const prefijo = $('cliente-select')?.value;
-    const clave   = ($('cliente-clave')?.value || '').trim();
-    if(!prefijo) return showMsg('login-err','⚠️ Selecciona tu empresa','err');
-    if(!clave)   return showMsg('login-err','⚠️ Ingresa tu clave de acceso','err');
-    Object.assign(body, { prefijo, clave });
-  }
+    // Validar PIN
+    const pinEsperado = C.PINES_AGENTE?.[nombre] || '';
+    if(!pinEsperado || pin !== pinEsperado) {
+      showMsg('login-err','❌ PIN incorrecto. Contacta al administrador.','err');
+      const pinInp = $('agente-pin');
+      if(pinInp) { pinInp.value = ''; pinInp.focus(); }
+      const lcard = document.querySelector('.login-card');
+      if(lcard) { lcard.classList.remove('shake'); void lcard.offsetWidth; lcard.classList.add('shake'); }
+      return;
+    }
 
-  const btnLogin = document.querySelector('.btn-red.btn-full');
-  const btnLabel = btnLogin?.textContent;
-  if(btnLogin) { btnLogin.disabled = true; btnLogin.textContent = 'ENTRANDO...'; }
-
-  let res, data;
-  try {
-    res = await fetch('/.netlify/functions/auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    data = await res.json().catch(() => ({}));
-  } catch(e) {
-    if(btnLogin) { btnLogin.disabled = false; btnLogin.textContent = btnLabel; }
-    return showMsg('login-err','❌ Sin conexión con el servidor. Intenta de nuevo.','err');
-  }
-
-  if(btnLogin) { btnLogin.disabled = false; btnLogin.textContent = btnLabel; }
-
-  if(!res.ok || !data.ok) {
-    showMsg('login-err','❌ ' + (data.error || 'Credenciales incorrectas'), 'err');
-    ['agente-pin','login-input','cliente-clave'].forEach(id => {
-      const inp = $(id); if(inp && inp === document.activeElement) inp.value = '';
-    });
-    const lcard = document.querySelector('.login-card');
-    if(lcard) { lcard.classList.remove('shake'); void lcard.offsetWidth; lcard.classList.add('shake'); }
+    STATE.session = { tipo: 'agente', nombre, isla };
+    enterApp();
     return;
   }
 
-  // Sesión aceptada — guardar sesión + token y entrar a la app
-  STATE.session = { ...data.session };
-  if(STATE.session.tipo === 'cliente' && STATE.session.prefijo) {
-    STATE.session.nombre = C.CLIENTES[STATE.session.prefijo] || STATE.session.prefijo;
+  if(loginType === 'admin') {
+    const pinGuardado = localStorage.getItem('sgm_PIN_ADMIN') || C.PIN_ADMIN || '071288';
+    // Comparación simple: evitar timing attacks con comparación de longitud primero
+    const match = val.length === pinGuardado.length && val === pinGuardado;
+    if(match) {
+      STATE.session = { tipo: 'admin' };
+      enterApp();
+    } else {
+      showMsg('login-err', 'PIN incorrecto', 'err');
+      const lcard = document.querySelector('.login-card');
+      if(lcard) { lcard.classList.remove('shake'); void lcard.offsetWidth; lcard.classList.add('shake'); }
+    }
+    return;
   }
-  try { localStorage.setItem('sgm_session_token', data.token); } catch(_) {}
-  try { localStorage.setItem('sgm_session', JSON.stringify(STATE.session)); } catch(_) {}
 
-  enterApp();
+  if(loginType === 'cliente') {
+    const pref  = $('cliente-select')?.value;
+    const clave = ($('cliente-clave')?.value || '').trim().toUpperCase();
+    if(!pref)  { showMsg('login-err', '⚠️ Selecciona tu empresa', 'err'); return; }
+    if(!clave) { showMsg('login-err', '⚠️ Ingresa tu clave de acceso', 'err'); return; }
+
+    // Validar clave contra el config
+    const claveEsperada = (C.CLAVES_CLIENTE?.[pref] || '').toUpperCase();
+    if(!claveEsperada || clave !== claveEsperada) {
+      showMsg('login-err', '❌ Clave incorrecta. Contacta a Morgan Gasolineros.', 'err');
+      const inp = $('cliente-clave');
+      if(inp) { inp.value = ''; inp.focus(); }
+      const lcard = document.querySelector('.login-card');
+      if(lcard) { lcard.classList.remove('shake'); void lcard.offsetWidth; lcard.classList.add('shake'); }
+      return;
+    }
+
+    STATE.session = { tipo: 'cliente', prefijo: pref, nombre: C.CLIENTES[pref] };
+    enterApp();
+    return;
+  }
 }
 
 function enterApp() {
@@ -3022,9 +3089,6 @@ function doLogout() {
   closeLowMemoryCamera_(true);
   stopAutoRefresh();
   STATE.session = null;
-  // F1b: limpiar token de sesión server-side
-  try { localStorage.removeItem('sgm_session_token'); } catch(_) {}
-  try { localStorage.removeItem('sgm_session'); } catch(_) {}
   $('login-screen').classList.remove('hidden');
   $('app-shell').classList.add('hidden');
   $('login-input').value = '';
@@ -3047,19 +3111,86 @@ function getClienteSheets() {
   return merged;
 }
 
-// F1b: PINs y claves ahora viven en env vars de Netlify (ADMIN_PIN,
-// AGENT_PINS, CLIENT_CODES). Las funciones siguen aquí como no-ops para
-// que los botones viejos no revienten, pero muestran aviso al operador.
 function renderPinesConfig() {
   const el = $('cfg-pines-lista');
-  if(el) el.innerHTML = `<div class="msg msg-info" style="grid-column:1/-1;font-size:12px;line-height:1.6;">Los PINs de agentes se gestionan desde <strong>Netlify → Site config → Environment variables → <code>AGENT_PINS</code></strong> (JSON). Para cambiar uno, edita el JSON y redeploya. Los valores nunca regresan al navegador.</div>`;
+  if(!el) return;
+  const agentes = Object.keys(C.PINES_AGENTE || {});
+  el.innerHTML = agentes.map(nombre => {
+    const pinActual = C.PINES_AGENTE?.[nombre] || '';
+    return `
+      <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:12px;">
+        <div style="font-size:11px;font-weight:700;color:var(--fg-2);margin-bottom:8px;">${nombre}</div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input id="pin-inp-${nombre}" type="text" class="inp" value="${pinActual}"
+            maxlength="3"
+            style="width:70px;font-size:18px;letter-spacing:6px;text-align:center;padding:6px 8px;font-family:monospace;font-weight:700;"
+            placeholder="000"
+            oninput="this.value=this.value.replace(/[^0-9]/g,'')"
+            onkeydown="if(event.key==='Enter')cambiarPin('${nombre}')">
+          <button class="btn btn-ghost btn-sm" onclick="cambiarPin('${nombre}')" style="font-size:10px;padding:6px 10px;">✅</button>
+        </div>
+      </div>`;
+  }).join('');
 }
+
+function cambiarPin(nombre) {
+  const inp = $(`pin-inp-${nombre}`);
+  const nuevoPin = inp?.value?.trim();
+  if(!nuevoPin || nuevoPin.length !== 3 || !/^[0-9]{3}$/.test(nuevoPin)) {
+    alert('El PIN debe ser exactamente 3 dígitos numéricos');
+    return;
+  }
+  if(!C.PINES_AGENTE) C.PINES_AGENTE = {};
+  C.PINES_AGENTE[nombre] = nuevoPin;
+  // Persistir en localStorage
+  try {
+    const saved = JSON.parse(localStorage.getItem('sgm_pines_agente') || '{}');
+    saved[nombre] = nuevoPin;
+    localStorage.setItem('sgm_pines_agente', JSON.stringify(saved));
+  } catch(e) {}
+  if(inp) { inp.style.borderColor = '#22c55e'; setTimeout(() => { if(inp) inp.style.borderColor = ''; }, 2000); }
+  console.log(`[SGM] PIN de ${nombre} actualizado`);
+}
+
 function renderClavesConfig() {
   const el = $('cfg-claves-lista');
-  if(el) el.innerHTML = `<div class="msg msg-info" style="grid-column:1/-1;font-size:12px;line-height:1.6;">Las claves de cliente se gestionan desde <strong>Netlify → Site config → Environment variables → <code>CLIENT_CODES</code></strong> (JSON). Para cambiar una, edita el JSON y redeploya.</div>`;
+  if(!el) return;
+  el.innerHTML = Object.entries(C.CLIENTES).sort((a,b)=>a[1].localeCompare(b[1])).map(([pref, nom]) => {
+    const claveActual = C.CLAVES_CLIENTE?.[pref] || '';
+    return `
+      <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:12px;">
+        <div style="font-size:10px;font-weight:700;color:var(--fg-4);margin-bottom:4px;">${pref}</div>
+        <div style="font-size:11px;color:var(--fg-2);margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${nom}">${nom}</div>
+        <div style="display:flex;gap:6px;">
+          <input id="clave-inp-${pref}" type="text" class="inp" value="${claveActual}"
+            style="flex:1;font-size:11px;padding:6px 8px;font-family:monospace;letter-spacing:1px;"
+            placeholder="Nueva clave"
+            onkeydown="if(event.key==='Enter')cambiarClave('${pref}')">
+          <button class="btn btn-ghost btn-sm" onclick="cambiarClave('${pref}')" style="font-size:10px;padding:6px 10px;">✅</button>
+        </div>
+      </div>`;
+  }).join('');
 }
-function cambiarPin()   { alert('Este valor ahora se gestiona desde Netlify (AGENT_PINS).'); }
-function cambiarClave() { alert('Este valor ahora se gestiona desde Netlify (CLIENT_CODES).'); }
+
+function cambiarClave(pref) {
+  const inp = $(`clave-inp-${pref}`);
+  const nuevaClave = inp?.value?.trim().toUpperCase();
+  if(!nuevaClave || nuevaClave.length < 4) {
+    alert('La clave debe tener al menos 4 caracteres');
+    return;
+  }
+  if(!C.CLAVES_CLIENTE) C.CLAVES_CLIENTE = {};
+  C.CLAVES_CLIENTE[pref] = nuevaClave;
+  // Guardar en localStorage para persistencia
+  try {
+    const saved = JSON.parse(localStorage.getItem('sgm_claves_cliente') || '{}');
+    saved[pref] = nuevaClave;
+    localStorage.setItem('sgm_claves_cliente', JSON.stringify(saved));
+  } catch(e) {}
+  // Feedback visual
+  if(inp) { inp.style.borderColor = '#22c55e'; setTimeout(() => { if(inp) inp.style.borderColor = ''; }, 2000); }
+  console.log(`[SGM] Clave de ${pref} actualizada`);
+}
 
 function resetSheetConfig() {
   if(!confirm('¿Restablecer configuración de hojas a los valores originales?\n\nEsto limpia el localStorage y vuelve a usar la configuración del sistema.')) return;
@@ -3178,28 +3309,23 @@ function buildBatchTabsFromMeta_(metaSheets, cfg) {
         .filter(Boolean)
     : [];
 
-  // Override explícito: si el cliente define cfg.tabs como array, úsalo tal cual.
-  // Si hay metadata, filtramos solo a las que realmente existen.
-  if(cfg && Array.isArray(cfg.tabs) && cfg.tabs.length) {
-    const wanted = cfg.tabs.map(t => String(t || '').trim()).filter(Boolean);
-    const existing = titles.length ? wanted.filter(t => titles.includes(t)) : wanted;
-    return Array.from(new Set(existing.length ? existing : wanted));
-  }
+  // Pestañas que SIEMPRE leemos:
+  //   • APP_WRITE_TAB (Despachos_SGM_APP) — si existe, aquí van registros nuevos
+  //   • 'Despachos_SGM' — el Apps Script escribe aquí para TODOS los clientes;
+  //     también contiene el histórico de cada cliente.
+  const always = [APP_WRITE_TAB, 'Despachos_SGM'];
 
-  // Tomar SOLO la primera pestaña histórica real del spreadsheet
-  // y SIEMPRE agregar Despachos_SGM_APP.
-  let firstHistorical = titles.find(t => t && t !== APP_WRITE_TAB && t !== 'Despachos_SGM');
+  // Primera pestaña adicional que no sea ninguna de las anteriores
+  // (p. ej. respaldo histórico en otra pestaña del cliente)
+  let firstHistorical = titles.find(t => t && !always.includes(t));
 
-  // Fallback: si no vino metadata, usar cfg.hoja solo si NO es la pestaña app.
+  // Fallback: usar cfg.hoja si no coincide con las ya incluidas
   if(!firstHistorical) {
     const cfgTab = (cfg && cfg.hoja) ? String(cfg.hoja).trim() : '';
-    if(cfgTab && cfgTab !== APP_WRITE_TAB && cfgTab !== 'Despachos_SGM') firstHistorical = cfgTab;
+    if(cfgTab && !always.includes(cfgTab)) firstHistorical = cfgTab;
   }
 
-  // Último fallback conservador
-  if(!firstHistorical) firstHistorical = 'Sheet1';
-
-  return Array.from(new Set([APP_WRITE_TAB, firstHistorical].filter(Boolean)));
+  return Array.from(new Set([...always, firstHistorical].filter(Boolean)));
 }
 
 function isQuotaError_(res, jsn, errMsg) {
@@ -3739,16 +3865,26 @@ async function confirmWriteInSheet_(record, options = {}) {
   const timeoutMs = Number(options.timeoutMs || 12000);
   const intervalMs = Number(options.intervalMs || 1200);
   const started = Date.now();
-  const range = encodeURIComponent(`${APP_WRITE_TAB}!R:R`);
+
+  // Apps Script escribe en 'Despachos_SGM'; también checar APP_WRITE_TAB por compatibilidad.
+  // Columna Q = posición 17 en REQUIRED_HEADERS (campo 'id'); R como fallback.
+  const tabsToCheck = ['Despachos_SGM', APP_WRITE_TAB];
+  const colsToCheck = ['Q', 'R', 'S'];
 
   while(Date.now() - started <= timeoutMs) {
-    try {
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}/values/${range}?majorDimension=COLUMNS&key=${apiKey}`;
-      const res = await fetch(url, { cache: 'no-store' });
-      const json = await res.json();
-      const ids = Array.isArray(json?.values?.[0]) ? json.values[0].map(v => String(v || '').trim()) : [];
-      if(ids.includes(wantedId)) return true;
-    } catch(_) {}
+    for(const tab of tabsToCheck) {
+      for(const col of colsToCheck) {
+        try {
+          const range = encodeURIComponent(`${tab}!${col}:${col}`);
+          const url = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}/values/${range}?majorDimension=COLUMNS&key=${apiKey}`;
+          const res = await fetch(url, { cache: 'no-store' });
+          if(!res.ok) continue;
+          const json = await res.json();
+          const ids = Array.isArray(json?.values?.[0]) ? json.values[0].map(v => String(v || '').trim()) : [];
+          if(ids.includes(wantedId)) return true;
+        } catch(_) {}
+      }
+    }
     await sleep_(intervalMs);
   }
 
@@ -3952,39 +4088,6 @@ function applyFilters() {
   if(tipo === 'admin') renderAdminDash();
 }
 
-// ── F1a: helpers de scope de datos ─────────────────────────
-// Evitan el bug donde "0 resultados" caía de vuelta a todos los registros.
-function hasActiveAdminFilters_() {
-  return !!(($('filter-start')?.value   || '').trim() ||
-            ($('filter-end')?.value     || '').trim() ||
-            ($('filter-cliente')?.value || '').trim());
-}
-function hasActiveClientFilters_() {
-  return !!(($('cli-filter-start')?.value || '').trim() ||
-            ($('cli-filter-end')?.value   || '').trim());
-}
-function getAdminData_() {
-  return hasActiveAdminFilters_() ? [...STATE.filtered] : [...STATE.registros];
-}
-function getClientData_(pref) {
-  pref = pref || STATE.session?.prefijo;
-  if(!pref) return [];
-  let data = STATE.registros.filter(r => r.prefix === pref);
-  const start = $('cli-filter-start')?.value;
-  const end   = $('cli-filter-end')?.value;
-  if(start) {
-    const [sy, sm, sd] = start.split('-').map(Number);
-    const st = new Date(sy, sm - 1, sd, 0, 0, 0).getTime();
-    data = data.filter(r => (r.timestamp || parseDateToTs(r.fecha) || 0) >= st);
-  }
-  if(end) {
-    const [ey, em, ed] = end.split('-').map(Number);
-    const en = new Date(ey, em - 1, ed, 23, 59, 59).getTime();
-    data = data.filter(r => (r.timestamp || parseDateToTs(r.fecha) || 0) <= en);
-  }
-  return data;
-}
-
 // ── ADMIN DASHBOARD ────────────────────────────────────────
 function adminTab(tab) {
   document.querySelectorAll('#view-admin .tab').forEach(t => {
@@ -4034,7 +4137,7 @@ function renderBarras(containerId, groups, total, color, limit) {
 }
 
 function renderAdminDash() {
-  const data = getAdminData_();
+  const data = STATE.filtered;
   const totalL = data.reduce((a,b) => a + b.litros, 0);
   const totalM = data.reduce((a,b) => a + b.monto, 0);
   const clientes = new Set(data.map(r => r.prefix)).size;
@@ -4216,7 +4319,7 @@ function renderBitacora(data) {
 }
 
 function renderGraficas() {
-  const data = getAdminData_();
+  const data = STATE.filtered;
   if(!data.length) {
     const nt = $('narrative-text');
     if(nt) nt.textContent = 'Sin datos en el período seleccionado. Ajusta los filtros de fecha.';
@@ -4568,9 +4671,20 @@ function renderLine(id, labels, data) {
 function renderClienteView() {
   if(!STATE.session || STATE.session.tipo !== 'cliente') return;
   const pref = STATE.session.prefijo;
+  
+  let data = STATE.registros.filter(r => r.prefix === pref);
 
-  // F1a: helper unificado (prefix + filtros de fecha)
-  const data = getClientData_(pref);
+  // Filtros fecha
+  const start = $('cli-filter-start')?.value;
+  const end   = $('cli-filter-end')?.value;
+  if(start) {
+    const [sy,sm,sd] = start.split('-').map(Number);
+    data = data.filter(r => r.timestamp >= new Date(sy,sm-1,sd,0,0,0).getTime());
+  }
+  if(end) {
+    const [ey,em,ed] = end.split('-').map(Number);
+    data = data.filter(r => r.timestamp <= new Date(ey,em-1,ed,23,59,59).getTime());
+  }
 
   const totalL = data.reduce((a,b) => a + b.litros, 0);
   const totalM = data.reduce((a,b) => a + b.monto, 0);
@@ -4670,19 +4784,25 @@ function scanFrame() {
   }
   canvas.width  = video.videoWidth;
   canvas.height = video.videoHeight;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const ctx = canvas.getContext('2d');
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
   if(code && code.data) {
-    // F1a: pasar el payload crudo a validateFolio para que pueda verificar el hash
-    const raw = String(code.data).trim();
-    const parsed = parseQrVale(raw);
-    const folioInp = $('folio-input');
-    folioInp.dataset.qrRaw = raw;
-    folioInp.value = String(parsed.folio || raw).trim().toUpperCase();
+    const raw = code.data.trim();
+    const parts = raw.split('|');
+    const primera = parts[0].toUpperCase();
+    // Si el primer segmento tiene guion (TGIO-0001) es un vale físico
+    // Si no tiene guion (K7MNP2) es un código de autorización digital
+    if(primera.includes('-')) {
+      // Vale físico
+      $('folio-input').value = primera;
+    } else {
+      // Autorización digital — poner el código directamente
+      $('folio-input').value = primera;
+    }
     stopScanner();
-    validateFolio(raw);
+    validateFolio();
     return;
   }
   qrAnimFrame = requestAnimationFrame(scanFrame);
@@ -4696,28 +4816,12 @@ function stopScanner() {
   STATE.scannerActive = false;
 }
 
-function validateFolio(rawFromQr) {
-  const folioInp = $('folio-input');
-  // F1a: si viene del escáner, usamos el payload crudo del QR para verificar hash
-  const raw = String(rawFromQr || folioInp?.dataset.qrRaw || folioInp?.value || '').trim();
-  if(!raw) return;
-
-  const parsed = parseQrVale(raw);
-  const folioFromQr = String(parsed?.folio || '').trim().toUpperCase();
-  const hashFromQr  = String(parsed?.hash  || '').trim().toUpperCase();
-  const inputManual = String(folioInp?.value || '').trim().toUpperCase();
-  const input = folioFromQr || inputManual;
+function validateFolio() {
+  const input = $('folio-input').value.trim().toUpperCase();
   if(!input) return;
 
-  // Si el QR trae hash, verificarlo contra el vale registrado
-  if(hashFromQr && !validateValeHash(raw)) {
-    showMsg('folio-status', '❌ QR inválido o alterado. Genera nuevamente el vale.', 'err');
-    $('step2-card').classList.add('hidden');
-    return;
-  }
-
-  // ¿Es un código de autorización digital? (sin guion, 5-8 chars alfanuméricos)
-  const esAutz = !input.includes('-') && /^[A-Z0-9]{5,8}$/.test(input);
+  // ¿Es un código de autorización digital? (sin guion, 6 chars alfanuméricos)
+  const esAutz = !input.includes('-') && input.length >= 5 && input.length <= 8;
   if(esAutz) {
     const result = validateAutorizacion(input);
     if(!result.ok) {
@@ -5677,8 +5781,7 @@ function cancelForm() {
   $('step3-card').classList.add('hidden');
   $('step1-card').classList.remove('hidden');
   setStepDots(1);
-  const folioInp = $('folio-input');
-  if(folioInp) { folioInp.value = ''; delete folioInp.dataset.qrRaw; }
+  $('folio-input').value = '';
   $('folio-status').classList.add('hidden');
   $('f-litros').value = '';
   $('f-monto').value = '';
@@ -6349,7 +6452,7 @@ function eliminarCorte(id) {
 
 
 function exportCSV() {
-  const data = getAdminData_();
+  const data = STATE.filtered;
   const header = 'Fecha,Hora,Ticket,Folio Vale,Cliente,Chofer,Placas,Producto,Litros,Monto,Odometro';
   const rows = data.map(r =>
     [r.fecha, r.hora||'', r.ticket||'', r.folio_vale||'', r.cliente, r.chofer, r.placas||r.unidad, r.producto, r.litros, r.monto, r.odometro||''].join(',')
@@ -6466,9 +6569,11 @@ async function testConnection() {
 }
 
 function changePin() {
-  // F1b: ya no se edita localmente. Hay que cambiar la env var ADMIN_PIN en Netlify.
-  alert('El PIN admin ahora se cambia desde Netlify → Site config → Environment variables → ADMIN_PIN. Después de editarlo hay que redeployar.');
-  const ni = $('new-pin'); if(ni) ni.value = '';
+  const newPin = $('new-pin').value.trim();
+  if(newPin.length < 4) { alert('El PIN debe tener al menos 4 caracteres.'); return; }
+  saveConfig('PIN_ADMIN', newPin);
+  $('new-pin').value = '';
+  alert('PIN actualizado correctamente.');
 }
 
 function ajustarSaldo(pref, nom) {
@@ -6522,9 +6627,7 @@ function saveVales(vales) {
 }
 
 function selectValeProducto(btn) {
-  // F1a: scopeada al tab individual para no pisar el selector del tab masivo
-  const scope = btn.closest('#vales-individual') || document;
-  scope.querySelectorAll('.btn-producto[data-prod]').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#admin-vales .btn-producto').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   $('vale-producto').value = btn.dataset.prod;
 }
@@ -7014,13 +7117,11 @@ function renderAutorizacionesHistorial() {
 function validateAutorizacion(codigo) {
   const autz  = getAutorizaciones();
   const found = autz.find(a => a.codigo === codigo.toUpperCase());
-  if(!found)                         return { ok: false, msg: '❌ Código no encontrado.' };
-  if(found.estado === 'SOLICITADO')  return { ok: false, msg: '⏳ La autorización aún no ha sido aprobada por SGM.' };
-  if(found.estado === 'USADO')       return { ok: false, msg: `⛔ Ya fue utilizada por ${found.agente || 'agente'}.` };
+  if(!found)                   return { ok: false, msg: '❌ Código no encontrado.' };
+  if(found.estado === 'USADO') return { ok: false, msg: `⛔ Ya fue utilizado por ${found.agente || 'agente'}.` };
   if(found.estado === 'VENCIDO' || Date.now() > found.vence)
-                                     return { ok: false, msg: '⏱ Autorización vencida.' };
-  if(found.estado === 'RECHAZADO')   return { ok: false, msg: '✗ Autorización rechazada por admin.' };
-  if(found.estado !== 'PENDIENTE')   return { ok: false, msg: `⚠️ Estado inválido para despacho: ${found.estado}` };
+                               return { ok: false, msg: '⏱ Autorización vencida.' };
+  if(found.estado === 'RECHAZADO') return { ok: false, msg: '✗ Autorización rechazada por admin.' };
   return { ok: true, autz: found };
 }
 
@@ -7328,7 +7429,9 @@ function detectarAlertas(unidades, choferes, data) {
 }
 
 function renderRendimiento() {
-  const data = getAdminData_();
+  // Si hay filtros activos y dan 0 resultados, mostrar vacío (no caer a todos los registros)
+  const hayFiltroActivo = $('filter-start')?.value || $('filter-end')?.value || $('filter-cliente')?.value;
+  const data = (hayFiltroActivo && STATE.filtered.length === 0) ? [] : (STATE.filtered.length > 0 ? STATE.filtered : STATE.registros);
   if(!data.length) {
     $('rend-kpis').innerHTML = `<div class="msg msg-warn">Sin datos cargados. Ve a Resumen y actualiza primero.</div>`;
     return;
@@ -7742,7 +7845,7 @@ function renderAlertasInteligentes() {
   const el = $('alertas-inteligentes');
   if(!el) return;
 
-  const data = getAdminData_();
+  const data = STATE.filtered.length > 0 ? STATE.filtered : STATE.registros;
   if(!data.length) {
     el.innerHTML = `<div class="msg msg-warn">Sin datos. Actualiza primero en la pestaña Resumen.</div>`;
     return;
@@ -7796,12 +7899,32 @@ function renderAlertasInteligentes() {
 
 
 
-// F0: keys movidas a Netlify env vars. Los helpers quedan como no-ops para no
-// romper referencias existentes; la UI de admin-config ya no expone inputs.
-function getClaudeKey() { return ''; }
-function saveClaudeKey() {}
-function getGeminiKey() { return ''; }
-function saveGeminiKey() {}
+function getClaudeKey() {
+  // Hardcodeada en SGM_CONFIG — funciona en cualquier navegador sin configurar nada
+  return window.SGM_CONFIG.CLAUDE_API_KEY || localStorage.getItem('sgm_claude_key') || '';
+}
+
+function saveClaudeKey() {
+  const key = $('cfg-claude-key')?.value?.trim();
+  if(!key) { alert('Ingresa una API Key válida.'); return; }
+  localStorage.setItem('sgm_claude_key', key);
+  $('cfg-claude-key').value = '';
+  $('cfg-claude-key').placeholder = '✅ API Key guardada';
+  setTimeout(() => { if($('cfg-claude-key')) $('cfg-claude-key').placeholder = 'sk-ant-api03-...'; }, 3000);
+}
+
+function getGeminiKey() {
+  return window.SGM_CONFIG.GEMINI_API_KEY || localStorage.getItem('sgm_gemini_key') || '';
+}
+
+function saveGeminiKey() {
+  const key = $('cfg-gemini-key')?.value?.trim();
+  if(!key) { alert('Ingresa una API Key válida.'); return; }
+  localStorage.setItem('sgm_gemini_key', key);
+  $('cfg-gemini-key').value = '';
+  $('cfg-gemini-key').placeholder = '✅ API Key guardada';
+  setTimeout(() => { if($('cfg-gemini-key')) $('cfg-gemini-key').placeholder = 'AIzaSy...'; }, 3000);
+}
 
 // ── Dashboard alerts panel ─────────────────────────────────
 function renderDashAlertas(data) {
@@ -7840,32 +7963,27 @@ function renderDashAlertas(data) {
 }
 
 function initIATab() {
-  // F0: IA siempre vía proxy server-side. El aviso de "sin key" ya no aplica.
+  const hasKey = getGeminiKey() || getClaudeKey();
   const warn = $('ia-apikey-warn');
-  if(warn) warn.style.display = 'none';
+  if(warn) warn.style.display = hasKey ? 'none' : 'block';
+  const engine = getGeminiKey() ? '🟢 Gemini' : getClaudeKey() ? '🔵 Claude' : '⚠️ Sin API Key';
   const n = STATE.registros.length;
   const status = $('ia-status');
   if(status) status.textContent = n > 0
-    ? `🟢 IA lista · ${n.toLocaleString()} registros`
-    : `🟢 IA lista · Sin datos — actualiza primero`;
+    ? `${engine} · ${n.toLocaleString()} registros`
+    : `${engine} · Sin datos — actualiza primero`;
 }
 
 // Construye el contexto de datos para la IA
 function buildIAContext() {
-  const data = getAdminData_();
+  const data = STATE.filtered.length > 0 ? STATE.filtered : STATE.registros;
   if(!data.length) return 'No hay datos de despacho cargados actualmente.';
 
   // Estadísticas generales
   const totalL  = data.reduce((a,b) => a+b.litros, 0);
   const totalM  = data.reduce((a,b) => a+b.monto,  0);
-  // F1a: ordenar cronológicamente antes de tomar primera/última
-  const fechasOrdenadas = data
-    .map(r => r.fecha)
-    .filter(Boolean)
-    .sort((a, b) => parseDateToTs(a) - parseDateToTs(b));
-  const periodo = fechasOrdenadas.length
-    ? `${fechasOrdenadas[0]} al ${fechasOrdenadas[fechasOrdenadas.length - 1]}`
-    : 'período actual';
+  const fechas  = data.map(r => r.fecha).filter(Boolean);
+  const periodo = fechas.length ? `${fechas[fechas.length-1]} al ${fechas[0]}` : 'período actual';
 
   // Por cliente
   const porCliente = {};
@@ -8008,6 +8126,9 @@ Desviación estándar: ${stdL.toFixed(1)} L
 - El score de riesgo es un indicador, no una afirmación de hecho.
 `;
 
+  // Enriquecer con cierres operativos si existen
+  ctx = buildIAContextCierres(ctx);
+
   return ctx;
 }
 
@@ -8033,8 +8154,61 @@ CONTEXTO DE LA OPERACIÓN:
 - Tienen 27 clientes corporativos activos`;
 }
 
+async function iaCallGemini(userMessage) {
+  const key = getGeminiKey();
+  if(!key) return null; // sin key → fallback a Claude
+
+  const contextFull = buildIAContext();
+  const context = contextFull.length > 8000 ? contextFull.slice(0, 8000) + '\n...[contexto truncado]' : contextFull;
+  const systemPrompt = iaSystemPrompt() + '\n\nCONTEXTO DE DATOS ACTUAL:\n' + context;
+
+  // Construir historial de conversación para Gemini
+  const contents = [];
+  for(let i = 0; i < IA_HISTORY.length; i += 2) {
+    if(IA_HISTORY[i]) contents.push({ role: 'user',  parts: [{ text: IA_HISTORY[i].content }] });
+    if(IA_HISTORY[i+1]) contents.push({ role: 'model', parts: [{ text: IA_HISTORY[i+1].content }] });
+  }
+  contents.push({ role: 'user', parts: [{ text: userMessage }] });
+
+  const body = {
+    system_instruction: { parts: [{ text: systemPrompt }] },
+    contents,
+    generationConfig: { maxOutputTokens: 1500, temperature: 0.4 }
+  };
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${key}`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+  );
+  if(!res.ok) throw new Error(`Gemini HTTP ${res.status}`);
+  const data = await res.json();
+  const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Sin respuesta de Gemini.';
+
+  IA_HISTORY.push({ role: 'user', content: userMessage });
+  IA_HISTORY.push({ role: 'assistant', content: reply });
+  if(IA_HISTORY.length > 20) IA_HISTORY = IA_HISTORY.slice(-20);
+  return reply;
+}
+
 async function iaCall(userMessage) {
-  // F0: proxy server-side en /.netlify/functions/ia (OpenAI gpt-4o-mini).
+  // Intentar Gemini primero (llamada directa, sin proxy)
+  const geminiKey = getGeminiKey();
+  if(geminiKey) {
+    try {
+      const reply = await iaCallGemini(userMessage);
+      if(reply !== null) return reply;
+    } catch(e) {
+      console.warn('[SGM] Gemini error, fallback a Claude:', e.message);
+    }
+  }
+
+  // Fallback: Claude via Apps Script proxy
+  const key = getClaudeKey();
+  if(!key) {
+    return '⚠️ Configura tu **Gemini API Key** en Config → sección IA para activar el análisis. Es gratis en aistudio.google.com';
+  }
+
+  // Limitar contexto a 8000 chars para no exceder límites del request
   const contextFull = buildIAContext();
   const context = contextFull.length > 8000 ? contextFull.slice(0, 8000) + '\n...[contexto truncado]' : contextFull;
 
@@ -8042,26 +8216,33 @@ async function iaCall(userMessage) {
     ? [{ role:'user', content: userMessage }]
     : [...IA_HISTORY, { role:'user', content: userMessage }];
 
+  // Usar Apps Script como proxy para evitar CORS
+  const proxyUrl = C.APPS_SCRIPT_URL;
+  if(!proxyUrl) return '❌ Apps Script URL no configurada.';
+
   let res;
   try {
-    res = await fetch('/.netlify/functions/ia', {
+    res = await fetch(proxyUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        system: iaSystemPrompt() + '\n\nCONTEXTO DE DATOS ACTUAL:\n' + context,
-        messages,
-        max_tokens: 800
+        action:     'claudeProxy',
+        model:      'claude-haiku-4-5-20251001',
+        max_tokens: 1500,
+        system:     iaSystemPrompt() + '\n\nCONTEXTO DE DATOS ACTUAL:\n' + context,
+        messages
       })
     });
   } catch(netErr) {
     return '❌ Error de red: ' + netErr.message;
   }
 
-  let data = {};
-  try { data = await res.json(); } catch(_) {}
-  if(!res.ok || !data.ok) return '❌ ' + (data.error || `HTTP ${res.status}`);
+  if(!res.ok) return `❌ Error proxy ${res.status}`;
+
+  const data = await res.json();
+  if(!data.ok) return '❌ ' + (data.error || 'Error desconocido');
   const reply = data.content?.[0]?.text || 'Sin respuesta.';
 
+  // Actualizar historial (máximo 10 turnos para no exceder tokens)
   IA_HISTORY.push({ role:'user', content: userMessage });
   IA_HISTORY.push({ role:'assistant', content: reply });
   if(IA_HISTORY.length > 20) IA_HISTORY = IA_HISTORY.slice(-20);
@@ -8179,6 +8360,16 @@ async function iaQuick(tipo) {
   await iaSend();
 }
 
+// Cargar API keys guardadas en campos de config
+document.addEventListener('DOMContentLoaded', () => {
+  if(localStorage.getItem('sgm_claude_key') && $('cfg-claude-key')) {
+    $('cfg-claude-key').placeholder = '✅ API Key configurada';
+  }
+  if(localStorage.getItem('sgm_gemini_key') && $('cfg-gemini-key')) {
+    $('cfg-gemini-key').placeholder = '✅ API Key configurada';
+  }
+});
+
 // ══════════════════════════════════════════════════════════
 // MÓDULO: RENDIMIENTO CLIENTE + CIERRE OPERATIVO
 // Capa B — datos operativos declarados por el cliente
@@ -8293,11 +8484,24 @@ function renderGraficasCliente() {
   const pref = STATE.session?.prefijo;
   if(!pref) return;
 
-  // F1a: helper unificado
-  const data = getClientData_(pref);
+  // Usar datos filtrados del cliente
+  let data = STATE.registros.filter(r => r.prefix === pref);
+  const start = $('cli-filter-start')?.value;
+  const end   = $('cli-filter-end')?.value;
+  if(start) {
+    const [sy,sm,sd] = start.split('-').map(Number);
+    const st = new Date(sy,sm-1,sd,0,0,0).getTime();
+    data = data.filter(r => (r.timestamp||0) >= st);
+  }
+  if(end) {
+    const [ey,em,ed] = end.split('-').map(Number);
+    const en = new Date(ey,em-1,ed,23,59,59).getTime();
+    data = data.filter(r => (r.timestamp||0) <= en);
+  }
+
   if(!data.length) return;
 
-  const TOP = 10;
+  const TOP = Number.POSITIVE_INFINITY;
 
   function destroyCliChart(id) {
     const key = 'cli-' + id;
@@ -8432,9 +8636,29 @@ function renderCliBitacora() {
   const prefix = STATE.session?.prefijo;
   if(!prefix) return;
   const search = ($('cli-bita-search')?.value || '').toLowerCase();
+  const start  = $('cli-filter-start')?.value;
+  const end    = $('cli-filter-end')?.value;
 
-  // F1a: helper unificado aplica prefix + filtros de fecha
-  let data = getClientData_(prefix);
+  let data = STATE.registros.filter(r => r.prefix === prefix);
+
+  if(start) {
+    const [sy,sm,sd] = start.split('-').map(Number);
+    const st = new Date(sy,sm-1,sd,0,0,0).getTime();
+    data = data.filter(r => {
+      const ts = r.timestamp || 0;
+      if(ts > 0) return ts >= st;
+      return parseDateToTs(r.fecha) >= st;
+    });
+  }
+  if(end) {
+    const [ey,em,ed] = end.split('-').map(Number);
+    const en = new Date(ey,em-1,ed,23,59,59).getTime();
+    data = data.filter(r => {
+      const ts = r.timestamp || 0;
+      if(ts > 0) return ts <= en;
+      return parseDateToTs(r.fecha) <= en;
+    });
+  }
   if(search) {
     data = data.filter(r =>
       (r.chofer||'').toLowerCase().includes(search) ||
@@ -8494,8 +8718,7 @@ function renderCliBitacora() {
 function exportCSVCliente() {
   const prefix = STATE.session?.prefijo;
   if(!prefix) return;
-  // F1a: exporta lo que el usuario realmente tiene en pantalla (con filtros aplicados)
-  const data = getClientData_(prefix);
+  const data = STATE.registros.filter(r => r.prefix === prefix);
   if(!data.length) { alert('Sin datos para exportar'); return; }
   const headers = ['Fecha','Hora','Ticket','Folio Vale','Chofer','Placas','Producto','Litros','Monto','Odometro'];
   const rows = data.map(r => [r.fecha,r.hora||'',r.ticket||'',r.folio_vale||'',r.chofer,r.placas,r.producto,r.litros||r.cantidad,r.monto,r.odometro||''].join(','));
@@ -8513,8 +8736,7 @@ let CLI_IA_HISTORY = [];
 function buildCliIAContext() {
   const prefix  = STATE.session?.prefijo;
   const nombre  = STATE.session?.nombre || prefix;
-  // F1a: helper respeta los filtros de fecha del cliente
-  const data    = getClientData_(prefix);
+  const data    = STATE.filtered.filter(r => r.prefix === prefix);
   if(!data.length) return `Cliente: ${nombre}
 Sin datos en el período seleccionado.`;
 
@@ -8562,9 +8784,11 @@ ${data.slice(0,10).map(r=>`  ${r.fecha} | ${r.chofer} | ${r.placas} | ${fmtL(r.l
 }
 
 async function cliIaCall(userMessage) {
-  // F0: proxy server-side en /.netlify/functions/ia (OpenAI gpt-4o-mini).
-  const prefix  = STATE.session?.prefijo;
-  const nombre  = STATE.session?.nombre || prefix;
+  const key = getClaudeKey();
+  if(!key) return '⚠️ La API Key de Claude no está configurada. Pide al administrador que la configure en Admin → Config → sección IA.';
+
+  const prefix = STATE.session?.prefijo;
+  const nombre = STATE.session?.nombre || prefix;
   const context = buildCliIAContext();
 
   const system = `Eres el analista de inteligencia artificial de SGM Morgan Gasolineros.
@@ -8581,27 +8805,41 @@ ${context}`;
     ? [{ role:'user', content: userMessage }]
     : [...CLI_IA_HISTORY, { role:'user', content: userMessage }];
 
-  let res;
   try {
-    res = await fetch('/.netlify/functions/ia', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ system, messages, max_tokens: 800 })
-    });
-  } catch(netErr) {
-    return '❌ Error de red: ' + netErr.message;
+    const proxyUrl = C.APPS_SCRIPT_URL;
+    if(!proxyUrl) return '❌ Apps Script URL no configurada.';
+
+    let res;
+    try {
+      res = await fetch(proxyUrl, {
+        method: 'POST',
+        body: JSON.stringify({
+          action:     'claudeProxy',
+          model:      'claude-haiku-4-5-20251001',
+          max_tokens: 1500,
+          system,
+          messages
+        })
+      });
+    } catch(netErr) {
+      return '❌ Error de red: ' + netErr.message;
+    }
+
+    if(!res.ok) return `❌ Error proxy ${res.status}`;
+    const proxyData = await res.json();
+    if(!proxyData.ok) return '❌ ' + (proxyData.error || 'Error desconocido');
+
+    const reply = proxyData.content?.[0]?.text || '(sin respuesta)';
+
+    // Guardar historial
+    CLI_IA_HISTORY.push({ role:'user', content: userMessage });
+    CLI_IA_HISTORY.push({ role:'assistant', content: reply });
+    if(CLI_IA_HISTORY.length > 20) CLI_IA_HISTORY = CLI_IA_HISTORY.slice(-20);
+
+    return reply;
+  } catch(e) {
+    return '❌ Error de conexión: ' + e.message;
   }
-
-  let data = {};
-  try { data = await res.json(); } catch(_) {}
-  if(!res.ok || !data.ok) return '❌ ' + (data.error || `HTTP ${res.status}`);
-  const reply = data.content?.[0]?.text || '(sin respuesta)';
-
-  CLI_IA_HISTORY.push({ role:'user', content: userMessage });
-  CLI_IA_HISTORY.push({ role:'assistant', content: reply });
-  if(CLI_IA_HISTORY.length > 20) CLI_IA_HISTORY = CLI_IA_HISTORY.slice(-20);
-
-  return reply;
 }
 
 function cliIaAddMsg(role, text) {
@@ -8695,8 +8933,9 @@ function renderCliRendimiento() {
   const prefix = STATE.session?.prefijo;
   if(!prefix) return;
 
-  // F1a: usa getClientData_ para que no se reinyecten registros de otros períodos
-  const registros = getClientData_(prefix);
+  // Registros del cliente en el período
+  const registros = (STATE.filtered.length > 0 ? STATE.filtered : STATE.registros)
+    .filter(r => r.prefix === prefix);
 
   const cierres = getCierresCliente();
 
