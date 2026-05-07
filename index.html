@@ -7964,10 +7964,12 @@ function renderDashAlertas(data) {
 }
 
 function initIATab() {
-  const hasKey = getGeminiKey() || getClaudeKey();
+  // La IA siempre está disponible vía /.netlify/functions/ia (gpt-4o-mini).
+  // El warning de API key queda oculto; Gemini sigue disponible si el admin
+  // configura su propia key en Config → IA.
   const warn = $('ia-apikey-warn');
-  if(warn) warn.style.display = hasKey ? 'none' : 'block';
-  const engine = getGeminiKey() ? '🟢 Gemini' : getClaudeKey() ? '🔵 Claude' : '⚠️ Sin API Key';
+  if(warn) warn.style.display = 'none';
+  const engine = getGeminiKey() ? '🟢 Gemini' : '🔵 GPT-4o-mini';
   const n = STATE.registros.length;
   const status = $('ia-status');
   if(status) status.textContent = n > 0
@@ -8203,12 +8205,7 @@ async function iaCall(userMessage) {
     }
   }
 
-  // Fallback: Claude via Apps Script proxy
-  const key = getClaudeKey();
-  if(!key) {
-    return '⚠️ Configura tu **Gemini API Key** en Config → sección IA para activar el análisis. Es gratis en aistudio.google.com';
-  }
-
+  // Fallback: GPT-4o-mini via Netlify Function (sin API key en el navegador)
   // Limitar contexto a 8000 chars para no exceder límites del request
   const contextFull = buildIAContext();
   const context = contextFull.length > 8000 ? contextFull.slice(0, 8000) + '\n...[contexto truncado]' : contextFull;
@@ -8217,17 +8214,13 @@ async function iaCall(userMessage) {
     ? [{ role:'user', content: userMessage }]
     : [...IA_HISTORY, { role:'user', content: userMessage }];
 
-  // Usar Apps Script como proxy para evitar CORS
-  const proxyUrl = C.APPS_SCRIPT_URL;
-  if(!proxyUrl) return '❌ Apps Script URL no configurada.';
-
+  // IA via Netlify Function (gpt-4o-mini) — la API key vive solo en el server
   let res;
   try {
-    res = await fetch(proxyUrl, {
+    res = await fetch('/.netlify/functions/ia', {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        action:     'claudeProxy',
-        model:      'claude-haiku-4-5-20251001',
         max_tokens: 1500,
         system:     iaSystemPrompt() + '\n\nCONTEXTO DE DATOS ACTUAL:\n' + context,
         messages
@@ -8237,7 +8230,7 @@ async function iaCall(userMessage) {
     return '❌ Error de red: ' + netErr.message;
   }
 
-  if(!res.ok) return `❌ Error proxy ${res.status}`;
+  if(!res.ok) return `❌ Error IA ${res.status}`;
 
   const data = await res.json();
   if(!data.ok) return '❌ ' + (data.error || 'Error desconocido');
@@ -8785,9 +8778,7 @@ ${data.slice(0,10).map(r=>`  ${r.fecha} | ${r.chofer} | ${r.placas} | ${fmtL(r.l
 }
 
 async function cliIaCall(userMessage) {
-  const key = getClaudeKey();
-  if(!key) return '⚠️ La API Key de Claude no está configurada. Pide al administrador que la configure en Admin → Config → sección IA.';
-
+  // IA via Netlify Function (gpt-4o-mini) — sin API key en el navegador
   const prefix = STATE.session?.prefijo;
   const nombre = STATE.session?.nombre || prefix;
   const context = buildCliIAContext();
@@ -8807,16 +8798,13 @@ ${context}`;
     : [...CLI_IA_HISTORY, { role:'user', content: userMessage }];
 
   try {
-    const proxyUrl = C.APPS_SCRIPT_URL;
-    if(!proxyUrl) return '❌ Apps Script URL no configurada.';
-
+    // IA via Netlify Function (gpt-4o-mini) — sin API key en el navegador
     let res;
     try {
-      res = await fetch(proxyUrl, {
+      res = await fetch('/.netlify/functions/ia', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action:     'claudeProxy',
-          model:      'claude-haiku-4-5-20251001',
           max_tokens: 1500,
           system,
           messages
@@ -8826,7 +8814,7 @@ ${context}`;
       return '❌ Error de red: ' + netErr.message;
     }
 
-    if(!res.ok) return `❌ Error proxy ${res.status}`;
+    if(!res.ok) return `❌ Error IA ${res.status}`;
     const proxyData = await res.json();
     if(!proxyData.ok) return '❌ ' + (proxyData.error || 'Error desconocido');
 
