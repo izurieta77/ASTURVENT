@@ -3866,9 +3866,10 @@ async function confirmWriteInSheet_(record, options = {}) {
   const intervalMs = Number(options.intervalMs || 1200);
   const started = Date.now();
 
-  // Apps Script escribe en 'Despachos_SGM'; también checar APP_WRITE_TAB por compatibilidad.
-  // Columna Q = posición 17 en REQUIRED_HEADERS (campo 'id'); R como fallback.
-  const tabsToCheck = ['Despachos_SGM', APP_WRITE_TAB];
+  // Apps Script v4 escribe a APP_WRITE_TAB ('Despachos_SGM_APP') como tab primario;
+  // 'Despachos_SGM' es fallback histórico. Checar APP_WRITE_TAB primero acelera la confirmación.
+  // Columnas Q/R/S cubren posiciones posibles del campo id según versión de headers.
+  const tabsToCheck = [APP_WRITE_TAB, 'Despachos_SGM'];
   const colsToCheck = ['Q', 'R', 'S'];
 
   while(Date.now() - started <= timeoutMs) {
