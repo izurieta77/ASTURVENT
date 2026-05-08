@@ -3862,30 +3862,39 @@ async function confirmWriteInSheet_(record, options = {}) {
   const wantedId = String(record.ID_REGISTRO || record.id || '').trim();
   if(!wantedId) return false;
 
-  const timeoutMs = Number(options.timeoutMs || 12000);
-  const intervalMs = Number(options.intervalMs || 1200);
+  const timeoutMs = Number(options.timeoutMs || 8000);
+  const intervalMs = Number(options.intervalMs || 1000);
   const started = Date.now();
 
-  // Apps Script v4 escribe a APP_WRITE_TAB ('Despachos_SGM_APP') como tab primario;
-  // 'Despachos_SGM' es fallback histórico. Checar APP_WRITE_TAB primero acelera la confirmación.
-  // Columnas Q/R/S cubren posiciones posibles del campo id según versión de headers.
-  const tabsToCheck = [APP_WRITE_TAB, 'Despachos_SGM'];
-  const colsToCheck = ['Q', 'R', 'S'];
+  // batchGet en UNA sola llamada cubre 6 rangos (2 tabs × 3 columnas).
+  // Esto reemplaza 6 fetches secuenciales por uno solo — ~6x más rápido por iteración
+  // y reduce drásticamente la carga sobre Sheets API en redes celulares lentas.
+  const ranges = [
+    `${APP_WRITE_TAB}!Q:Q`,
+    `${APP_WRITE_TAB}!R:R`,
+    `${APP_WRITE_TAB}!S:S`,
+    'Despachos_SGM!Q:Q',
+    'Despachos_SGM!R:R',
+    'Despachos_SGM!S:S',
+  ].map(r => 'ranges=' + encodeURIComponent(r)).join('&');
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}/values:batchGet?majorDimension=COLUMNS&${ranges}&key=${apiKey}`;
 
   while(Date.now() - started <= timeoutMs) {
-    for(const tab of tabsToCheck) {
-      for(const col of colsToCheck) {
-        try {
-          const range = encodeURIComponent(`${tab}!${col}:${col}`);
-          const url = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}/values/${range}?majorDimension=COLUMNS&key=${apiKey}`;
-          const res = await fetch(url, { cache: 'no-store' });
-          if(!res.ok) continue;
-          const json = await res.json();
-          const ids = Array.isArray(json?.values?.[0]) ? json.values[0].map(v => String(v || '').trim()) : [];
-          if(ids.includes(wantedId)) return true;
-        } catch(_) {}
+    try {
+      const res = await fetch(url, { cache: 'no-store' });
+      if(res.ok) {
+        const json = await res.json();
+        const valueRanges = Array.isArray(json?.valueRanges) ? json.valueRanges : [];
+        for(const vr of valueRanges) {
+          const cols = Array.isArray(vr?.values) ? vr.values : [];
+          for(const col of cols) {
+            if(Array.isArray(col) && col.some(v => String(v || '').trim() === wantedId)) {
+              return true;
+            }
+          }
+        }
       }
-    }
+    } catch(_) {}
     await sleep_(intervalMs);
   }
 
@@ -3921,7 +3930,7 @@ async function writeToSheet(data, options = {}) {
   }
 
   // Si ya quedó escrito antes, confirmarlo y limpiar backup
-  const alreadyThere = await confirmWriteInSheet_(data, { timeoutMs: 1200, intervalMs: 500 });
+  const alreadyThere = await confirmWriteInSheet_(data, { timeoutMs: 1500, intervalMs: 500 });
   if(alreadyThere) {
     localStorage.removeItem(backupKey);
     return { ok: true, confirmed: true, duplicated: true };
@@ -3932,7 +3941,7 @@ async function writeToSheet(data, options = {}) {
     try {
       await postDispatchOpaque_(data);
 
-      const confirmed = await confirmWriteInSheet_(data, { timeoutMs: 15000, intervalMs: 1200 });
+      const confirmed = await confirmWriteInSheet_(data, { timeoutMs: 8000, intervalMs: 1000 });
       if(confirmed) {
         localStorage.removeItem(backupKey);
         return { ok: true, confirmed: true, attempt };
