@@ -3851,6 +3851,49 @@ async function postDispatchOpaque_(data) {
   });
 }
 
+// Cache de columnas de id por sheetId — evita refetch repetido del header row.
+const _idColCache = new Map();
+
+function _colLetter_(idx) {
+  // 0-indexed → letra A..Z, AA..ZZ. Suficiente para sheets <= 702 cols.
+  let s = '';
+  let n = idx;
+  do {
+    s = String.fromCharCode(65 + (n % 26)) + s;
+    n = Math.floor(n / 26) - 1;
+  } while(n >= 0);
+  return s;
+}
+
+async function _findIdColumns_(sheetId, apiKey) {
+  if(_idColCache.has(sheetId)) return _idColCache.get(sheetId);
+
+  const tabs = [APP_WRITE_TAB, 'Despachos_SGM'];
+  const ranges = tabs.map(t => 'ranges=' + encodeURIComponent(`${t}!1:1`)).join('&');
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values:batchGet?${ranges}&key=${apiKey}`;
+
+  const target = []; // [{ tab, col }]
+  try {
+    const res = await fetch(url, { cache: 'no-store' });
+    if(res.ok) {
+      const json = await res.json();
+      const valueRanges = Array.isArray(json?.valueRanges) ? json.valueRanges : [];
+      tabs.forEach((tab, i) => {
+        const headers = (valueRanges[i]?.values?.[0]) || [];
+        // Buscar 'id', 'ID_REGISTRO' o variantes (case-insensitive, sin espacios/_/-)
+        const idx = headers.findIndex(h => {
+          const k = String(h || '').toLowerCase().replace(/[\s_\-]/g, '');
+          return k === 'id' || k === 'idregistro' || k === 'idregistroapp';
+        });
+        if(idx >= 0) target.push({ tab, col: _colLetter_(idx) });
+      });
+    }
+  } catch(_) {}
+
+  _idColCache.set(sheetId, target);
+  return target;
+}
+
 async function confirmWriteInSheet_(record, options = {}) {
   const apiKey = C.SHEETS_API_KEY;
   if(!apiKey || apiKey === 'TU_API_KEY_AQUI') return false;
@@ -3862,21 +3905,20 @@ async function confirmWriteInSheet_(record, options = {}) {
   const wantedId = String(record.ID_REGISTRO || record.id || '').trim();
   if(!wantedId) return false;
 
+  // Detectar dinámicamente en qué columna vive 'id' en cada tab del cliente.
+  // Cada cliente puede tener layout diferente (ej. AMSC tiene headers custom
+  // que empujan 'id' a columna X). Esto evita falsos negativos.
+  const targets = await _findIdColumns_(cfg.sheetId, apiKey);
+  if(targets.length === 0) return false;
+
   const timeoutMs = Number(options.timeoutMs || 8000);
   const intervalMs = Number(options.intervalMs || 1000);
   const started = Date.now();
 
-  // batchGet en UNA sola llamada cubre 6 rangos (2 tabs × 3 columnas).
-  // Esto reemplaza 6 fetches secuenciales por uno solo — ~6x más rápido por iteración
-  // y reduce drásticamente la carga sobre Sheets API en redes celulares lentas.
-  const ranges = [
-    `${APP_WRITE_TAB}!Q:Q`,
-    `${APP_WRITE_TAB}!R:R`,
-    `${APP_WRITE_TAB}!S:S`,
-    'Despachos_SGM!Q:Q',
-    'Despachos_SGM!R:R',
-    'Despachos_SGM!S:S',
-  ].map(r => 'ranges=' + encodeURIComponent(r)).join('&');
+  // batchGet de las columnas detectadas — 1 sola llamada por iteración.
+  const ranges = targets
+    .map(t => 'ranges=' + encodeURIComponent(`${t.tab}!${t.col}:${t.col}`))
+    .join('&');
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}/values:batchGet?majorDimension=COLUMNS&${ranges}&key=${apiKey}`;
 
   while(Date.now() - started <= timeoutMs) {
