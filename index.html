@@ -2888,70 +2888,73 @@ function toggleTheme() {
   }
 })();
 
-function doLogin() {
-  const val = ($('login-input')?.value||'').trim().toUpperCase();
-  $('login-err')?.classList.add('hidden');
+async function doLogin() {
+  const errEl = $('login-err');
+  errEl?.classList.add('hidden');
+
+  const body = { tipo: loginType };
 
   if(loginType === 'agente') {
     const nombre = $('login-agente-select')?.value;
     const isla   = $('login-isla')?.value || '1';
     const pin    = ($('agente-pin')?.value || '').trim();
-
     if(!nombre) { showMsg('login-err','⚠️ Selecciona tu nombre antes de entrar.','err'); return; }
     if(!pin)    { showMsg('login-err','⚠️ Ingresa tu PIN de 3 dígitos.','err'); return; }
+    Object.assign(body, { nombre, isla, pin });
 
-    // Validar PIN
-    const pinEsperado = C.PINES_AGENTE?.[nombre] || '';
-    if(!pinEsperado || pin !== pinEsperado) {
-      showMsg('login-err','❌ PIN incorrecto. Contacta al administrador.','err');
-      const pinInp = $('agente-pin');
-      if(pinInp) { pinInp.value = ''; pinInp.focus(); }
-      const lcard = document.querySelector('.login-card');
-      if(lcard) { lcard.classList.remove('shake'); void lcard.offsetWidth; lcard.classList.add('shake'); }
-      return;
-    }
+  } else if(loginType === 'admin') {
+    const pin = ($('login-input')?.value || '').trim();
+    if(!pin) { showMsg('login-err', '⚠️ Ingresa el PIN maestro.', 'err'); return; }
+    body.pin = pin;
 
-    STATE.session = { tipo: 'agente', nombre, isla };
-    enterApp();
+  } else if(loginType === 'cliente') {
+    const prefijo = $('cliente-select')?.value;
+    const clave   = ($('cliente-clave')?.value || '').trim();
+    if(!prefijo) { showMsg('login-err', '⚠️ Selecciona tu empresa', 'err'); return; }
+    if(!clave)   { showMsg('login-err', '⚠️ Ingresa tu clave de acceso', 'err'); return; }
+    Object.assign(body, { prefijo, clave });
+  }
+
+  const btnLogin = document.querySelector('#login-screen .btn-red.btn-full');
+  const btnLabel = btnLogin?.textContent;
+  if(btnLogin) { btnLogin.disabled = true; btnLogin.textContent = 'ENTRANDO...'; }
+
+  let res, data;
+  try {
+    res = await fetch('/.netlify/functions/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    data = await res.json().catch(() => ({}));
+  } catch(e) {
+    if(btnLogin) { btnLogin.disabled = false; btnLogin.textContent = btnLabel; }
+    showMsg('login-err', '❌ Sin conexión con el servidor. Intenta de nuevo.', 'err');
     return;
   }
 
-  if(loginType === 'admin') {
-    const pinGuardado = localStorage.getItem('sgm_PIN_ADMIN') || C.PIN_ADMIN || '071288';
-    // Comparación simple: evitar timing attacks con comparación de longitud primero
-    const match = val.length === pinGuardado.length && val === pinGuardado;
-    if(match) {
-      STATE.session = { tipo: 'admin' };
-      enterApp();
-    } else {
-      showMsg('login-err', 'PIN incorrecto', 'err');
-      const lcard = document.querySelector('.login-card');
-      if(lcard) { lcard.classList.remove('shake'); void lcard.offsetWidth; lcard.classList.add('shake'); }
-    }
+  if(btnLogin) { btnLogin.disabled = false; btnLogin.textContent = btnLabel; }
+
+  if(!res.ok || !data.ok) {
+    showMsg('login-err', '❌ ' + (data.error || 'Credenciales incorrectas'), 'err');
+    ['agente-pin','login-input','cliente-clave'].forEach(id => {
+      const inp = $(id);
+      if(inp && inp === document.activeElement) inp.value = '';
+    });
+    const lcard = document.querySelector('.login-card');
+    if(lcard) { lcard.classList.remove('shake'); void lcard.offsetWidth; lcard.classList.add('shake'); }
     return;
   }
 
-  if(loginType === 'cliente') {
-    const pref  = $('cliente-select')?.value;
-    const clave = ($('cliente-clave')?.value || '').trim().toUpperCase();
-    if(!pref)  { showMsg('login-err', '⚠️ Selecciona tu empresa', 'err'); return; }
-    if(!clave) { showMsg('login-err', '⚠️ Ingresa tu clave de acceso', 'err'); return; }
-
-    // Validar clave contra el config
-    const claveEsperada = (C.CLAVES_CLIENTE?.[pref] || '').toUpperCase();
-    if(!claveEsperada || clave !== claveEsperada) {
-      showMsg('login-err', '❌ Clave incorrecta. Contacta a Morgan Gasolineros.', 'err');
-      const inp = $('cliente-clave');
-      if(inp) { inp.value = ''; inp.focus(); }
-      const lcard = document.querySelector('.login-card');
-      if(lcard) { lcard.classList.remove('shake'); void lcard.offsetWidth; lcard.classList.add('shake'); }
-      return;
-    }
-
-    STATE.session = { tipo: 'cliente', prefijo: pref, nombre: C.CLIENTES[pref] };
-    enterApp();
-    return;
+  STATE.session = { ...data.session };
+  if(STATE.session.tipo === 'cliente' && STATE.session.prefijo) {
+    STATE.session.nombre = C.CLIENTES[STATE.session.prefijo] || STATE.session.prefijo;
   }
+
+  try { localStorage.setItem('sgm_session_token', data.token || ''); } catch(_) {}
+  try { localStorage.setItem('sgm_session', JSON.stringify(STATE.session)); } catch(_) {}
+
+  enterApp();
 }
 
 function enterApp() {
@@ -3089,6 +3092,8 @@ function doLogout() {
   closeLowMemoryCamera_(true);
   stopAutoRefresh();
   STATE.session = null;
+  try { localStorage.removeItem('sgm_session_token'); } catch(_) {}
+  try { localStorage.removeItem('sgm_session'); } catch(_) {}
   $('login-screen').classList.remove('hidden');
   $('app-shell').classList.add('hidden');
   $('login-input').value = '';
