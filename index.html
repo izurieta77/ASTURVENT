@@ -3908,38 +3908,38 @@ async function confirmWriteInSheet_(record, options = {}) {
   const wantedId = String(record.ID_REGISTRO || record.id || '').trim();
   if(!wantedId) return false;
 
-  // Detectar dinámicamente en qué columna vive 'id' en cada tab del cliente.
-  // Cada cliente puede tener layout diferente (ej. AMSC tiene headers custom
-  // que empujan 'id' a columna X). Esto evita falsos negativos.
-  const targets = await _findIdColumns_(cfg.sheetId, apiKey);
-  if(targets.length === 0) return false;
-
   const timeoutMs = Number(options.timeoutMs || 8000);
   const intervalMs = Number(options.intervalMs || 1000);
   const started = Date.now();
 
-  // batchGet de las columnas detectadas — 1 sola llamada por iteración.
-  const ranges = targets
-    .map(t => 'ranges=' + encodeURIComponent(`${t.tab}!${t.col}:${t.col}`))
-    .join('&');
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}/values:batchGet?majorDimension=COLUMNS&${ranges}&key=${apiKey}`;
-
   while(Date.now() - started <= timeoutMs) {
-    try {
-      const res = await fetch(url, { cache: 'no-store' });
-      if(res.ok) {
-        const json = await res.json();
-        const valueRanges = Array.isArray(json?.valueRanges) ? json.valueRanges : [];
-        for(const vr of valueRanges) {
-          const cols = Array.isArray(vr?.values) ? vr.values : [];
-          for(const col of cols) {
-            if(Array.isArray(col) && col.some(v => String(v || '').trim() === wantedId)) {
-              return true;
+    // Detectar columnas del id DENTRO del loop — race-condition safe:
+    // Apps Script puede estar creando los headers mientras nosotros polleamos.
+    // _findIdColumns_ tiene cache interno, así que solo es lento la primera vez
+    // que aparecen las columnas; subsiguientes iteraciones leen del cache.
+    const targets = await _findIdColumns_(cfg.sheetId, apiKey);
+    if(targets.length > 0) {
+      // batchGet de las columnas detectadas — 1 sola llamada por iteración.
+      const ranges = targets
+        .map(t => 'ranges=' + encodeURIComponent(`${t.tab}!${t.col}:${t.col}`))
+        .join('&');
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}/values:batchGet?majorDimension=COLUMNS&${ranges}&key=${apiKey}`;
+      try {
+        const res = await fetch(url, { cache: 'no-store' });
+        if(res.ok) {
+          const json = await res.json();
+          const valueRanges = Array.isArray(json?.valueRanges) ? json.valueRanges : [];
+          for(const vr of valueRanges) {
+            const cols = Array.isArray(vr?.values) ? vr.values : [];
+            for(const col of cols) {
+              if(Array.isArray(col) && col.some(v => String(v || '').trim() === wantedId)) {
+                return true;
+              }
             }
           }
         }
-      }
-    } catch(_) {}
+      } catch(_) {}
+    }
     await sleep_(intervalMs);
   }
 
