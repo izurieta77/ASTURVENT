@@ -2983,6 +2983,15 @@ let _nextRefreshAt     = 0;
 let _syncState         = 'idle'; // 'idle' | 'syncing' | 'error'
 let _fetchStats        = { quotaHits:0, cacheHits:0, failedClients:[], successClients:0 };
 let _lastFetchScopeKey = '';
+let _refreshPromise    = null;
+let _refreshRerunRequested = false;
+
+const SHEET_TABS_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+const SHEET_ROWS_CACHE_TTL_MS = 30 * 60 * 1000;
+const SHEET_ROWS_PERSIST_MAX  = 900000; // localStorage por origen suele rondar 5MB.
+const SHEET_READ_COL_RANGE    = 'A:AE'; // columnas principales + evidencias/sellos.
+const _sheetTabsCache = new Map();
+const _sheetRowsCache = new Map();
 
 function updateBadge(state, extra) {
   const badge = $('sync-badge');
@@ -3283,6 +3292,84 @@ function getRecordsForPrefix_(rows, pref) {
   return (rows || []).filter(r => (r.prefix || '') === pref);
 }
 
+function safeJsonParse_(txt, fallback = null) {
+  try { return JSON.parse(txt); } catch(_) { return fallback; }
+}
+
+function cacheKey_(kind, id) {
+  return `sgm_cache_${kind}_${String(id || '').replace(/[^a-z0-9_-]/gi, '_')}`;
+}
+
+function getCachedRows_(pref) {
+  const key = String(pref || '').toUpperCase();
+  const mem = _sheetRowsCache.get(key);
+  if(mem && Date.now() - mem.ts <= SHEET_ROWS_CACHE_TTL_MS) return mem.rows || [];
+
+  const stored = safeJsonParse_(localStorage.getItem(cacheKey_('rows', key)) || '', null);
+  if(stored && Date.now() - stored.ts <= SHEET_ROWS_CACHE_TTL_MS && Array.isArray(stored.rows)) {
+    _sheetRowsCache.set(key, stored);
+    return stored.rows;
+  }
+  return [];
+}
+
+function setCachedRows_(pref, rows) {
+  const key = String(pref || '').toUpperCase();
+  const payload = { ts: Date.now(), rows: rows || [] };
+  _sheetRowsCache.set(key, payload);
+  try {
+    const txt = JSON.stringify(payload);
+    if(txt.length <= SHEET_ROWS_PERSIST_MAX) {
+      localStorage.setItem(cacheKey_('rows', key), txt);
+    } else {
+      localStorage.removeItem(cacheKey_('rows', key));
+    }
+  } catch(_) {}
+}
+
+function getCachedTabs_(sheetId) {
+  const key = String(sheetId || '');
+  const mem = _sheetTabsCache.get(key);
+  if(mem && Date.now() - mem.ts <= SHEET_TABS_CACHE_TTL_MS) return mem.tabs || null;
+
+  const stored = safeJsonParse_(localStorage.getItem(cacheKey_('tabs', key)) || '', null);
+  if(stored && Date.now() - stored.ts <= SHEET_TABS_CACHE_TTL_MS && Array.isArray(stored.tabs)) {
+    _sheetTabsCache.set(key, stored);
+    return stored.tabs;
+  }
+  return null;
+}
+
+function setCachedTabs_(sheetId, tabs) {
+  const key = String(sheetId || '');
+  const payload = { ts: Date.now(), tabs: tabs || [] };
+  _sheetTabsCache.set(key, payload);
+  try { localStorage.setItem(cacheKey_('tabs', key), JSON.stringify(payload)); } catch(_) {}
+}
+
+function sheetRange_(tab, colRange = SHEET_READ_COL_RANGE) {
+  const safeTab = String(tab || '').replace(/'/g, "''");
+  return `'${safeTab}'!${colRange}`;
+}
+
+async function getReadableTabsForSheet_(cfg, apiKey) {
+  const cached = getCachedTabs_(cfg.sheetId);
+  if(cached && cached.length) return cached;
+
+  try {
+    const metaUrl = 'https://sheets.googleapis.com/v4/spreadsheets/' + cfg.sheetId +
+      '?fields=sheets.properties(title,index)&key=' + apiKey;
+    const metaRes = await fetch(metaUrl, { cache: 'no-store' });
+    if(!metaRes.ok) throw new Error('metadata HTTP ' + metaRes.status);
+    const metaJsn = await metaRes.json();
+    const tabs = buildBatchTabsFromMeta_(metaJsn?.sheets || [], cfg);
+    if(tabs.length) setCachedTabs_(cfg.sheetId, tabs);
+    return tabs;
+  } catch(e) {
+    return buildBatchTabsFromMeta_([], cfg);
+  }
+}
+
 function getDesiredFetchPrefixes_() {
   const clienteSheets = getClienteSheets();
   const allPrefixes = Object.entries(clienteSheets)
@@ -3318,16 +3405,18 @@ function buildBatchTabsFromMeta_(metaSheets, cfg) {
   //   • APP_WRITE_TAB (Despachos_SGM_APP) — si existe, aquí van registros nuevos
   //   • 'Despachos_SGM' — el Apps Script escribe aquí para TODOS los clientes;
   //     también contiene el histórico de cada cliente.
-  const always = [APP_WRITE_TAB, 'Despachos_SGM'];
+  const preferred = [APP_WRITE_TAB, 'Despachos_SGM'];
+  const hasMeta = titles.length > 0;
+  const always = hasMeta ? preferred.filter(t => titles.includes(t)) : preferred;
 
   // Primera pestaña adicional que no sea ninguna de las anteriores
   // (p. ej. respaldo histórico en otra pestaña del cliente)
-  let firstHistorical = titles.find(t => t && !always.includes(t));
+  let firstHistorical = titles.find(t => t && !preferred.includes(t));
 
   // Fallback: usar cfg.hoja si no coincide con las ya incluidas
   if(!firstHistorical) {
     const cfgTab = (cfg && cfg.hoja) ? String(cfg.hoja).trim() : '';
-    if(cfgTab && !always.includes(cfgTab)) firstHistorical = cfgTab;
+    if(cfgTab && !always.includes(cfgTab) && (!hasMeta || titles.includes(cfgTab))) firstHistorical = cfgTab;
   }
 
   return Array.from(new Set([...always, firstHistorical].filter(Boolean)));
@@ -3387,26 +3476,27 @@ async function fetchSheetData(targetPrefixes) {
   const allRecords = [];
   const previousRows = Array.isArray(STATE.registros) ? STATE.registros : [];
   _fetchStats = { quotaHits:0, cacheHits:0, failedClients:[], successClients:0 };
+  const delayMs = configurados.length > 12 ? 450 : 200;
 
   for(const [pref, cfg] of configurados) {
     let clientRows = [];
     try {
-      let tabs = [];
-      try {
-        const metaUrl = 'https://sheets.googleapis.com/v4/spreadsheets/' + cfg.sheetId +
-          '?fields=sheets.properties(title,index)&key=' + apiKey;
-        const metaRes = await fetch(metaUrl);
-        const metaJsn = await metaRes.json();
-        tabs = buildBatchTabsFromMeta_(metaJsn?.sheets || [], cfg);
-      } catch(metaErr) {
-        tabs = buildBatchTabsFromMeta_([], cfg);
+      if(_fetchStats.quotaHits >= 2) {
+        const cached = getCachedRows_(pref);
+        if(cached.length) {
+          clientRows = cached.map(r => ({ ...r, _cached: true }));
+          _fetchStats.cacheHits++;
+          allRecords.push(...clientRows);
+          continue;
+        }
       }
 
-      const qs = tabs.map(r => 'ranges=' + encodeURIComponent(r)).join('&');
+      const tabs = await getReadableTabsForSheet_(cfg, apiKey);
+      const qs = tabs.map(r => 'ranges=' + encodeURIComponent(sheetRange_(r))).join('&');
       const url = 'https://sheets.googleapis.com/v4/spreadsheets/' + cfg.sheetId +
-        '/values:batchGet?' + qs + '&key=' + apiKey;
+        '/values:batchGet?majorDimension=ROWS&valueRenderOption=FORMATTED_VALUE&fields=valueRanges(range,values)&' + qs + '&key=' + apiKey;
 
-      const res = await fetch(url);
+      const res = await fetch(url, { cache: 'no-store' });
       const jsn = await res.json();
 
       if(res.ok && !jsn.error && Array.isArray(jsn.valueRanges)) {
@@ -3423,6 +3513,8 @@ async function fetchSheetData(targetPrefixes) {
         });
 
         _fetchStats.successClients++;
+        clientRows = dedupeRecords_(clientRows);
+        setCachedRows_(pref, clientRows);
         console.log('[SGM] ' + pref + ': ' + total + ' registros (' + (detalle.join(', ') || 'vacío') + ')');
       } else {
         const errMsg = jsn.error ? jsn.error.message : ('HTTP ' + res.status);
@@ -3436,13 +3528,20 @@ async function fetchSheetData(targetPrefixes) {
         _fetchStats.cacheHits++;
         console.warn('[SGM] ' + pref + ': usando caché en memoria (' + fallback.length + ') por ' + e.message);
       } else {
-        _fetchStats.failedClients.push(pref);
-        console.warn('[SGM] ' + pref + ': sin datos por ' + e.message);
+        const cached = getCachedRows_(pref);
+        if(cached.length) {
+          clientRows = cached.map(r => ({ ...r, _cached: true }));
+          _fetchStats.cacheHits++;
+          console.warn('[SGM] ' + pref + ': usando cachÃ© local (' + cached.length + ') por ' + e.message);
+        } else {
+          _fetchStats.failedClients.push(pref);
+          console.warn('[SGM] ' + pref + ': sin datos por ' + e.message);
+        }
       }
     }
 
     allRecords.push(...clientRows);
-    await new Promise(r => setTimeout(r, 250));
+    await sleep_(delayMs);
   }
 
   const local = JSON.parse(localStorage.getItem('sgm_local_records') || '[]')
@@ -3902,6 +4001,36 @@ async function _findIdColumns_(sheetId, apiKey) {
   return target;
 }
 
+async function confirmWriteViaBackendDiag_(record, options = {}) {
+  if(!C.APPS_SCRIPT_URL) return false;
+  const wantedId = String(record.ID_REGISTRO || record.id || '').trim();
+  if(!wantedId) return false;
+
+  const timeoutMs = Number(options.timeoutMs || 4000);
+  const intervalMs = Number(options.intervalMs || 500);
+  const started = Date.now();
+
+  while(Date.now() - started <= timeoutMs) {
+    try {
+      const url = C.APPS_SCRIPT_URL + '?diag=1&_=' + Date.now();
+      const res = await fetch(url, { cache: 'no-store' });
+      if(res.ok) {
+        const jsn = await res.json().catch(() => null);
+        const last = jsn?.lastAppend || {};
+        const lastId = String(last.rid || last.id || '').trim();
+        if(lastId === wantedId) {
+          const writes = Array.isArray(last.writes) ? last.writes : [];
+          const errors = Array.isArray(last.writeErrors) ? last.writeErrors : [];
+          return writes.length > 0 && errors.length === 0;
+        }
+      }
+    } catch(_) {}
+    await sleep_(intervalMs);
+  }
+
+  return false;
+}
+
 async function confirmWriteInSheet_(record, options = {}) {
   const apiKey = C.SHEETS_API_KEY;
   if(!apiKey || apiKey === 'TU_API_KEY_AQUI') return false;
@@ -3916,6 +4045,14 @@ async function confirmWriteInSheet_(record, options = {}) {
   const timeoutMs = Number(options.timeoutMs || 8000);
   const intervalMs = Number(options.intervalMs || 1000);
   const started = Date.now();
+
+  if(options.useBackendDiag) {
+    const diagOk = await confirmWriteViaBackendDiag_(record, {
+      timeoutMs: Math.min(timeoutMs, 5000),
+      intervalMs: Math.min(intervalMs, 500)
+    });
+    if(diagOk) return true;
+  }
 
   while(Date.now() - started <= timeoutMs) {
     // Detectar columnas del id DENTRO del loop — race-condition safe:
@@ -3993,7 +4130,7 @@ async function writeToSheet(data, options = {}) {
   // Drive + escritura a Sheet) y Sheets API tarda 1-3s en propagar el row.
   try {
     await postDispatchOpaque_(data);
-    const confirmed = await confirmWriteInSheet_(data, { timeoutMs: 20000, intervalMs: 800 });
+    const confirmed = await confirmWriteInSheet_(data, { timeoutMs: 20000, intervalMs: 800, useBackendDiag: true });
     if(confirmed) {
       localStorage.removeItem(backupKey);
       return { ok: true, confirmed: true, attempt: 1 };
@@ -4008,7 +4145,7 @@ async function writeToSheet(data, options = {}) {
   await sleep_(500);
   try {
     await postDispatchOpaque_(data);
-    const confirmed = await confirmWriteInSheet_(data, { timeoutMs: 6000, intervalMs: 800 });
+    const confirmed = await confirmWriteInSheet_(data, { timeoutMs: 6000, intervalMs: 800, useBackendDiag: true });
     if(confirmed) {
       localStorage.removeItem(backupKey);
       return { ok: true, confirmed: true, attempt: 2 };
@@ -4063,7 +4200,12 @@ function getDemoData() {
 }
 
 // ── REFRESH DATA ───────────────────────────────────────────
-async function refreshData() {
+async function refreshData(options = {}) {
+  if(_refreshPromise && !options.force) {
+    _refreshRerunRequested = true;
+    return _refreshPromise;
+  }
+  _refreshPromise = (async () => {
   updateBadge('syncing');
 
   try {
@@ -4110,6 +4252,17 @@ async function refreshData() {
     renderAdminDash();
   } else if(tipo === 'cliente') {
     renderClienteView();
+  }
+  })();
+
+  try {
+    return await _refreshPromise;
+  } finally {
+    _refreshPromise = null;
+    if(_refreshRerunRequested) {
+      _refreshRerunRequested = false;
+      setTimeout(() => refreshData({ force: true }), 0);
+    }
   }
 }
 
