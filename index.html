@@ -3974,30 +3974,42 @@ async function writeToSheet(data, options = {}) {
     return { ok: false, pending: true, localOnly: true, message: 'Sin endpoint de escritura' };
   }
 
-  // Si ya quedó escrito antes, confirmarlo y limpiar backup
-  const alreadyThere = await confirmWriteInSheet_(data, { timeoutMs: 1500, intervalMs: 500 });
+  // Si ya quedó escrito antes (caso retry), confirmar rápido y limpiar backup
+  const alreadyThere = await confirmWriteInSheet_(data, { timeoutMs: 1000, intervalMs: 400 });
   if(alreadyThere) {
     localStorage.removeItem(backupKey);
     return { ok: true, confirmed: true, duplicated: true };
   }
 
   let lastError = null;
-  for(let attempt = 1; attempt <= 2; attempt++) {
-    try {
-      await postDispatchOpaque_(data);
 
-      const confirmed = await confirmWriteInSheet_(data, { timeoutMs: 8000, intervalMs: 1000 });
-      if(confirmed) {
-        localStorage.removeItem(backupKey);
-        return { ok: true, confirmed: true, attempt };
-      }
-
-      lastError = new Error('No se pudo confirmar la escritura en Google Sheets');
-    } catch(e) {
-      lastError = e;
+  // 1er intento: POST + polling extendido (20s).
+  // Cubre casos típicos en que Apps Script tarda 5-12s en procesar (subidas a
+  // Drive + escritura a Sheet) y Sheets API tarda 1-3s en propagar el row.
+  try {
+    await postDispatchOpaque_(data);
+    const confirmed = await confirmWriteInSheet_(data, { timeoutMs: 20000, intervalMs: 800 });
+    if(confirmed) {
+      localStorage.removeItem(backupKey);
+      return { ok: true, confirmed: true, attempt: 1 };
     }
+    lastError = new Error('No se pudo confirmar la escritura en Google Sheets');
+  } catch(e) {
+    lastError = e;
+  }
 
-    if(attempt < 2) await sleep_(2000);
+  // 2do intento: re-POST corto (cubre el raro caso de fallo de red en el 1er POST).
+  // Apps Script dedup por row.id evita escrituras duplicadas.
+  await sleep_(500);
+  try {
+    await postDispatchOpaque_(data);
+    const confirmed = await confirmWriteInSheet_(data, { timeoutMs: 6000, intervalMs: 800 });
+    if(confirmed) {
+      localStorage.removeItem(backupKey);
+      return { ok: true, confirmed: true, attempt: 2 };
+    }
+  } catch(e) {
+    lastError = e;
   }
 
   if(!silent) console.warn('[SGM] Escritura pendiente:', lastError?.message || 'sin detalle');
