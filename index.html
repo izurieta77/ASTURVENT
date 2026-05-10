@@ -5925,6 +5925,13 @@ async function saveDespacho() {
   const placas   = $('f-placas').value.trim().toUpperCase();
   const chofer   = $('f-chofer').value.trim().toUpperCase();
   const producto = $('f-producto').value;
+  const prefActual = String(STATE.currFolio?.prefix || '').trim().toUpperCase();
+  const clienteActual = STATE.currFolio?.cliente || C.CLIENTES[prefActual] || '';
+
+  if(!prefActual || !getClienteSheets()[prefActual]) {
+    showMsg('save-err','Selecciona o valida un cliente antes de guardar el despacho.','err');
+    return;
+  }
 
   const sigCanvas = $('sig-canvas');
   const blank     = document.createElement('canvas');
@@ -6011,8 +6018,8 @@ async function saveDespacho() {
   const record = {
     FECHA:          ahora.toLocaleDateString('es-MX'),
     HORA:           horaVal,
-    CLIENTE:        STATE.currFolio?.cliente || 'GENERAL',
-    PREFIX:         STATE.currFolio?.prefix  || 'GEN',
+    CLIENTE:        clienteActual,
+    PREFIX:         prefActual,
     FOLIO_VALE:     folioValeVal,
     CODIGO_AUTZ:    esAutz ? (STATE.currFolio?.folio || '') : '',
     TIPO_DOCUMENTO: tipoDocumentoVal,
@@ -6047,8 +6054,8 @@ async function saveDespacho() {
     id:             rid,
     fecha:          ahora.toLocaleDateString('es-MX'),
     hora:           horaVal,
-    cliente:        STATE.currFolio?.cliente || 'GENERAL',
-    prefix:         STATE.currFolio?.prefix  || 'GEN',
+    cliente:        clienteActual,
+    prefix:         prefActual,
     ticket:         ticketEgasVal,
     ticket_egas:    ticketEgasVal,
     folio:          folioValeVal || (esAutz ? (STATE.currFolio?.folio || '') : ''),
