@@ -3053,6 +3053,12 @@ async function syncPendingRecords() {
       const record = JSON.parse(raw);
       if(!record) { localStorage.removeItem(key); continue; }
 
+      const pendingPref = String(record.prefix || record.PREFIX || '').trim().toUpperCase();
+      if(!pendingPref || !getClienteSheets()[pendingPref]) {
+        console.warn('[SGM] Pendiente sin cliente válido, se conserva local pero no se reintenta:', record.id || record.ID_REGISTRO, pendingPref || '(vacío)');
+        continue;
+      }
+
       const isDEH = (record.prefix === 'DEH') || !!record._rawEvidence?.se1 || !!record._rawEvidence?.se2 || !!record._rawEvidence?.ss1 || !!record._rawEvidence?.ss2;
 
       // 1) Si aún trae evidencias crudas, intentar subirlas primero
