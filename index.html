@@ -6043,17 +6043,17 @@ async function saveDespacho() {
     ORIGEN:         'APP',
     TIMESTAMP_MS:   ahora.getTime(),
 
-    FOTO_PLACA:     fotoPlacaUrl || '',
-    FOTO_TICKET:    fotoTicketUrl || '',
+    FOTO_PLACA:     '',
+    FOTO_TICKET:    '',
     FIRMA_CHOFER:   firmaUrl || '',
 
-    FOTO_SELLO_E1:  fotoSE1Url || '',
+    FOTO_SELLO_E1:  '',
     NUM_SELLO_E1:   numSelloE1,
-    FOTO_SELLO_E2:  fotoSE2Url || '',
+    FOTO_SELLO_E2:  '',
     NUM_SELLO_E2:   numSelloE2,
-    FOTO_SELLO_S1:  fotoSS1Url || '',
+    FOTO_SELLO_S1:  '',
     NUM_SELLO_S1:   numSelloS1,
-    FOTO_SELLO_S2:  fotoSS2Url || '',
+    FOTO_SELLO_S2:  '',
     NUM_SELLO_S2:   numSelloS2,
 
     // espejos locales para que el frontend siga leyendo bien
@@ -6081,16 +6081,16 @@ async function saveDespacho() {
     isla:           STATE.session?.isla   || '1',
     origen:         'APP',
     timestamp:      ahora.getTime(),
-    foto_placa:     isRemoteEvidenceUrl_(fotoPlacaUrl) ? fotoPlacaUrl : '',
-    foto_ticket:    isRemoteEvidenceUrl_(fotoTicketUrl) ? fotoTicketUrl : '',
+    foto_placa:     fotoPlacaUrl || '',
+    foto_ticket:    fotoTicketUrl || '',
     firma:          isRemoteEvidenceUrl_(firmaUrl) ? firmaUrl : '',
-    foto_sello_e1:  isRemoteEvidenceUrl_(fotoSE1Url) ? fotoSE1Url : '',
+    foto_sello_e1:  fotoSE1Url || '',
     num_sello_e1:   numSelloE1,
-    foto_sello_e2:  isRemoteEvidenceUrl_(fotoSE2Url) ? fotoSE2Url : '',
+    foto_sello_e2:  fotoSE2Url || '',
     num_sello_e2:   numSelloE2,
-    foto_sello_s1:  isRemoteEvidenceUrl_(fotoSS1Url) ? fotoSS1Url : '',
+    foto_sello_s1:  fotoSS1Url || '',
     num_sello_s1:   numSelloS1,
-    foto_sello_s2:  isRemoteEvidenceUrl_(fotoSS2Url) ? fotoSS2Url : '',
+    foto_sello_s2:  fotoSS2Url || '',
     num_sello_s2:   numSelloS2
   };
 
