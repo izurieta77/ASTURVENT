@@ -3057,7 +3057,7 @@ async function syncPendingRecords() {
 
       // 1) Si aún trae evidencias crudas, intentar subirlas primero
       if(record._rawEvidence) {
-        const urls = await uploadEvidenceBundle_(record.ID_REGISTRO || record.id || ('PEND-' + Date.now()), record._rawEvidence, isDEH, {
+        const urls = await prepareEvidenceBundleForAppend_(record._rawEvidence, isDEH, {
           firma:  record.FIRMA_CHOFER || record.firma || '',
           placa:  record.FOTO_PLACA   || record.foto_placa || '',
           ticket: record.FOTO_TICKET  || record.foto_ticket || '',
@@ -3086,7 +3086,7 @@ async function syncPendingRecords() {
         localStorage.setItem(key, JSON.stringify(record));
       }
 
-      // 2) Ya con URLs confirmadas, intentar escritura real
+      // 2) Ya con evidencias preparadas, intentar escritura real
       const result = await writeToSheet(record, { silent: true, skipBackup: true });
       if(result?.confirmed) {
         localStorage.removeItem(key);
@@ -4010,6 +4010,43 @@ async function uploadEvidenceBundle_(rid, rawEvidence, isDEH, existingUrls = {})
       if(url) out[key] = url;
       await yieldFrame_();
     } catch(_) {}
+  }
+
+  return out;
+}
+
+async function prepareEvidenceBundleForAppend_(rawEvidence, isDEH, existingUrls = {}) {
+  const out = {
+    firma:  existingUrls.firma  || '',
+    placa:  existingUrls.placa  || '',
+    ticket: existingUrls.ticket || '',
+    se1:    existingUrls.se1    || '',
+    se2:    existingUrls.se2    || '',
+    ss1:    existingUrls.ss1    || '',
+    ss2:    existingUrls.ss2    || ''
+  };
+
+  const ordered = [
+    ['firma',  rawEvidence?.firma],
+    ['placa',  rawEvidence?.placa],
+    ['ticket', rawEvidence?.ticket],
+  ];
+  if(isDEH) {
+    ordered.push(['se1', rawEvidence?.se1]);
+    ordered.push(['se2', rawEvidence?.se2]);
+    ordered.push(['ss1', rawEvidence?.ss1]);
+    ordered.push(['ss2', rawEvidence?.ss2]);
+  }
+
+  for (const [key, entry] of ordered) {
+    if(out[key] || !entry) continue;
+    try {
+      const dataUrl = await evidenceEntryToDataUrl_(entry, key);
+      if(dataUrl) out[key] = dataUrl;
+      await yieldFrame_();
+    } catch(e) {
+      console.warn('[SGM] prepareEvidenceBundleForAppend:', key, e?.message || e);
+    }
   }
 
   return out;
@@ -5916,7 +5953,7 @@ async function saveDespacho() {
   const ahora    = new Date();
   const esAutz   = STATE.currFolio?.esAutz || false;
 
-  updateProgress(30, 'Subiendo evidencias...');
+  updateProgress(30, 'Preparando evidencias...');
 
   const isDEH = (STATE.currFolio?.prefix === 'DEH');
   const existingEvidenceUrls = {
@@ -5937,7 +5974,7 @@ async function saveDespacho() {
     ss2:    isDEH ? (existingEvidenceUrls.ss2 ? '' : (STATE.photos?.ss2 || '')) : ''
   };
 
-  const uploadedEvidence = await uploadEvidenceBundle_(rid, rawEvidence, isDEH, existingEvidenceUrls);
+  const uploadedEvidence = await prepareEvidenceBundleForAppend_(rawEvidence, isDEH, existingEvidenceUrls);
   const firmaUrl      = uploadedEvidence.firma;
   const fotoPlacaUrl  = uploadedEvidence.placa;
   const fotoTicketUrl = uploadedEvidence.ticket;
@@ -6031,16 +6068,16 @@ async function saveDespacho() {
     isla:           STATE.session?.isla   || '1',
     origen:         'APP',
     timestamp:      ahora.getTime(),
-    foto_placa:     fotoPlacaUrl || '',
-    foto_ticket:    fotoTicketUrl || '',
-    firma:          firmaUrl || '',
-    foto_sello_e1:  fotoSE1Url || '',
+    foto_placa:     isRemoteEvidenceUrl_(fotoPlacaUrl) ? fotoPlacaUrl : '',
+    foto_ticket:    isRemoteEvidenceUrl_(fotoTicketUrl) ? fotoTicketUrl : '',
+    firma:          isRemoteEvidenceUrl_(firmaUrl) ? firmaUrl : '',
+    foto_sello_e1:  isRemoteEvidenceUrl_(fotoSE1Url) ? fotoSE1Url : '',
     num_sello_e1:   numSelloE1,
-    foto_sello_e2:  fotoSE2Url || '',
+    foto_sello_e2:  isRemoteEvidenceUrl_(fotoSE2Url) ? fotoSE2Url : '',
     num_sello_e2:   numSelloE2,
-    foto_sello_s1:  fotoSS1Url || '',
+    foto_sello_s1:  isRemoteEvidenceUrl_(fotoSS1Url) ? fotoSS1Url : '',
     num_sello_s1:   numSelloS1,
-    foto_sello_s2:  fotoSS2Url || '',
+    foto_sello_s2:  isRemoteEvidenceUrl_(fotoSS2Url) ? fotoSS2Url : '',
     num_sello_s2:   numSelloS2
   };
 
@@ -6049,7 +6086,7 @@ async function saveDespacho() {
     const pendingRecord = {
       ...record,
       _pending: true,
-      _pendingReason: 'EVIDENCE_UPLOAD',
+      _pendingReason: 'EVIDENCE_PREPARE',
       _rawEvidence: null
     };
     try {
@@ -6062,7 +6099,7 @@ async function saveDespacho() {
     descontarSaldo(record.prefix, record.monto);
     applyFilters();
     updateProgress(100, 'Evidencias pendientes — guardado local ⚠️');
-    showMsg('save-err', `⚠️ No se pudieron subir todas las evidencias (${missingEvidence.join(', ')}).
+    showMsg('save-err', `⚠️ No se pudieron preparar todas las evidencias (${missingEvidence.join(', ')}).
 El despacho quedó guardado localmente y se sincronizará automáticamente cuando la conexión responda.`, 'warn');
     btn.textContent = '✅ CONFIRMAR Y GUARDAR'; btn.disabled = false;
     setTimeout(() => cancelForm(), 3200);
@@ -6075,7 +6112,17 @@ El despacho quedó guardado localmente y se sincronizará automáticamente cuand
     const writeResult = await writeToSheet(record);
 
     // Reflejar en UI local para que el dashboard cambie al instante
-    const localUiRecord = { ...record, _pending: !writeResult?.confirmed };
+    const localUiRecord = {
+      ...record,
+      _pending: !writeResult?.confirmed,
+      foto_placa: record.foto_placa || record.FOTO_PLACA || '',
+      foto_ticket: record.foto_ticket || record.FOTO_TICKET || '',
+      firma: record.firma || record.FIRMA_CHOFER || '',
+      foto_sello_e1: record.foto_sello_e1 || record.FOTO_SELLO_E1 || '',
+      foto_sello_e2: record.foto_sello_e2 || record.FOTO_SELLO_E2 || '',
+      foto_sello_s1: record.foto_sello_s1 || record.FOTO_SELLO_S1 || '',
+      foto_sello_s2: record.foto_sello_s2 || record.FOTO_SELLO_S2 || ''
+    };
     STATE.registros.unshift(localUiRecord);
     descontarSaldo(record.prefix, record.monto);
     if(STATE.currFolio?.esAutz) {
