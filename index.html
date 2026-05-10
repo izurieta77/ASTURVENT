@@ -627,6 +627,9 @@ body.light td {border-top-color:rgba(0,0,0,0.05);}
 window.SGM_CONFIG = {
   SHEETS_API_KEY:    'AIzaSyATotw-cM7Y7J8IXH59m89xzaksKwgaABY',
   APPS_SCRIPT_URL:   'https://script.google.com/macros/s/AKfycbzLUmxVdbfVWP9wCFR_mSN0wVEZMcjdF8bSjLWInPVMLU4hrAaIdYC3XqP4fGPQJDxG/exec',
+  // Google Sheet nativo del histórico limpio. No usar el XLSX de Drive:
+  // la API de Sheets solo lee archivos convertidos a Google Sheets.
+  HISTORICO_CONSOLIDADO_SHEET_ID: '1TvL0tEzlTpTYOPXLNO0B-NWMftYb2inHcmCTtRJ1zQQ',
   GEMINI_API_KEY:    '',
   CLAUDE_API_KEY:    '',
   SPREADSHEET_ID:    '',
@@ -3352,6 +3355,98 @@ function sheetRange_(tab, colRange = SHEET_READ_COL_RANGE) {
   return `'${safeTab}'!${colRange}`;
 }
 
+function getHistoricoConsolidadoId_() {
+  return String(C.HISTORICO_CONSOLIDADO_SHEET_ID || localStorage.getItem('SGM_HISTORICO_CONSOLIDADO_SHEET_ID') || '').trim();
+}
+
+function compactText_(v) {
+  return String(v || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9+]/g, '');
+}
+
+function cleanTicket_(v) {
+  const raw = String(v || '').trim().toUpperCase();
+  if(!raw || /[:APM]/.test(raw)) return '';
+  const ticket = raw.replace(/[^A-Z0-9]/g, '');
+  if(ticket.length < 4 || !/\d/.test(ticket)) return '';
+  if(['SN','SNT','SP','NA','ND','0000'].includes(ticket)) return '';
+  return ticket;
+}
+
+function normalizeFuelProduct_(v) {
+  const key = compactText_(v);
+  if(!key) return '';
+  if(key.includes('DIESEL') || key.includes('DIESLE') || key.includes('DISEL')) return 'DIÉSEL UBA';
+  if(key.includes('SUPREME') || key.includes('SUPRME') || key.includes('SUPRREME') || key.includes('PREMIUM')) return 'SUPREME+';
+  if(key.includes('EXTRA') || key.includes('MAGNA') || key.includes('REGULAR')) return 'EXTRA';
+  return String(v || '').trim().toUpperCase();
+}
+
+function findConsolidadoTab_(tabs, pref) {
+  const p = compactText_(pref);
+  return (tabs || []).find(t => compactText_(t).startsWith(p)) || '';
+}
+
+async function getAllSheetTitles_(sheetId, apiKey) {
+  const cacheKey = 'all_' + String(sheetId || '');
+  const cached = getCachedTabs_(cacheKey);
+  if(cached && cached.length) return cached;
+
+  const metaUrl = 'https://sheets.googleapis.com/v4/spreadsheets/' + sheetId +
+    '?fields=sheets.properties(title,index)&key=' + apiKey;
+  const metaRes = await fetch(metaUrl, { cache: 'no-store' });
+  if(!metaRes.ok) throw new Error('metadata HTTP ' + metaRes.status);
+  const metaJsn = await metaRes.json();
+  const tabs = (metaJsn?.sheets || [])
+    .map(s => s?.properties || {})
+    .sort((a,b) => (a.index || 0) - (b.index || 0))
+    .map(p => String(p.title || '').trim())
+    .filter(Boolean);
+  if(tabs.length) setCachedTabs_(cacheKey, tabs);
+  return tabs;
+}
+
+async function fetchHistoricoConsolidado_(wanted, apiKey) {
+  const sheetId = getHistoricoConsolidadoId_();
+  if(!sheetId) return null;
+
+  try {
+    const tabs = await getAllSheetTitles_(sheetId, apiKey);
+    const targets = [...wanted]
+      .map(pref => ({ pref, tab: findConsolidadoTab_(tabs, pref) }))
+      .filter(x => x.tab);
+
+    if(!targets.length) return new Map();
+
+    const qs = targets.map(x => 'ranges=' + encodeURIComponent(sheetRange_(x.tab, 'A:H'))).join('&');
+    const url = 'https://sheets.googleapis.com/v4/spreadsheets/' + sheetId +
+      '/values:batchGet?majorDimension=ROWS&valueRenderOption=FORMATTED_VALUE&fields=valueRanges(range,values)&' + qs + '&key=' + apiKey;
+
+    const res = await fetch(url, { cache: 'no-store' });
+    const jsn = await res.json();
+    if(!res.ok || jsn.error) throw new Error(jsn.error?.message || ('HTTP ' + res.status));
+
+    const map = new Map();
+    (jsn.valueRanges || []).forEach((vr, i) => {
+      const pref = targets[i]?.pref;
+      if(!pref) return;
+      const rows = parseSheetRows(vr.values || [], pref, 0).map(r => ({
+        ...r,
+        _tab: 'HISTORICO_CONSOLIDADO',
+        _historico: true,
+      }));
+      map.set(pref, rows);
+    });
+    console.log('[SGM] Histórico consolidado activo: ' + targets.length + ' pestañas');
+    return map;
+  } catch(e) {
+    console.warn('[SGM] Histórico consolidado no disponible: ' + e.message);
+    return null;
+  }
+}
+
 async function getReadableTabsForSheet_(cfg, apiKey) {
   const cached = getCachedTabs_(cfg.sheetId);
   if(cached && cached.length) return cached;
@@ -3450,13 +3545,26 @@ function buildRecordFingerprint_(r) {
 }
 
 function dedupeRecords_(rows) {
-  const seen = new Set();
-  return (rows || []).filter(r => {
-    const key = (r.id && String(r.id).trim()) || buildRecordFingerprint_(r);
-    if(seen.has(key)) return false;
-    seen.add(key);
-    return true;
+  const map = new Map();
+  (rows || []).forEach(r => {
+    const ticket = cleanTicket_(r.ticket_egas || r.ticket || r.numero_ticket || '');
+    const pref = String(r.prefix || '').toUpperCase();
+    const key = ticket ? `TICKET|${pref}|${ticket}` : ((r.id && String(r.id).trim()) || buildRecordFingerprint_(r));
+    const prev = map.get(key);
+    if(!prev || recordRichness_(r) > recordRichness_(prev)) {
+      map.set(key, { ...prev, ...r });
+    } else if(prev) {
+      map.set(key, { ...r, ...prev });
+    }
   });
+  return [...map.values()];
+}
+
+function recordRichness_(r) {
+  return [
+    r.fecha, r.hora, r.ticket_egas || r.ticket, r.chofer, r.placas,
+    r.producto, r.litros || r.cantidad, r.monto, r.folio_vale, r.id
+  ].filter(v => v !== undefined && v !== null && String(v).trim() !== '').length;
 }
 
 async function fetchSheetData(targetPrefixes) {
@@ -3477,9 +3585,11 @@ async function fetchSheetData(targetPrefixes) {
   const previousRows = Array.isArray(STATE.registros) ? STATE.registros : [];
   _fetchStats = { quotaHits:0, cacheHits:0, failedClients:[], successClients:0 };
   const delayMs = configurados.length > 12 ? 450 : 200;
+  const historicoMap = await fetchHistoricoConsolidado_(wanted, apiKey);
+  const usarHistoricoConsolidado = historicoMap instanceof Map;
 
   for(const [pref, cfg] of configurados) {
-    let clientRows = [];
+    let clientRows = usarHistoricoConsolidado ? (historicoMap.get(pref) || []) : [];
     try {
       if(_fetchStats.quotaHits >= 2) {
         const cached = getCachedRows_(pref);
@@ -3491,7 +3601,19 @@ async function fetchSheetData(targetPrefixes) {
         }
       }
 
-      const tabs = await getReadableTabsForSheet_(cfg, apiKey);
+      let tabs = await getReadableTabsForSheet_(cfg, apiKey);
+      if(usarHistoricoConsolidado) {
+        // Con histórico limpio central, cada cliente solo aporta lo nuevo de la app.
+        tabs = tabs.filter(t => t === APP_WRITE_TAB);
+        if(!tabs.length) {
+          clientRows = dedupeRecords_(clientRows);
+          setCachedRows_(pref, clientRows);
+          console.log('[SGM] ' + pref + ': ' + clientRows.length + ' registros (histórico consolidado; sin APP)');
+          allRecords.push(...clientRows);
+          await sleep_(delayMs);
+          continue;
+        }
+      }
       const qs = tabs.map(r => 'ranges=' + encodeURIComponent(sheetRange_(r))).join('&');
       const url = 'https://sheets.googleapis.com/v4/spreadsheets/' + cfg.sheetId +
         '/values:batchGet?majorDimension=ROWS&valueRenderOption=FORMATTED_VALUE&fields=valueRanges(range,values)&' + qs + '&key=' + apiKey;
@@ -3522,6 +3644,11 @@ async function fetchSheetData(targetPrefixes) {
         throw new Error(errMsg);
       }
     } catch(e) {
+      if(clientRows.length) {
+        clientRows = dedupeRecords_(clientRows);
+        setCachedRows_(pref, clientRows);
+        console.warn('[SGM] ' + pref + ': usando histórico consolidado (' + clientRows.length + ') por ' + e.message);
+      } else {
       const fallback = getRecordsForPrefix_(previousRows, pref);
       if(fallback.length) {
         clientRows = fallback.map(r => ({ ...r, _cached: true }));
@@ -3537,6 +3664,7 @@ async function fetchSheetData(targetPrefixes) {
           _fetchStats.failedClients.push(pref);
           console.warn('[SGM] ' + pref + ': sin datos por ' + e.message);
         }
+      }
       }
     }
 
@@ -3695,7 +3823,7 @@ function parseSheetRows(rows, pref, startIdx) {
       chofer:         String(rr[colIdx.chofer] || 'S/D').trim().toUpperCase(),
       placas:         String(rr[colIdx.placas] || 'S/D').trim().toUpperCase(),
       unidad:         String(rr[colIdx.placas] || 'S/D').trim().toUpperCase(),
-      producto:       String(rr[colIdx.producto] || 'DIESEL').trim().toUpperCase(),
+      producto:       normalizeFuelProduct_(rr[colIdx.producto]),
       litros:         litros,
       cantidad:       litros,
       monto:          monto,
