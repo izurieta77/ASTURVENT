@@ -1166,6 +1166,7 @@ window.SGM_CONFIG = {
         <button class="tab" data-tab="vales"        onclick="adminTab('vales')">🎫 Vales</button>
         <button class="tab" data-tab="autorizaciones" onclick="adminTab('autorizaciones')">🔐 Autz</button>
         <button class="tab" data-tab="ia"           onclick="adminTab('ia')">🤖 IA</button>
+        <button class="tab" data-tab="tienda"       onclick="adminTab('tienda')">🏪 Tienda</button>
         <button class="tab" data-tab="cortes"       onclick="adminTab('cortes')">✂️ Cortes</button>
         <button class="tab" data-tab="importar"     onclick="adminTab('importar')">📤 Importar</button>
         <button class="tab" data-tab="config"       onclick="adminTab('config')">⚙️ Config</button>
@@ -2067,6 +2068,41 @@ window.SGM_CONFIG = {
               <tbody id="tbody-saldos"></tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+      <!-- ── TIENDA (agente DVR) ── -->
+      <div id="admin-tienda" class="view">
+        <div class="card mb-16">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+            <div>
+              <div class="h3" style="margin-bottom:4px;">🏪 Monitoreo de Tienda</div>
+              <div class="label" style="font-size:11px;color:var(--steel-5);">Agente IA que observa las cámaras del DVR cada ~7 min</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <input id="tienda-fecha" type="date" class="inp inp-sm" style="max-width:160px;" onchange="renderTiendaReporte()">
+              <button class="btn btn-ghost btn-sm" onclick="renderTiendaTab()">🔄 Recargar</button>
+              <button class="btn btn-ghost btn-sm" onclick="tiendaTriggerSnapshot()">📸 Snapshot ahora</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Reporte del día -->
+        <div class="card mb-16" id="tienda-reporte-card">
+          <div class="label mb-12">Reporte del día</div>
+          <div id="tienda-reporte"><div style="color:var(--steel-5);font-size:13px;">Cargando…</div></div>
+        </div>
+
+        <!-- Últimas observaciones -->
+        <div class="card mb-16">
+          <div class="label mb-12">Últimas observaciones por cámara</div>
+          <div id="tienda-latest"><div style="color:var(--steel-5);font-size:13px;">Cargando…</div></div>
+        </div>
+
+        <!-- Historial -->
+        <div class="card">
+          <div class="label mb-12">Historial (últimos 30 días)</div>
+          <div id="tienda-historial"><div style="color:var(--steel-5);font-size:13px;">Cargando…</div></div>
         </div>
       </div>
 
@@ -3983,7 +4019,7 @@ function adminTab(tab) {
     // data-tab es más robusto que índice — no se rompe si cambia el orden
     t.classList.toggle('active', (t.dataset.tab || '') === tab);
   });
-  ['resumen','bitacora','graficas','rendimiento','catalogo','vales','autorizaciones','ia','cortes','importar','config'].forEach(v => {
+  ['resumen','bitacora','graficas','rendimiento','catalogo','vales','autorizaciones','ia','tienda','cortes','importar','config'].forEach(v => {
     $(`admin-${v}`)?.classList.toggle('active', v === tab);
   });
   if(tab === 'graficas')       renderGraficas();
@@ -3994,6 +4030,7 @@ function adminTab(tab) {
   if(tab === 'ia')             initIATab();
   if(tab === 'rendimiento')    renderRendimiento();
   if(tab === 'catalogo')       renderCatalogo();
+  if(tab === 'tienda')         renderTiendaTab();
 }
 
 // Agrupa registros por campo, suma litros, devuelve { label: totalLitros }
@@ -7840,6 +7877,180 @@ function initIATab() {
   if(status) status.textContent = n > 0
     ? `🟢 IA lista · ${n.toLocaleString()} registros`
     : `🟢 IA lista · Sin datos — actualiza primero`;
+}
+
+// ─── Monitoreo de Tienda (agente DVR Hikvision) ────────────────────────────
+async function tiendaFetch_(action, payload) {
+  const token = localStorage.getItem('sgm_session_token') || '';
+  const res = await fetch('/.netlify/functions/dvr-data', {
+    method: 'POST',
+    headers: {
+      'Content-Type':  'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ action, ...(payload || {}) }),
+  });
+  let data = {};
+  try { data = await res.json(); } catch(_) {}
+  if(!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+function tiendaTodayCDMX_() {
+  const d = new Date(Date.now() - 6 * 3600 * 1000);
+  return d.toISOString().slice(0, 10);
+}
+
+function tiendaHHMM_(iso) {
+  if(!iso) return '—';
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return '—';
+  // CDMX = UTC-6
+  const cdmx = new Date(d.getTime() - 6 * 3600 * 1000);
+  return cdmx.toISOString().slice(11, 16);
+}
+
+function renderTiendaTab() {
+  const f = $('tienda-fecha');
+  if(f && !f.value) f.value = tiendaTodayCDMX_();
+  renderTiendaReporte();
+  renderTiendaLatest();
+  renderTiendaHistorial();
+}
+
+async function renderTiendaReporte() {
+  const cont = $('tienda-reporte');
+  if(!cont) return;
+  const fecha = $('tienda-fecha')?.value || tiendaTodayCDMX_();
+  cont.innerHTML = `<div style="color:var(--steel-5);font-size:13px;">Cargando reporte de ${fecha}…</div>`;
+  try {
+    const { data } = await tiendaFetch_('dailyReport', { fecha });
+    if(!data) {
+      cont.innerHTML = `<div style="color:var(--steel-5);font-size:13px;">No hay reporte para ${fecha}. Se genera automáticamente a las 23:05 CDMX.</div>`;
+      return;
+    }
+    const r = data.resumen || {};
+    const lim = r.limpieza || {};
+    cont.innerHTML = `
+      <div class="grid-3" style="gap:12px;margin-bottom:14px;">
+        <div style="text-align:center;padding:10px;background:var(--surface-2);border-radius:8px;">
+          <div class="label" style="font-size:9px;">Apertura</div>
+          <div style="font-size:22px;font-weight:800;color:var(--green);">${tiendaHHMM_(r.apertura)}</div>
+        </div>
+        <div style="text-align:center;padding:10px;background:var(--surface-2);border-radius:8px;">
+          <div class="label" style="font-size:9px;">Cierre</div>
+          <div style="font-size:22px;font-weight:800;color:var(--mobil-red);">${tiendaHHMM_(r.cierre)}</div>
+        </div>
+        <div style="text-align:center;padding:10px;background:var(--surface-2);border-radius:8px;">
+          <div class="label" style="font-size:9px;">Inactividad</div>
+          <div style="font-size:22px;font-weight:800;color:var(--yellow);">${Number(r.inactividad_min||0)} min</div>
+        </div>
+      </div>
+      <div class="grid-3" style="gap:12px;margin-bottom:14px;">
+        <div style="text-align:center;padding:10px;background:var(--surface-2);border-radius:8px;">
+          <div class="label" style="font-size:9px;">Barrido</div>
+          <div style="font-size:18px;font-weight:700;">${lim.hubo_barrido ? '✅' : '❌'} <span style="font-size:11px;color:var(--fg-4);">${Number(lim.barrido_min||0)} min</span></div>
+        </div>
+        <div style="text-align:center;padding:10px;background:var(--surface-2);border-radius:8px;">
+          <div class="label" style="font-size:9px;">Trapeado</div>
+          <div style="font-size:18px;font-weight:700;">${lim.hubo_trapeado ? '✅' : '❌'} <span style="font-size:11px;color:var(--fg-4);">${Number(lim.trapeado_min||0)} min</span></div>
+        </div>
+        <div style="text-align:center;padding:10px;background:var(--surface-2);border-radius:8px;">
+          <div class="label" style="font-size:9px;">Polvo</div>
+          <div style="font-size:18px;font-weight:700;">${lim.hubo_polvo ? '✅' : '❌'} <span style="font-size:11px;color:var(--fg-4);">${Number(lim.polvo_min||0)} min</span></div>
+        </div>
+      </div>
+      <div style="padding:12px;background:var(--surface-2);border-radius:8px;line-height:1.6;font-size:13px;white-space:pre-wrap;">${escapeHTMLTienda_(data.narrativa || '(sin narrativa)')}</div>
+      <div style="font-size:10px;color:var(--steel-5);margin-top:8px;">${Number(data.total_observaciones||0)} observaciones · generado ${data.generado_en || ''}</div>
+    `;
+  } catch (e) {
+    cont.innerHTML = `<div class="msg msg-err">${escapeHTMLTienda_(e.message)}</div>`;
+  }
+}
+
+async function renderTiendaLatest() {
+  const cont = $('tienda-latest');
+  if(!cont) return;
+  try {
+    const { data } = await tiendaFetch_('latestObservations', { limit: 40 });
+    if(!Array.isArray(data) || data.length === 0) {
+      cont.innerHTML = `<div style="color:var(--steel-5);font-size:13px;">Sin observaciones todavía. El primer snapshot se ejecuta al activar el scheduled function.</div>`;
+      return;
+    }
+    // Agrupar por cámara: tomar la más reciente
+    const byLabel = {};
+    for(const o of data) {
+      const k = o.camera_label || `CH${o.camera_ch}`;
+      if(!byLabel[k] || o.timestamp > byLabel[k].timestamp) byLabel[k] = o;
+    }
+    cont.innerHTML = '<div class="grid-2" style="gap:12px;">' + Object.entries(byLabel).map(([label, o]) => {
+      const p = o.parsed || {};
+      return `
+        <div style="padding:12px;background:var(--surface-2);border-radius:8px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <div style="font-weight:700;">${escapeHTMLTienda_(label)}</div>
+            <div style="font-size:10px;color:var(--steel-5);">${tiendaHHMM_(o.timestamp)}</div>
+          </div>
+          <div style="font-size:12px;line-height:1.5;">
+            <div><b>Actividad:</b> ${escapeHTMLTienda_(String(p.actividad || '—'))}</div>
+            <div><b>Personas:</b> ${Number(p.personas_detectadas||0)} (${Number(p.empleados_visibles||0)} emp · ${Number(p.clientes_visibles||0)} cli)</div>
+            <div><b>Luces:</b> ${p.luces_encendidas ? '💡' : '⚫'} · <b>Cortina:</b> ${p.cortina_abierta ? '🟢 abierta' : '🔒 cerrada'}</div>
+            ${p.observacion_breve ? `<div style="margin-top:4px;color:var(--fg-3);font-style:italic;">"${escapeHTMLTienda_(String(p.observacion_breve))}"</div>` : ''}
+          </div>
+        </div>`;
+    }).join('') + '</div>';
+  } catch (e) {
+    cont.innerHTML = `<div class="msg msg-err">${escapeHTMLTienda_(e.message)}</div>`;
+  }
+}
+
+async function renderTiendaHistorial() {
+  const cont = $('tienda-historial');
+  if(!cont) return;
+  try {
+    const { data } = await tiendaFetch_('listReports', { limit: 30 });
+    if(!Array.isArray(data) || data.length === 0) {
+      cont.innerHTML = `<div style="color:var(--steel-5);font-size:13px;">Sin reportes históricos todavía.</div>`;
+      return;
+    }
+    cont.innerHTML = `<div class="tbl-wrap"><table>
+      <thead><tr><th>Fecha</th><th>Apertura</th><th>Cierre</th><th>Barrido</th><th>Trapeado</th><th>Polvo</th><th>Inact.</th><th>Obs</th><th></th></tr></thead>
+      <tbody>${data.map(r => `
+        <tr>
+          <td>${escapeHTMLTienda_(r.fecha)}</td>
+          <td>${tiendaHHMM_(r.apertura)}</td>
+          <td>${tiendaHHMM_(r.cierre)}</td>
+          <td>${Number(r.barrido_min||0)}m</td>
+          <td>${Number(r.trapeado_min||0)}m</td>
+          <td>${Number(r.polvo_min||0)}m</td>
+          <td>${Number(r.inactividad_min||0)}m</td>
+          <td>${Number(r.total_obs||0)}</td>
+          <td><button class="btn btn-ghost btn-sm" onclick="document.getElementById('tienda-fecha').value='${escapeHTMLTienda_(r.fecha)}';renderTiendaReporte();">Ver</button></td>
+        </tr>`).join('')}
+      </tbody></table></div>`;
+  } catch (e) {
+    cont.innerHTML = `<div class="msg msg-err">${escapeHTMLTienda_(e.message)}</div>`;
+  }
+}
+
+async function tiendaTriggerSnapshot() {
+  const btn = event?.currentTarget;
+  if(btn) { btn.disabled = true; btn.textContent = '📸 Procesando…'; }
+  try {
+    const r = await tiendaFetch_('triggerSnapshot', {});
+    const okN = (r.results || []).filter(x => x.ok).length;
+    const totN = (r.results || []).length;
+    alert(`Snapshot completado: ${okN}/${totN} cámaras OK (${r.took_ms || 0}ms)`);
+    renderTiendaLatest();
+  } catch (e) {
+    alert('Error: ' + e.message);
+  } finally {
+    if(btn) { btn.disabled = false; btn.textContent = '📸 Snapshot ahora'; }
+  }
+}
+
+function escapeHTMLTienda_(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 }
 
 // Construye el contexto de datos para la IA

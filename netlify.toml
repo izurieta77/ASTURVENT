@@ -5,6 +5,15 @@
 [functions]
   node_bundler = "esbuild"
 
+# Agente DVR: snapshot cada 7 min en horario operativo (7am-11pm CDMX = UTC-6).
+# UTC equivalente: horas 13-23 y 0-5.
+[functions."dvr-snapshot"]
+  schedule = "*/7 0-5,13-23 * * *"
+
+# Reporte diario a las 23:05 CDMX = 05:05 UTC.
+[functions."dvr-daily-report"]
+  schedule = "5 5 * * *"
+
 [[headers]]
   for = "/*"
   [headers.values]
