@@ -1,0 +1,23 @@
+# Sitio Netlify independiente para el dashboard SUPER CHEAP.
+# Configura este sitio en Netlify con "Base directory" = super-cheap/
+# (Site settings -> Build & deploy -> Base directory).
+
+[build]
+  base      = "super-cheap"
+  publish   = "."
+  functions = "netlify/functions"
+  command   = "npm install"
+
+[functions]
+  node_bundler = "esbuild"
+  # La librería de BigQuery trae binarios/dependencias que conviene no re-empaquetar:
+  external_node_modules = ["@google-cloud/bigquery"]
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options           = "DENY"
+    X-Content-Type-Options    = "nosniff"
+    Referrer-Policy           = "strict-origin-when-cross-origin"
+    Permissions-Policy        = "camera=(self), microphone=(), geolocation=()"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"

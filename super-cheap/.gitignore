@@ -1,0 +1,6 @@
+node_modules/
+.env
+.netlify/
+sicar-bridge/config.json
+sicar-bridge/node_modules/
+*.log
