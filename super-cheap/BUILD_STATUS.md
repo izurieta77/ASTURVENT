@@ -8,10 +8,14 @@ Arnés de seguimiento para no perder nada ni repetir pasos. Se actualiza tras ca
 - [x] `netlify/functions/_lib.js` (CORS + tokens HMAC)
 - [x] `CONTRACT.md` (contrato de API — fuente única de verdad)
 
-## En progreso (3 agentes en paralelo + revisor)
-- [ ] **Agente A — Backend & Datos**: `_bq.js`, `auth.js`, `sc-data.js`, `sc-ingest.js`, `bigquery-setup.sql`
-- [ ] **Agente B — Frontend & Bridge**: `index.html`, `netlify/functions/sc-ticket.js`, `sicar-bridge/*`
-- [ ] **Agente C — Revisor**: auditoría + checklist anti-fallos
+## Construcción (3 agentes: 2 builders + 1 revisor) — COMPLETA
+- [x] **Agente A — Backend & Datos**: `_bq.js`, `auth.js`, `sc-data.js`, `sc-ingest.js`, `bigquery-setup.sql`
+- [x] **Agente B — Frontend & Bridge**: `index.html`, `sicar-bridge/*`
+- [x] **Agente C — Revisor**: auditoría extremo-a-extremo + correcciones
+  - Detectó y creó el faltante `sc-ticket.js` (lectura de tickets con IA, IVA/IEPS)
+  - Endureció `sc-data.js` (serialización de `conceptos`) y documentó CORS en `_lib.js`
+  - Confirmó: nombres de campos alineados FE↔BE↔esquema, auth en todas las rutas,
+    consultas parametrizadas, NUMERIC→Number en KPIs. Todos los .js pasan `node --check`.
 
 ## Pendiente de datos del usuario (no bloquea el código)
 - [ ] `GCP_PROJECT_ID` + Service Account JSON (BigQuery)

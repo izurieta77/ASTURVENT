@@ -7,15 +7,20 @@ const crypto = require('crypto');
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
-// Dominios permitidos. Agrega aqui el dominio del sitio nuevo de Netlify.
+// Dominios permitidos (origenes que pueden llamar a las funciones desde el navegador).
+// Cualquier subdominio *.netlify.app ya esta permitido por la regex de mas abajo,
+// asi que para el sitio en Netlify NO hace falta tocar nada. Solo agrega aqui el
+// DOMINIO FINAL/PERSONALIZADO cuando lo conectes (ej. 'https://panel.supercheap.mx').
 const ALLOWED_ORIGINS = [
   'http://localhost:8888',
   'http://localhost:3000',
+  // 'https://TU-DOMINIO-PERSONALIZADO.com',  // <- descomenta y ajusta al conectar el dominio final
 ];
 
 function corsHeaders(event) {
   const origin = event.headers?.origin || event.headers?.Origin || '';
-  // Permite cualquier subdominio *.netlify.app ademas de la lista explicita.
+  // Permite cualquier subdominio *.netlify.app (incluido el preview deploy con guiones)
+  // ademas de la lista explicita de arriba.
   const ok = ALLOWED_ORIGINS.includes(origin) || /^https:\/\/[a-z0-9-]+\.netlify\.app$/i.test(origin);
   return {
     'Access-Control-Allow-Origin':  ok ? origin : ALLOWED_ORIGINS[0],

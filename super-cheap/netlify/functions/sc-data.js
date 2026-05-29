@@ -24,6 +24,27 @@ const REQUERIDOS = {
   nomina:  ['periodo', 'fecha', 'empleado', 'monto'],
 };
 
+// Columnas permitidas por tabla al insertar (lista blanca = mismo esquema de
+// bigquery-setup.sql, sin `ts` que lo pone el servidor). Cualquier campo que
+// mande el frontend y NO este aqui se descarta: asi un campo de mas no revienta
+// el streaming insert de BigQuery ("no such field") y no se inyectan columnas.
+const COLUMNAS = {
+  compras: ['fecha', 'proveedor', 'subtotal', 'iva', 'ieps', 'total',
+            'impuestos_estimados', 'categoria', 'conceptos', 'foto_url', 'raw_ocr'],
+  gastos:  ['fecha', 'concepto', 'categoria', 'subtotal', 'iva', 'ieps', 'total',
+            'impuestos_estimados', 'foto_url'],
+  nomina:  ['periodo', 'fecha', 'empleado', 'monto', 'tipo'],
+};
+
+// Columnas NUMERIC en BigQuery: se castean a Number JS al insertar.
+const COLS_NUMERIC = new Set(['subtotal', 'iva', 'ieps', 'total', 'monto']);
+// Columnas BOOL en BigQuery.
+const COLS_BOOL = new Set(['impuestos_estimados']);
+// Columnas que en el esquema son STRING (incluye `conceptos`, que viaja como
+// JSON.stringify desde el frontend y se guarda tal cual, sin re-serializar).
+const COLS_STRING = new Set(['proveedor', 'concepto', 'categoria', 'conceptos',
+                             'foto_url', 'raw_ocr', 'periodo', 'empleado', 'tipo']);
+
 // Valida formato YYYY-MM-DD (no valida que la fecha exista en el calendario,
 // pero BigQuery rechazaria un DATE invalido).
 function fechaValida(s) {
@@ -153,21 +174,56 @@ async function lista(cors, q) {
   if (!TABLAS_LISTA.includes(tabla)) {
     return json(400, cors, { ok: false, error: 'tabla invalida (ventas|compras|gastos|nomina)' });
   }
-  if (!fechaValida(desde) || !fechaValida(hasta)) {
+  // desde/hasta son OPCIONALES en el listado (el frontend muestra todo). Si
+  // vienen, deben tener formato valido y se aplican como filtro de rango.
+  const tieneDesde = desde !== undefined && desde !== '';
+  const tieneHasta = hasta !== undefined && hasta !== '';
+  if ((tieneDesde && !fechaValida(desde)) || (tieneHasta && !fechaValida(hasta))) {
     return json(400, cors, { ok: false, error: 'desde/hasta deben ser fechas YYYY-MM-DD' });
   }
 
   const ds = bq.DATASET;
+  const params = {};
+  const filtros = [];
+  if (tieneDesde) { filtros.push('fecha >= @desde'); params.desde = desde; }
+  if (tieneHasta) { filtros.push('fecha <= @hasta'); params.hasta = hasta; }
+  const where = filtros.length ? 'WHERE ' + filtros.join(' AND ') : '';
+
   // `tabla` ya esta validada contra una lista blanca, asi que es seguro
   // interpolarla en el nombre de la tabla (BigQuery no parametriza identificadores).
+  // Limite defensivo para no traer tablas enormes al navegador.
   const filas = await bq.query(
     `SELECT *
        FROM \`${ds}.${tabla}\`
-      WHERE fecha BETWEEN @desde AND @hasta
-      ORDER BY fecha DESC`,
-    { desde, hasta });
+      ${where}
+      ORDER BY fecha DESC
+      LIMIT 1000`,
+    params);
 
-  return json(200, cors, { ok: true, filas });
+  return json(200, cors, { ok: true, filas: filas.map(normalizarFila) });
+}
+
+// Aplana los tipos especiales que devuelve el cliente de BigQuery para que el
+// JSON que recibe el frontend sea "plano": DATE/TIMESTAMP llegan como objetos
+// { value:"..." } y NUMERIC como string; aqui se convierten a string/Number
+// JS reales para que la UI los muestre y formatee bien.
+function normalizarValor(v) {
+  if (v === null || v === undefined) return v;
+  // BigQueryDate / BigQueryTimestamp / BigQueryDatetime exponen .value (string).
+  if (typeof v === 'object' && v !== null && typeof v.value === 'string') return v.value;
+  return v;
+}
+function normalizarFila(fila) {
+  const out = {};
+  for (const k of Object.keys(fila)) {
+    let v = normalizarValor(fila[k]);
+    // Columnas NUMERIC llegan como string: a Number para que la UI las formatee.
+    if (typeof v === 'string' && COLS_NUMERIC.has(k) && v !== '' && !isNaN(Number(v))) {
+      v = Number(v);
+    }
+    out[k] = v;
+  }
+  return out;
 }
 
 // --- POST action=insertar -------------------------------------------------
@@ -196,8 +252,35 @@ async function insertar(cors, body) {
     return json(400, cors, { ok: false, error: 'Faltan campos requeridos: ' + faltan.join(', ') });
   }
 
+  // Construye el registro SOLO con columnas de la lista blanca, casteando cada
+  // valor al tipo del esquema. Los campos opcionales ausentes simplemente no se
+  // incluyen (BigQuery los deja NULL); los campos extra se ignoran.
+  const registro = {};
+  for (const col of COLUMNAS[tabla]) {
+    if (!(col in fila)) continue;
+    const v = fila[col];
+    if (v === undefined || v === null) continue;
+    if (COLS_NUMERIC.has(col)) {
+      const n = Number(v);
+      registro[col] = Number.isFinite(n) ? n : 0;
+    } else if (COLS_BOOL.has(col)) {
+      registro[col] = Boolean(v);
+    } else if (COLS_STRING.has(col)) {
+      // `conceptos` ya llega como string (JSON.stringify del frontend); no se
+      // re-serializa para no doble-codificar. Si por alguna razon llega un
+      // objeto/arreglo (no string), se serializa a JSON en vez de producir
+      // "[object Object]"; el resto de STRING simples se castean con String().
+      if (typeof v === 'string') registro[col] = v;
+      else if (col === 'conceptos' && typeof v === 'object') registro[col] = JSON.stringify(v);
+      else registro[col] = String(v);
+    } else {
+      // fecha y cualquier otra columna DATE/STRING simple.
+      registro[col] = v;
+    }
+  }
+
   // Agrega timestamp de ingestion en formato compatible con BigQuery TIMESTAMP.
-  const registro = { ...fila, ts: new Date().toISOString() };
+  registro.ts = new Date().toISOString();
 
   await bq.insertRows(tabla, [registro]);
   return json(200, cors, { ok: true, insertados: 1 });
