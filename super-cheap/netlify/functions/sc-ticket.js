@@ -48,36 +48,55 @@ function limpiarB64(s) {
   return b64.trim();
 }
 
-// Prompt del sistema: salida JSON estricta, multi-foto, manuscritos, fecha+hora.
+// Prompt del sistema: salida JSON estricta, multi-foto, manuscritos, fecha+hora,
+// y CLASIFICACION INTELIGENTE de insumos (maquila vs reventa) + ingrediente.
 const SYSTEM_PROMPT =
-  'Eres un asistente contable para una tienda de conveniencia en Mexico. ' +
+  'Eres un asistente contable y de costos para una tienda de conveniencia en Mexico ' +
+  'que ADEMAS maquila (prepara) alimentos: tortas, sandwiches y cuernitos. ' +
   'Recibes UNA O VARIAS imagenes que son PARTES DEL MISMO ticket, factura o nota ' +
   '(por ejemplo varias hojas o secciones). FUSIONA la informacion de todas las ' +
   'imagenes en un solo documento: NO dupliques conceptos ni sumes dos veces el ' +
   'mismo total. El documento puede estar IMPRESO o escrito A MANO (manuscrito); ' +
-  'lee la letra manuscrita lo mejor posible. Devuelves SOLO un objeto JSON valido ' +
-  '(sin texto extra, sin markdown, sin ```). Estructura exacta requerida:\n' +
+  'lee la letra manuscrita lo mejor posible. NO agregues datos "a lo tonto": LEE y ' +
+  'ENTIENDE para que sirve cada producto comprado.\n' +
+  'Devuelves SOLO un objeto JSON valido (sin texto extra, sin markdown, sin ```). ' +
+  'Estructura exacta requerida:\n' +
   '{\n' +
   '  "fecha": "YYYY-MM-DD" o null,\n' +
   '  "hora": "HH:MM" o null,\n' +
   '  "proveedor": string o null,\n' +
   '  "categoria": string o null,\n' +
+  '  "clasificacion": "maquila" | "reventa" | "mixto" | "otro",\n' +
   '  "subtotal": number,\n' +
   '  "iva": number,\n' +
   '  "ieps": number,\n' +
   '  "total": number,\n' +
-  '  "conceptos": [ { "descripcion": string, "importe": number } ],\n' +
+  '  "conceptos": [ { "descripcion": string, "importe": number, "uso": "maquila"|"reventa"|"otro", "ingrediente": string o null } ],\n' +
   '  "iva_desglosado": boolean\n' +
   '}\n' +
-  'Reglas:\n' +
+  'Reglas de NUMEROS:\n' +
   '- Usa punto decimal, sin simbolo de moneda ni separador de miles.\n' +
   '- "hora" en formato 24h HH:MM si es legible; si no, null.\n' +
   '- "iva_desglosado" = true SOLO si el documento muestra explicitamente el monto ' +
   'de IVA (o IEPS) desglosado. Si solo ves el total, ponlo en false.\n' +
   '- Si el IVA viene desglosado, copia subtotal, iva, ieps y total tal como aparecen.\n' +
   '- Si NO viene desglosado, pon iva=0 e ieps=0 y deja el total; el servidor estimara.\n' +
-  '- "categoria" sugiere una categoria corta (ej: abarrotes, bebidas, limpieza, renta, luz, agua).\n' +
-  '- Si no puedes leer un dato, usa null (texto) o 0 (numeros). NUNCA inventes.';
+  '- "categoria" sugiere una categoria corta (ej: abarrotes, bebidas, carnes frios, panaderia, limpieza, renta, luz, agua).\n' +
+  '- Si no puedes leer un dato, usa null (texto) o 0 (numeros). NUNCA inventes montos.\n' +
+  'Reglas de ENTENDIMIENTO (clasificar cada concepto):\n' +
+  '- "uso"="maquila": INSUMOS para preparar las tortas/sandwiches/cuernitos. Ejemplos: ' +
+  'jamon, queso, panela, pierna, salami, pan, bolillo, telera, cuernito/croissant, ' +
+  'mayonesa, mostaza, chiles, jitomate, lechua, aguacate, mantequilla. Si el producto ' +
+  'tipicamente se usa como ingrediente de una torta/sandwich/cuernito, es "maquila".\n' +
+  '- "uso"="reventa": productos que se VENDEN TAL CUAL sin preparar. Ejemplos: refrescos, ' +
+  'agua embotellada, sabritas/frituras, dulces, cigarros, cerveza, galletas empaquetadas.\n' +
+  '- "uso"="otro": lo que no es ni ingrediente ni mercancia de reventa (limpieza, ' +
+  'papeleria, servicios, equipo, bolsas).\n' +
+  '- "ingrediente": cuando uso="maquila", normaliza el nombre del insumo a una palabra ' +
+  'clave en minusculas y singular (ej: "jamon", "queso", "pan", "cuernito", "jitomate"). ' +
+  'Para uso!="maquila" pon null.\n' +
+  '- "clasificacion" (del ticket completo): "maquila" si casi todo es insumo de maquila; ' +
+  '"reventa" si casi todo es mercancia de reventa; "mixto" si hay de ambos; "otro" si no aplica.';
 
 exports.handler = async (event) => {
   const cors = corsHeaders(event);
@@ -177,15 +196,37 @@ exports.handler = async (event) => {
     hora = `${String(h).padStart(2, '0')}:${m}`;
   }
 
-  // Conceptos saneados.
+  // Conceptos saneados (incluye uso/ingrediente entendidos por la IA).
+  const USOS = ['maquila', 'reventa', 'otro'];
   const conceptos = Array.isArray(raw.conceptos)
     ? raw.conceptos
-        .map(c => ({
-          descripcion: c && c.descripcion != null ? String(c.descripcion) : '',
-          importe: r2(c && c.importe),
-        }))
+        .map(c => {
+          const uso = c && USOS.includes(String(c.uso)) ? String(c.uso) : 'otro';
+          const ing = uso === 'maquila' && c && c.ingrediente != null && String(c.ingrediente).trim()
+            ? String(c.ingrediente).trim().toLowerCase()
+            : null;
+          return {
+            descripcion: c && c.descripcion != null ? String(c.descripcion) : '',
+            importe: r2(c && c.importe),
+            uso,
+            ingrediente: ing,
+          };
+        })
         .filter(c => c.descripcion || c.importe)
     : [];
+
+  // Clasificacion del ticket completo (maquila|reventa|mixto|otro).
+  const CLASIF = ['maquila', 'reventa', 'mixto', 'otro'];
+  let clasificacion = CLASIF.includes(String(raw.clasificacion)) ? String(raw.clasificacion) : null;
+  if (!clasificacion && conceptos.length) {
+    // Respaldo: derivar de los usos de los conceptos si la IA no la mando.
+    const usos = new Set(conceptos.map(c => c.uso));
+    if (usos.has('maquila') && usos.has('reventa')) clasificacion = 'mixto';
+    else if (usos.has('maquila')) clasificacion = 'maquila';
+    else if (usos.has('reventa')) clasificacion = 'reventa';
+    else clasificacion = 'otro';
+  }
+  if (!clasificacion) clasificacion = 'otro';
 
   let subtotal = r2(raw.subtotal);
   let iva      = r2(raw.iva);
@@ -233,6 +274,7 @@ exports.handler = async (event) => {
       ieps,
       total,
       conceptos,
+      clasificacion,
       impuestos_estimados,
       revisar,
       nota,
