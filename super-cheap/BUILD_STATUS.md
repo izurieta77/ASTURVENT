@@ -27,3 +27,15 @@ Arnés de seguimiento para no perder nada ni repetir pasos. Se actualiza tras ca
 1. Base funcional (login + resumen + carga manual)
 2. IA en tickets (OCR de compras/gastos)
 3. Sincronización SICAR (bridge + ingest)
+
+## v2 — Skills de Dirección (DESPLEGADO Y VERIFICADO)
+- [x] Inserción DML + columnas `id/activo/hora/fotos` (migración aplicada en BigQuery)
+- [x] Skill 1 — Analítica: comparativos, top proveedores/categorías, proyección de mes ✅ probado
+- [x] Skill 2 — Alertas inteligentes (margen, egreso anómalo, caída ventas, salud SICAR) ✅ probado
+- [x] Skill 3 — Asistente IA "pregúntale a tu negocio" ✅ probado
+- [x] Skill 6 — Editar / borrar (soft delete) + búsqueda/filtros ✅ CRUD probado
+- [x] Skill 7 — Exportar Excel/PDF (frontend)
+- [x] Skill 8 — Captura multi-foto + fecha/hora auto + notas a mano (sc-ticket)
+- [~] Skill 4 — Resumen diario por correo: CÓDIGO listo; falta `RESEND_API_KEY` (Resend) para activar
+- [~] Skill 5 — Guardar fotos en GCS: CÓDIGO listo (graceful); falta crear bucket + permiso Storage
+- Construido con arnés de 3 agentes (2 constructores + 1 revisor) sobre `CONTRACT.md` v2.
