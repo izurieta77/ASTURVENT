@@ -1,12 +1,13 @@
 {
+  "_ayuda": "Copia este archivo como config.json y llena tus datos. Para SICAR 4: user 'root', port 3306, database 'auto' (el descubridor la encuentra). La contraseña la puso el instalador de SICAR; si no la sabes prueba primero vacia (\"\").",
   "mysql": {
     "host": "127.0.0.1",
     "port": 3306,
     "user": "root",
-    "password": "PON_AQUI_LA_CONTRASENA_DE_MYSQL_DE_SICAR",
-    "database": "NOMBRE_DE_LA_BASE_DE_SICAR"
+    "password": "",
+    "database": "auto"
   },
-  "siteUrl": "https://TU-SITIO.netlify.app",
-  "ingestToken": "DEBE_SER_IGUAL_A_SICAR_INGEST_TOKEN_EN_NETLIFY",
-  "sqlVentas": "-- AJUSTA esta consulta al esquema REAL de tu SICAR (nombres de tablas/columnas cambian segun version). Debe devolver columnas con estos nombres exactos: fecha, ticket_id, total, forma_pago, items. Usa el placeholder :fecha donde filtres por dia. Ejemplo orientativo: SELECT DATE(v.fecha) AS fecha, v.idVenta AS ticket_id, v.total AS total, fp.nombre AS forma_pago, COUNT(d.idDetalle) AS items FROM venta v LEFT JOIN detalle_venta d ON d.idVenta = v.idVenta LEFT JOIN forma_pago fp ON fp.idFormaPago = v.idFormaPago WHERE DATE(v.fecha) = :fecha GROUP BY v.idVenta"
+  "siteUrl": "https://supercheapp.netlify.app",
+  "ingestToken": "PEGA_AQUI_EL_SICAR_INGEST_TOKEN",
+  "sqlVentas": "-- Esta consulta se ajusta DESPUES de correr 'node descubrir.js'. Debe devolver columnas con estos nombres exactos: fecha, ticket_id, total, forma_pago, items. Usa el placeholder :fecha donde filtres por dia. Ejemplo orientativo SICAR 4: SELECT DATE(v.fecha) AS fecha, v.idVenta AS ticket_id, v.total AS total, fp.nombre AS forma_pago, COUNT(d.idDetalle) AS items FROM venta v LEFT JOIN detalle_venta d ON d.idVenta = v.idVenta LEFT JOIN forma_pago fp ON fp.idFormaPago = v.idFormaPago WHERE DATE(v.fecha) = :fecha GROUP BY v.idVenta"
 }
