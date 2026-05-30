@@ -10,8 +10,11 @@
 
 [functions]
   node_bundler = "esbuild"
-  # La librería de BigQuery trae binarios/dependencias que conviene no re-empaquetar:
-  external_node_modules = ["@google-cloud/bigquery"]
+  # Los clientes de Google Cloud traen dependencias dinámicas (gRPC/proto) que
+  # esbuild no debe re-empaquetar. Se marcan como externas las DOS librerías
+  # (BigQuery y Storage); si falta Storage, el require perezoso de _gcs.js puede
+  # fallar al empaquetar y romper la subida de fotos.
+  external_node_modules = ["@google-cloud/bigquery", "@google-cloud/storage"]
 
 [[headers]]
   for = "/*"

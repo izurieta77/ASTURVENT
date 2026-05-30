@@ -1,48 +1,65 @@
-// Lectura de tickets con IA (vision) para SUPER CHEAP.
+// Lectura de tickets con IA (vision) para SUPER CHEAP — Skill 8 (v2).
 //
-// El frontend manda la foto de un ticket de compra/gasto en base64 y esta
-// funcion la envia a OpenAI (modelo de vision) para extraer los montos. La API
+// El frontend manda una o VARIAS fotos del MISMO ticket/nota en base64 y esta
+// funcion las envia a OpenAI (modelo de vision) para extraer los montos. La API
 // key vive SOLO en el servidor (env var OPENAI_API_KEY); el navegador nunca la ve.
 //
 // Requiere Bearer token valido (mismo que sc-data; firmado por auth.js).
 //
-//   POST  { imagen_base64:"<base64 sin encabezado data:>", tipo:"compra|gasto" }
+//   POST  { imagenes_base64:["<b64>", ...], tipo:"compra|gasto" }
+//   (acepta tambien { imagen_base64:"<b64>", tipo } para compatibilidad)
 //
-// Respuesta (ver CONTRACT.md):
-//   { ok:true, datos:{ fecha, proveedor, categoria, subtotal, iva, ieps, total,
-//                      conceptos:[{descripcion, importe}], impuestos_estimados,
-//                      revisar, nota } }
+// Las imagenes se mandan en UNA SOLA llamada de vision: son PARTES del MISMO
+// documento, por lo que el modelo debe FUSIONAR conceptos/totales SIN duplicar.
+// Soporta documentos IMPRESOS o A MANO (manuscritos).
+//
+// Respuesta (ver CONTRACT.md v2):
+//   { ok:true, datos:{ fecha, hora, proveedor, categoria, subtotal, iva, ieps,
+//                      total, conceptos:[{descripcion, importe}],
+//                      impuestos_estimados, revisar, nota } }
 //
 // Reglas de impuestos (CONTRACT.md):
 //   1. Si el ticket desglosa IVA/IEPS -> se usan tal cual, impuestos_estimados=false.
 //   2. Si NO los desglosa -> el total ya los incluye; se estima IVA 16% (y IEPS solo
 //      si aplica); impuestos_estimados=true.
 //   3. Validar |subtotal+iva+ieps - total| <= 0.50 -> si no cuadra, revisar=true.
+//   4. Si la fecha no es legible -> revisar=true.
 
 const { corsHeaders, json, verifyToken, bearer } = require('./_lib');
 
 const MODEL      = 'gpt-4o';          // modelo de vision
-const MAX_TOKENS = 900;               // techo de salida (controla costo)
-// Limite de tamano de la imagen base64. Una imagen base64 muy grande puede
-// reventar la funcion (memoria/timeout) y el limite de payload de OpenAI.
-// ~8 MB de base64 ~= 6 MB de imagen real, suficiente para la foto de un ticket.
-const MAX_B64_LEN = 8 * 1024 * 1024;
-const IVA_TASA    = 0.16;             // IVA general en Mexico (16%)
-const TOLERANCIA  = 0.50;             // tolerancia para validar subtotal+iva+ieps≈total
+const MAX_TOKENS = 1200;              // techo de salida (mas alto por multi-foto)
+// Limite de tamano TOTAL combinado de las imagenes base64 (~20 MB).
+const MAX_B64_TOTAL = 20 * 1024 * 1024;
+const MAX_IMAGENES  = 8;              // techo de imagenes por llamada
+const IVA_TASA    = 0.16;            // IVA general en Mexico (16%)
+const TOLERANCIA  = 0.50;            // tolerancia para validar subtotal+iva+ieps≈total
 
-// Redondea a 2 decimales devolviendo Number.
 function r2(n) {
   const v = Number(n);
   return Number.isFinite(v) ? Math.round(v * 100) / 100 : 0;
 }
 
-// Prompt del sistema: pide salida JSON estricta con las reglas de impuestos.
+// Quita el encabezado data: si viene y recorta.
+function limpiarB64(s) {
+  let b64 = String(s || '');
+  const coma = b64.indexOf(',');
+  if (b64.startsWith('data:') && coma >= 0) b64 = b64.slice(coma + 1);
+  return b64.trim();
+}
+
+// Prompt del sistema: salida JSON estricta, multi-foto, manuscritos, fecha+hora.
 const SYSTEM_PROMPT =
   'Eres un asistente contable para una tienda de conveniencia en Mexico. ' +
-  'Analizas la foto de un ticket o factura y devuelves SOLO un objeto JSON valido ' +
+  'Recibes UNA O VARIAS imagenes que son PARTES DEL MISMO ticket, factura o nota ' +
+  '(por ejemplo varias hojas o secciones). FUSIONA la informacion de todas las ' +
+  'imagenes en un solo documento: NO dupliques conceptos ni sumes dos veces el ' +
+  'mismo total. El documento puede estar IMPRESO o escrito A MANO (manuscrito); ' +
+  'lee la letra manuscrita lo mejor posible. Devuelves SOLO un objeto JSON valido ' +
   '(sin texto extra, sin markdown, sin ```). Estructura exacta requerida:\n' +
   '{\n' +
   '  "fecha": "YYYY-MM-DD" o null,\n' +
+  '  "hora": "HH:MM" o null,\n' +
   '  "proveedor": string o null,\n' +
   '  "categoria": string o null,\n' +
   '  "subtotal": number,\n' +
@@ -54,10 +71,11 @@ const SYSTEM_PROMPT =
   '}\n' +
   'Reglas:\n' +
   '- Usa punto decimal, sin simbolo de moneda ni separador de miles.\n' +
-  '- "iva_desglosado" = true SOLO si el ticket muestra explicitamente el monto de IVA ' +
-  '(o IEPS) desglosado. Si solo ves el total, ponlo en false.\n' +
+  '- "hora" en formato 24h HH:MM si es legible; si no, null.\n' +
+  '- "iva_desglosado" = true SOLO si el documento muestra explicitamente el monto ' +
+  'de IVA (o IEPS) desglosado. Si solo ves el total, ponlo en false.\n' +
   '- Si el IVA viene desglosado, copia subtotal, iva, ieps y total tal como aparecen.\n' +
-  '- Si NO viene desglosado, pon iva=0 e ieps=0 y deja el total; el servidor estimara los impuestos.\n' +
+  '- Si NO viene desglosado, pon iva=0 e ieps=0 y deja el total; el servidor estimara.\n' +
   '- "categoria" sugiere una categoria corta (ej: abarrotes, bebidas, limpieza, renta, luz, agua).\n' +
   '- Si no puedes leer un dato, usa null (texto) o 0 (numeros). NUNCA inventes.';
 
@@ -81,18 +99,31 @@ exports.handler = async (event) => {
   catch { return json(400, cors, { ok: false, error: 'JSON invalido' }); }
 
   const tipo = payload.tipo === 'gasto' ? 'gasto' : 'compra';
-  let b64 = String(payload.imagen_base64 || '');
-  // Por si llega con encabezado data: lo quitamos para quedarnos con el base64 puro.
-  const coma = b64.indexOf(',');
-  if (b64.startsWith('data:') && coma >= 0) b64 = b64.slice(coma + 1);
-  b64 = b64.trim();
 
-  if (!b64) return json(400, cors, { ok: false, error: 'Falta imagen_base64' });
-  if (b64.length > MAX_B64_LEN) {
-    return json(413, cors, { ok: false, error: 'La imagen es demasiado grande. Toma la foto a menor resolucion.' });
+  // Acepta imagenes_base64:[...] o imagen_base64:"..." (compatibilidad).
+  let entradas = [];
+  if (Array.isArray(payload.imagenes_base64)) entradas = payload.imagenes_base64;
+  else if (payload.imagen_base64) entradas = [payload.imagen_base64];
+
+  const imagenes = entradas.map(limpiarB64).filter(Boolean);
+
+  if (imagenes.length === 0) {
+    return json(400, cors, { ok: false, error: 'Falta imagenes_base64 (o imagen_base64)' });
+  }
+  if (imagenes.length > MAX_IMAGENES) {
+    return json(413, cors, { ok: false, error: `Demasiadas imagenes (max ${MAX_IMAGENES}).` });
+  }
+  const totalLen = imagenes.reduce((s, b) => s + b.length, 0);
+  if (totalLen > MAX_B64_TOTAL) {
+    return json(413, cors, { ok: false, error: 'Las imagenes son demasiado grandes. Tomalas a menor resolucion.' });
   }
 
-  // --- Llamada a OpenAI (vision) ---
+  // --- Llamada a OpenAI (vision) con TODAS las imagenes en un solo mensaje ---
+  const contenidoUsuario = [
+    { type: 'text', text: `Estas ${imagenes.length} imagen(es) son partes del MISMO ticket/nota de ${tipo}. Fusiona la informacion y devuelve el JSON.` },
+    ...imagenes.map(b64 => ({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${b64}` } })),
+  ];
+
   let data;
   try {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -103,26 +134,18 @@ exports.handler = async (event) => {
       },
       body: JSON.stringify({
         model: MODEL,
-        // Forzar salida JSON valida.
         response_format: { type: 'json_object' },
         temperature: 0.1,
         max_tokens: MAX_TOKENS,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: `Lee este ticket de ${tipo} y devuelve el JSON.` },
-              { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${b64}` } },
-            ],
-          },
+          { role: 'user', content: contenidoUsuario },
         ],
       }),
     });
 
     data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      // No se filtra el cuerpo completo de OpenAI; solo el mensaje de error.
       return json(502, cors, { ok: false, error: data.error?.message || `OpenAI HTTP ${res.status}` });
     }
   } catch (e) {
@@ -137,13 +160,24 @@ exports.handler = async (event) => {
     return json(502, cors, { ok: false, error: 'La IA devolvio un formato inesperado. Intenta con otra foto.' });
   }
 
-  // Normaliza fecha al formato YYYY-MM-DD (o null si no es valida).
+  // Fecha YYYY-MM-DD (o null). Si no es legible -> revisar.
   let fecha = null;
+  let fechaIlegible = false;
   if (typeof raw.fecha === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.fecha.trim())) {
     fecha = raw.fecha.trim();
+  } else {
+    fechaIlegible = true;
   }
 
-  // Conceptos: arreglo de { descripcion, importe } saneado.
+  // Hora HH:MM (o null).
+  let hora = null;
+  if (typeof raw.hora === 'string' && /^([01]?\d|2[0-3]):[0-5]\d$/.test(raw.hora.trim())) {
+    // Normaliza a HH:MM con cero a la izquierda.
+    const [h, m] = raw.hora.trim().split(':');
+    hora = `${String(h).padStart(2, '0')}:${m}`;
+  }
+
+  // Conceptos saneados.
   const conceptos = Array.isArray(raw.conceptos)
     ? raw.conceptos
         .map(c => ({
@@ -163,38 +197,35 @@ exports.handler = async (event) => {
   let nota = '';
 
   if (desglosado) {
-    // Regla 1: impuestos desglosados -> se usan tal cual.
     impuestos_estimados = false;
-    // Si falta el subtotal, se deriva del total menos impuestos.
     if (!(subtotal > 0)) subtotal = r2(total - iva - ieps);
     nota = 'IVA/IEPS tomados directamente del ticket.';
   } else {
-    // Regla 2: no viene desglosado -> el total ya los incluye; se estima IVA 16%.
     impuestos_estimados = true;
-    if (!(total > 0) && subtotal > 0) {
-      // Si solo se leyo el subtotal, se asume que es el total con impuestos incluidos.
-      total = subtotal;
-    }
-    // IEPS no se puede inferir de forma fiable de un total; se deja en 0 salvo que
-    // la IA lo haya desglosado (caso ya cubierto arriba).
+    if (!(total > 0) && subtotal > 0) total = subtotal;
     ieps = 0;
-    // total = subtotal + iva, con iva = subtotal * 0.16  =>  subtotal = total / 1.16
     subtotal = r2(total / (1 + IVA_TASA));
     iva = r2(total - subtotal);
     nota = 'El ticket no desglosa impuestos: se estimo IVA 16% sobre el total. Revisa los montos.';
   }
 
-  // Regla 3: validar que subtotal + iva + ieps ≈ total (tolerancia 0.50).
+  // Regla 3: validar que subtotal + iva + ieps ≈ total.
   const cuadra = Math.abs((subtotal + iva + ieps) - total) <= TOLERANCIA;
-  const revisar = !cuadra;
+  let revisar = !cuadra;
   if (revisar) {
     nota = (nota ? nota + ' ' : '') + 'Los montos no cuadran exactamente; verifica antes de guardar.';
+  }
+  // Regla 4: fecha no legible -> revisar.
+  if (fechaIlegible) {
+    revisar = true;
+    nota = (nota ? nota + ' ' : '') + 'No se pudo leer la fecha con seguridad; capturala manualmente.';
   }
 
   return json(200, cors, {
     ok: true,
     datos: {
       fecha,
+      hora,
       proveedor: raw.proveedor != null ? String(raw.proveedor) : null,
       categoria: raw.categoria != null ? String(raw.categoria) : null,
       subtotal,

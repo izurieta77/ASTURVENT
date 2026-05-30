@@ -1,20 +1,27 @@
-// API del dashboard SUPER CHEAP.
+// API del dashboard SUPER CHEAP (v2).
 //
 // Toda llamada requiere un Bearer token valido (firmado por auth.js).
-// Responde con la forma exacta definida en CONTRACT.md.
+// Responde con la forma exacta definida en CONTRACT.md (seccion CONTRATO v2).
 //
 //   GET  ?action=resumen&desde=YYYY-MM-DD&hasta=YYYY-MM-DD
 //   GET  ?action=lista&tabla=ventas|compras|gastos|nomina&desde=&hasta=
-//   POST  { action:"insertar", tabla:"compras|gastos|nomina", fila:{...} }
+//   GET  ?action=analitica&desde=YYYY-MM-DD&hasta=YYYY-MM-DD
+//   GET  ?action=alertas
+//   POST { action:"insertar",   tabla:"compras|gastos|nomina", fila:{...}, imagenes_base64?:[...] }
+//   POST { action:"actualizar", tabla, id, fila }
+//   POST { action:"eliminar",   tabla, id }
 //
 // Todas las consultas a BigQuery son PARAMETRIZADAS (nunca se concatena input).
+// Todas las lecturas/agregados filtran COALESCE(activo, TRUE) = TRUE (soft delete v2).
 
+const crypto = require('crypto');
 const { corsHeaders, json, verifyToken, bearer } = require('./_lib');
 const bq = require('./_bq');
+const gcs = require('./_gcs');
 
 // Tablas validas para lectura/listado.
 const TABLAS_LISTA    = ['ventas', 'compras', 'gastos', 'nomina'];
-// Tablas validas para insercion manual (ventas NO: entra por sc-ingest).
+// Tablas validas para insercion/edicion manual (ventas NO: entra por sc-ingest).
 const TABLAS_INSERTAR = ['compras', 'gastos', 'nomina'];
 
 // Campos requeridos por tabla al insertar (segun esquema del CONTRACT).
@@ -24,29 +31,26 @@ const REQUERIDOS = {
   nomina:  ['periodo', 'fecha', 'empleado', 'monto'],
 };
 
-// Columnas permitidas por tabla al insertar (lista blanca = mismo esquema de
-// bigquery-setup.sql, sin `ts` que lo pone el servidor). Cualquier campo que
-// mande el frontend y NO este aqui se descarta: asi un campo de mas no revienta
-// el streaming insert de BigQuery ("no such field") y no se inyectan columnas.
+// Columnas permitidas por tabla al insertar/actualizar (lista blanca = esquema
+// v2 de bigquery-setup.sql, incluye id/activo/hora/fotos; sin `ts` que lo pone el
+// servidor). Cualquier campo extra del frontend se descarta para no inyectar
+// columnas ni romper el INSERT/UPDATE de BigQuery.
 const COLUMNAS = {
-  compras: ['fecha', 'proveedor', 'subtotal', 'iva', 'ieps', 'total',
-            'impuestos_estimados', 'categoria', 'conceptos', 'foto_url', 'raw_ocr'],
-  gastos:  ['fecha', 'concepto', 'categoria', 'subtotal', 'iva', 'ieps', 'total',
-            'impuestos_estimados', 'foto_url'],
-  nomina:  ['periodo', 'fecha', 'empleado', 'monto', 'tipo'],
+  compras: ['id', 'fecha', 'hora', 'proveedor', 'subtotal', 'iva', 'ieps', 'total',
+            'impuestos_estimados', 'categoria', 'conceptos', 'foto_url', 'fotos',
+            'raw_ocr', 'activo'],
+  gastos:  ['id', 'fecha', 'hora', 'concepto', 'categoria', 'subtotal', 'iva', 'ieps',
+            'total', 'impuestos_estimados', 'foto_url', 'fotos', 'activo'],
+  nomina:  ['id', 'periodo', 'fecha', 'empleado', 'monto', 'tipo', 'activo'],
 };
 
-// Columnas NUMERIC en BigQuery: se castean a Number JS al insertar.
+// Columnas NUMERIC en BigQuery: se castean a Number JS al normalizar/leer.
 const COLS_NUMERIC = new Set(['subtotal', 'iva', 'ieps', 'total', 'monto']);
-// Columnas BOOL en BigQuery.
-const COLS_BOOL = new Set(['impuestos_estimados']);
-// Columnas que en el esquema son STRING (incluye `conceptos`, que viaja como
-// JSON.stringify desde el frontend y se guarda tal cual, sin re-serializar).
-const COLS_STRING = new Set(['proveedor', 'concepto', 'categoria', 'conceptos',
-                             'foto_url', 'raw_ocr', 'periodo', 'empleado', 'tipo']);
 
-// Valida formato YYYY-MM-DD (no valida que la fecha exista en el calendario,
-// pero BigQuery rechazaria un DATE invalido).
+// Margen meta por defecto (%); configurable via env META_MARGEN.
+const META_MARGEN = Number(process.env.META_MARGEN) || 20;
+
+// Valida formato YYYY-MM-DD.
 function fechaValida(s) {
   return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 }
@@ -68,9 +72,11 @@ exports.handler = async (event) => {
       const q      = event.queryStringParameters || {};
       const action = String(q.action || '');
 
-      if (action === 'resumen') return await resumen(cors, q);
-      if (action === 'lista')   return await lista(cors, q);
-      return json(400, cors, { ok: false, error: 'action invalida (resumen|lista)' });
+      if (action === 'resumen')   return await resumen(cors, q);
+      if (action === 'lista')     return await lista(cors, q);
+      if (action === 'analitica') return await analitica(cors, q);
+      if (action === 'alertas')   return await alertas(cors, q);
+      return json(400, cors, { ok: false, error: 'action invalida (resumen|lista|analitica|alertas)' });
     }
 
     if (event.httpMethod === 'POST') {
@@ -78,8 +84,11 @@ exports.handler = async (event) => {
       try { body = JSON.parse(event.body || '{}'); }
       catch { return json(400, cors, { ok: false, error: 'JSON invalido' }); }
 
-      if (String(body.action || '') === 'insertar') return await insertar(cors, body);
-      return json(400, cors, { ok: false, error: 'action invalida (insertar)' });
+      const action = String(body.action || '');
+      if (action === 'insertar')   return await insertar(cors, body);
+      if (action === 'actualizar') return await actualizar(cors, body);
+      if (action === 'eliminar')   return await eliminar(cors, body);
+      return json(400, cors, { ok: false, error: 'action invalida (insertar|actualizar|eliminar)' });
     }
 
     return json(405, cors, { ok: false, error: 'Method not allowed' });
@@ -89,39 +98,38 @@ exports.handler = async (event) => {
   }
 };
 
-// --- GET action=resumen ---------------------------------------------------
-async function resumen(cors, q) {
-  const desde = q.desde;
-  const hasta = q.hasta;
-  if (!fechaValida(desde) || !fechaValida(hasta)) {
-    return json(400, cors, { ok: false, error: 'desde/hasta deben ser fechas YYYY-MM-DD' });
-  }
+// =============================================================================
+// Helpers de consulta reutilizables (los reusa tambien sc-chat / sc-resumen).
+// =============================================================================
 
+// Filtro de soft delete: solo filas activas (o viejas con activo IS NULL).
+const ACTIVO = 'COALESCE(activo, TRUE) = TRUE';
+
+// Calcula los KPIs agregados de un rango [desde, hasta] (ambos YYYY-MM-DD).
+// Devuelve { ventas, compras, gastos, nomina, utilidad, margen, iva_compras, ieps_compras }.
+async function kpisRango(desde, hasta) {
   const ds = bq.DATASET;
   const params = { desde, hasta };
 
-  // KPIs agregados. Se calculan los totales por tabla en una sola consulta
-  // por tabla; los montos NUMERIC de BigQuery llegan como string, por eso se
-  // castean con CAST(... AS FLOAT64) para devolver Number en el JSON.
   const [ventasRows, comprasRows, gastosRows, nominaRows] = await Promise.all([
     bq.query(
       `SELECT IFNULL(SUM(CAST(total AS FLOAT64)), 0) AS total
          FROM \`${ds}.ventas\`
-        WHERE fecha BETWEEN @desde AND @hasta`, params),
+        WHERE fecha BETWEEN @desde AND @hasta AND ${ACTIVO}`, params),
     bq.query(
       `SELECT IFNULL(SUM(CAST(total AS FLOAT64)), 0) AS total,
               IFNULL(SUM(CAST(iva   AS FLOAT64)), 0) AS iva,
               IFNULL(SUM(CAST(ieps  AS FLOAT64)), 0) AS ieps
          FROM \`${ds}.compras\`
-        WHERE fecha BETWEEN @desde AND @hasta`, params),
+        WHERE fecha BETWEEN @desde AND @hasta AND ${ACTIVO}`, params),
     bq.query(
       `SELECT IFNULL(SUM(CAST(total AS FLOAT64)), 0) AS total
          FROM \`${ds}.gastos\`
-        WHERE fecha BETWEEN @desde AND @hasta`, params),
+        WHERE fecha BETWEEN @desde AND @hasta AND ${ACTIVO}`, params),
     bq.query(
       `SELECT IFNULL(SUM(CAST(monto AS FLOAT64)), 0) AS total
          FROM \`${ds}.nomina\`
-        WHERE fecha BETWEEN @desde AND @hasta`, params),
+        WHERE fecha BETWEEN @desde AND @hasta AND ${ACTIVO}`, params),
   ]);
 
   const ventas      = Number(ventasRows[0]?.total || 0);
@@ -130,42 +138,123 @@ async function resumen(cors, q) {
   const nomina      = Number(nominaRows[0]?.total || 0);
   const iva_compras = Number(comprasRows[0]?.iva || 0);
   const ieps_compras = Number(comprasRows[0]?.ieps || 0);
-
   const utilidad = ventas - compras - gastos - nomina;
-  // Guard: margen 0 si no hubo ventas (evita division por cero).
   const margen = ventas > 0 ? (utilidad / ventas) * 100 : 0;
 
-  // Serie de ventas por dia (ordenada ascendente para graficar).
-  const serieRows = await bq.query(
+  return { ventas, compras, gastos, nomina, utilidad, margen, iva_compras, ieps_compras };
+}
+
+// Serie de ventas por dia en un rango (ascendente).
+async function serieVentas(desde, hasta) {
+  const ds = bq.DATASET;
+  const rows = await bq.query(
     `SELECT FORMAT_DATE('%Y-%m-%d', fecha) AS fecha,
             IFNULL(SUM(CAST(total AS FLOAT64)), 0) AS total
        FROM \`${ds}.ventas\`
-      WHERE fecha BETWEEN @desde AND @hasta
+      WHERE fecha BETWEEN @desde AND @hasta AND ${ACTIVO}
       GROUP BY fecha
-      ORDER BY fecha ASC`, params);
+      ORDER BY fecha ASC`, { desde, hasta });
+  return rows.map(r => ({ fecha: r.fecha, total: Number(r.total || 0) }));
+}
+
+// Top proveedores (desde compras) por monto en un rango.
+async function topProveedores(desde, hasta, limite = 10) {
+  const ds = bq.DATASET;
+  const rows = await bq.query(
+    `SELECT IFNULL(proveedor, 'Sin proveedor') AS proveedor,
+            IFNULL(SUM(CAST(total AS FLOAT64)), 0) AS total,
+            COUNT(*) AS conteo
+       FROM \`${ds}.compras\`
+      WHERE fecha BETWEEN @desde AND @hasta AND ${ACTIVO}
+      GROUP BY proveedor
+      ORDER BY total DESC
+      LIMIT @lim`, { desde, hasta, lim: limite });
+  return rows.map(r => ({ proveedor: r.proveedor, total: Number(r.total || 0), conteo: Number(r.conteo || 0) }));
+}
+
+// Top categorias de gasto por monto en un rango.
+async function topCategoriasGasto(desde, hasta, limite = 10) {
+  const ds = bq.DATASET;
+  const rows = await bq.query(
+    `SELECT IFNULL(categoria, 'Sin categoria') AS categoria,
+            IFNULL(SUM(CAST(total AS FLOAT64)), 0) AS total
+       FROM \`${ds}.gastos\`
+      WHERE fecha BETWEEN @desde AND @hasta AND ${ACTIVO}
+      GROUP BY categoria
+      ORDER BY total DESC
+      LIMIT @lim`, { desde, hasta, lim: limite });
+  return rows.map(r => ({ categoria: r.categoria, total: Number(r.total || 0) }));
+}
+
+// --- Utilidades de fecha (hora de Mexico, sin libs externas) ---
+// La tienda opera en America/Mexico_City (UTC-6, sin horario de verano desde
+// 2022). Calcular "hoy"/"ayer" en UTC desfasaba el dia cerca de medianoche
+// (las funciones corren en servidores UTC). Restamos el offset para obtener el
+// dia civil correcto en Mexico.
+const MX_OFFSET_MS = 6 * 60 * 60 * 1000; // UTC-6
+
+// "Ahora" en hora de Mexico, como objeto Date cuyos componentes UTC ya
+// representan la fecha/hora local mexicana.
+function ahoraMX() {
+  return new Date(Date.now() - MX_OFFSET_MS);
+}
+function hoyISO() {
+  return ahoraMX().toISOString().slice(0, 10);
+}
+function ayerISO() {
+  const d = ahoraMX();
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+function restarDiasISO(iso, n) {
+  const d = new Date(iso + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+function diasEntre(desdeISO, hastaISO) {
+  const a = new Date(desdeISO + 'T00:00:00Z');
+  const b = new Date(hastaISO + 'T00:00:00Z');
+  return Math.round((b - a) / 86400000) + 1; // inclusivo
+}
+
+// =============================================================================
+// GET action=resumen
+// =============================================================================
+async function resumen(cors, q) {
+  const desde = q.desde;
+  const hasta = q.hasta;
+  if (!fechaValida(desde) || !fechaValida(hasta)) {
+    return json(400, cors, { ok: false, error: 'desde/hasta deben ser fechas YYYY-MM-DD' });
+  }
+
+  const ds = bq.DATASET;
+  const k = await kpisRango(desde, hasta);
+  const serie = await serieVentas(desde, hasta);
 
   // Gastos agrupados por categoria (descendente por monto).
   const gastosCatRows = await bq.query(
     `SELECT IFNULL(categoria, 'Sin categoria') AS categoria,
             IFNULL(SUM(CAST(total AS FLOAT64)), 0) AS total
        FROM \`${ds}.gastos\`
-      WHERE fecha BETWEEN @desde AND @hasta
+      WHERE fecha BETWEEN @desde AND @hasta AND ${ACTIVO}
       GROUP BY categoria
-      ORDER BY total DESC`, params);
+      ORDER BY total DESC`, { desde, hasta });
 
   return json(200, cors, {
     ok: true,
     kpis: {
-      ventas, compras, gastos, nomina,
-      utilidad, margen,
-      iva_compras, ieps_compras,
+      ventas: k.ventas, compras: k.compras, gastos: k.gastos, nomina: k.nomina,
+      utilidad: k.utilidad, margen: k.margen,
+      iva_compras: k.iva_compras, ieps_compras: k.ieps_compras,
     },
-    serie_ventas: serieRows.map(r => ({ fecha: r.fecha, total: Number(r.total || 0) })),
+    serie_ventas: serie,
     gastos_por_categoria: gastosCatRows.map(r => ({ categoria: r.categoria, total: Number(r.total || 0) })),
   });
 }
 
-// --- GET action=lista -----------------------------------------------------
+// =============================================================================
+// GET action=lista
+// =============================================================================
 async function lista(cors, q) {
   const tabla = String(q.tabla || '');
   const desde = q.desde;
@@ -174,8 +263,6 @@ async function lista(cors, q) {
   if (!TABLAS_LISTA.includes(tabla)) {
     return json(400, cors, { ok: false, error: 'tabla invalida (ventas|compras|gastos|nomina)' });
   }
-  // desde/hasta son OPCIONALES en el listado (el frontend muestra todo). Si
-  // vienen, deben tener formato valido y se aplican como filtro de rango.
   const tieneDesde = desde !== undefined && desde !== '';
   const tieneHasta = hasta !== undefined && hasta !== '';
   if ((tieneDesde && !fechaValida(desde)) || (tieneHasta && !fechaValida(hasta))) {
@@ -184,14 +271,12 @@ async function lista(cors, q) {
 
   const ds = bq.DATASET;
   const params = {};
-  const filtros = [];
+  // Las listas solo muestran filas activas (v2).
+  const filtros = [ACTIVO];
   if (tieneDesde) { filtros.push('fecha >= @desde'); params.desde = desde; }
   if (tieneHasta) { filtros.push('fecha <= @hasta'); params.hasta = hasta; }
-  const where = filtros.length ? 'WHERE ' + filtros.join(' AND ') : '';
+  const where = 'WHERE ' + filtros.join(' AND ');
 
-  // `tabla` ya esta validada contra una lista blanca, asi que es seguro
-  // interpolarla en el nombre de la tabla (BigQuery no parametriza identificadores).
-  // Limite defensivo para no traer tablas enormes al navegador.
   const filas = await bq.query(
     `SELECT *
        FROM \`${ds}.${tabla}\`
@@ -203,13 +288,10 @@ async function lista(cors, q) {
   return json(200, cors, { ok: true, filas: filas.map(normalizarFila) });
 }
 
-// Aplana los tipos especiales que devuelve el cliente de BigQuery para que el
-// JSON que recibe el frontend sea "plano": DATE/TIMESTAMP llegan como objetos
-// { value:"..." } y NUMERIC como string; aqui se convierten a string/Number
-// JS reales para que la UI los muestre y formatee bien.
+// Aplana tipos especiales del cliente de BigQuery (DATE/TIMESTAMP -> string,
+// NUMERIC string -> Number) para que el JSON al frontend sea "plano".
 function normalizarValor(v) {
   if (v === null || v === undefined) return v;
-  // BigQueryDate / BigQueryTimestamp / BigQueryDatetime exponen .value (string).
   if (typeof v === 'object' && v !== null && typeof v.value === 'string') return v.value;
   return v;
 }
@@ -217,7 +299,6 @@ function normalizarFila(fila) {
   const out = {};
   for (const k of Object.keys(fila)) {
     let v = normalizarValor(fila[k]);
-    // Columnas NUMERIC llegan como string: a Number para que la UI las formatee.
     if (typeof v === 'string' && COLS_NUMERIC.has(k) && v !== '' && !isNaN(Number(v))) {
       v = Number(v);
     }
@@ -226,7 +307,161 @@ function normalizarFila(fila) {
   return out;
 }
 
-// --- POST action=insertar -------------------------------------------------
+// =============================================================================
+// GET action=analitica
+// =============================================================================
+async function analitica(cors, q) {
+  const desde = q.desde;
+  const hasta = q.hasta;
+  if (!fechaValida(desde) || !fechaValida(hasta)) {
+    return json(400, cors, { ok: false, error: 'desde/hasta deben ser fechas YYYY-MM-DD' });
+  }
+
+  // Periodo anterior equivalente: mismo numero de dias, inmediatamente antes.
+  const ndias = diasEntre(desde, hasta);
+  const hastaAnt = restarDiasISO(desde, 1);
+  const desdeAnt = restarDiasISO(hastaAnt, ndias - 1);
+
+  const [kAct, kAnt, tProv, tCat] = await Promise.all([
+    kpisRango(desde, hasta),
+    kpisRango(desdeAnt, hastaAnt),
+    topProveedores(desde, hasta),
+    topCategoriasGasto(desde, hasta),
+  ]);
+
+  // cambio_pct por metrica: (actual - anterior) / |anterior| * 100. Si anterior=0
+  // y actual!=0 -> 100 (o 0 si ambos son 0).
+  function pct(a, b) {
+    if (b === 0) return a === 0 ? 0 : 100;
+    return ((a - b) / Math.abs(b)) * 100;
+  }
+  const cambio_pct = {
+    ventas:   pct(kAct.ventas,   kAnt.ventas),
+    compras:  pct(kAct.compras,  kAnt.compras),
+    gastos:   pct(kAct.gastos,   kAnt.gastos),
+    nomina:   pct(kAct.nomina,   kAnt.nomina),
+    utilidad: pct(kAct.utilidad, kAnt.utilidad),
+  };
+
+  // Proyeccion del MES en curso por run-rate. Usa el mes natural de "hoy".
+  const hoy = hoyISO();
+  const anio = Number(hoy.slice(0, 4));
+  const mes  = Number(hoy.slice(5, 7));
+  const inicioMes = `${hoy.slice(0, 7)}-01`;
+  const dias_mes = new Date(Date.UTC(anio, mes, 0)).getUTCDate(); // ultimo dia del mes
+  const dias_transcurridos = Number(hoy.slice(8, 10));
+  const kMes = await kpisRango(inicioMes, hoy);
+  const factor = dias_transcurridos > 0 ? dias_mes / dias_transcurridos : 0;
+  const ventas_proy   = kMes.ventas * factor;
+  const utilidad_proy = kMes.utilidad * factor;
+
+  return json(200, cors, {
+    ok: true,
+    comparativo: {
+      actual:   { ventas: kAct.ventas, compras: kAct.compras, gastos: kAct.gastos, nomina: kAct.nomina, utilidad: kAct.utilidad },
+      anterior: { ventas: kAnt.ventas, compras: kAnt.compras, gastos: kAnt.gastos, nomina: kAnt.nomina, utilidad: kAnt.utilidad },
+      cambio_pct,
+    },
+    top_proveedores: tProv,
+    top_categorias_gasto: tCat,
+    proyeccion_mes: {
+      ventas_proy,
+      utilidad_proy,
+      dias_transcurridos,
+      dias_mes,
+    },
+  });
+}
+
+// =============================================================================
+// GET action=alertas
+// =============================================================================
+async function alertas(cors) {
+  const lista = await calcularAlertas();
+  return json(200, cors, { ok: true, alertas: lista });
+}
+
+// Funcion reutilizable: calcula las alertas operativas. La importa tambien
+// sc-resumen-diario. Devuelve [{ nivel, tipo, mensaje }].
+//   Reglas (CONTRACT v2):
+//    - margen del mes < META_MARGEN (default 20)
+//    - gasto/compra del dia de hoy > 2x promedio diario del mes
+//    - ventas de ayer < 60% del mismo dia de la semana pasada
+//    - salud SICAR: sin ventas fuente='sicar' ayer/hoy
+async function calcularAlertas() {
+  const ds = bq.DATASET;
+  const out = [];
+
+  const hoy = hoyISO();
+  const ayer = ayerISO();
+  const inicioMes = `${hoy.slice(0, 7)}-01`;
+  const haceSemana = restarDiasISO(ayer, 7);
+
+  // --- Regla 1: margen del mes en curso ---
+  const kMes = await kpisRango(inicioMes, hoy);
+  if (kMes.ventas > 0 && kMes.margen < META_MARGEN) {
+    out.push({
+      nivel: 'alto',
+      tipo: 'margen',
+      mensaje: `El margen del mes (${kMes.margen.toFixed(1)}%) esta por debajo de la meta (${META_MARGEN}%).`,
+    });
+  }
+
+  // --- Regla 2: gasto+compra del dia de hoy > 2x promedio diario del mes ---
+  const dias_transcurridos = Number(hoy.slice(8, 10));
+  const egresoHoyRows = await bq.query(
+    `SELECT
+       (SELECT IFNULL(SUM(CAST(total AS FLOAT64)),0) FROM \`${ds}.compras\` WHERE fecha=@hoy AND ${ACTIVO}) AS compras,
+       (SELECT IFNULL(SUM(CAST(total AS FLOAT64)),0) FROM \`${ds}.gastos\`  WHERE fecha=@hoy AND ${ACTIVO}) AS gastos`,
+    { hoy });
+  const egresoHoy = Number(egresoHoyRows[0]?.compras || 0) + Number(egresoHoyRows[0]?.gastos || 0);
+  const egresoMes = kMes.compras + kMes.gastos;
+  const promDiario = dias_transcurridos > 0 ? egresoMes / dias_transcurridos : 0;
+  if (promDiario > 0 && egresoHoy > 2 * promDiario) {
+    out.push({
+      nivel: 'warn',
+      tipo: 'egreso_dia',
+      mensaje: `Los egresos de hoy ($${egresoHoy.toFixed(2)}) superan el doble del promedio diario del mes ($${promDiario.toFixed(2)}).`,
+    });
+  }
+
+  // --- Regla 3: ventas de ayer < 60% del mismo dia de la semana pasada ---
+  const ventasDiaRows = await bq.query(
+    `SELECT
+       (SELECT IFNULL(SUM(CAST(total AS FLOAT64)),0) FROM \`${ds}.ventas\` WHERE fecha=@ayer       AND ${ACTIVO}) AS ayer,
+       (SELECT IFNULL(SUM(CAST(total AS FLOAT64)),0) FROM \`${ds}.ventas\` WHERE fecha=@haceSemana AND ${ACTIVO}) AS hace_semana`,
+    { ayer, haceSemana });
+  const vAyer = Number(ventasDiaRows[0]?.ayer || 0);
+  const vSemana = Number(ventasDiaRows[0]?.hace_semana || 0);
+  if (vSemana > 0 && vAyer < 0.6 * vSemana) {
+    out.push({
+      nivel: 'warn',
+      tipo: 'caida_ventas',
+      mensaje: `Las ventas de ayer ($${vAyer.toFixed(2)}) cayeron por debajo del 60% del mismo dia de la semana pasada ($${vSemana.toFixed(2)}).`,
+    });
+  }
+
+  // --- Regla 4: salud SICAR (sin ventas fuente='sicar' ayer/hoy) ---
+  const sicarRows = await bq.query(
+    `SELECT COUNT(*) AS n
+       FROM \`${ds}.ventas\`
+      WHERE fuente = 'sicar' AND fecha IN (@ayer, @hoy) AND ${ACTIVO}`,
+    { ayer, hoy });
+  const nSicar = Number(sicarRows[0]?.n || 0);
+  if (nSicar === 0) {
+    out.push({
+      nivel: 'alto',
+      tipo: 'sicar',
+      mensaje: 'No se han recibido ventas desde SICAR ayer ni hoy. Revisa que el bridge este corriendo.',
+    });
+  }
+
+  return out;
+}
+
+// =============================================================================
+// POST action=insertar
+// =============================================================================
 async function insertar(cors, body) {
   const tabla = String(body.tabla || '');
   const fila  = body.fila;
@@ -237,13 +472,10 @@ async function insertar(cors, body) {
   if (!fila || typeof fila !== 'object' || Array.isArray(fila)) {
     return json(400, cors, { ok: false, error: 'Falta fila (objeto)' });
   }
-
-  // La fecha siempre debe venir y tener formato valido.
   if (!fechaValida(fila.fecha)) {
     return json(400, cors, { ok: false, error: 'fila.fecha debe ser YYYY-MM-DD' });
   }
 
-  // Valida campos requeridos segun la tabla.
   const faltan = REQUERIDOS[tabla].filter(c => {
     const v = fila[c];
     return v === undefined || v === null || v === '';
@@ -252,36 +484,120 @@ async function insertar(cors, body) {
     return json(400, cors, { ok: false, error: 'Faltan campos requeridos: ' + faltan.join(', ') });
   }
 
-  // Construye el registro SOLO con columnas de la lista blanca, casteando cada
-  // valor al tipo del esquema. Los campos opcionales ausentes simplemente no se
-  // incluyen (BigQuery los deja NULL); los campos extra se ignoran.
-  const registro = {};
-  for (const col of COLUMNAS[tabla]) {
-    if (!(col in fila)) continue;
-    const v = fila[col];
-    if (v === undefined || v === null) continue;
-    if (COLS_NUMERIC.has(col)) {
-      const n = Number(v);
-      registro[col] = Number.isFinite(n) ? n : 0;
-    } else if (COLS_BOOL.has(col)) {
-      registro[col] = Boolean(v);
-    } else if (COLS_STRING.has(col)) {
-      // `conceptos` ya llega como string (JSON.stringify del frontend); no se
-      // re-serializa para no doble-codificar. Si por alguna razon llega un
-      // objeto/arreglo (no string), se serializa a JSON en vez de producir
-      // "[object Object]"; el resto de STRING simples se castean con String().
-      if (typeof v === 'string') registro[col] = v;
-      else if (col === 'conceptos' && typeof v === 'object') registro[col] = JSON.stringify(v);
-      else registro[col] = String(v);
-    } else {
-      // fecha y cualquier otra columna DATE/STRING simple.
-      registro[col] = v;
+  // Construye el registro SOLO con columnas de la lista blanca de la tabla.
+  // El backend SIEMPRE controla id y activo: se ignora lo que mande el frontend.
+  const registro = filtrarColumnas(tabla, fila);
+  registro.id = crypto.randomUUID();
+  registro.activo = true;
+
+  // Subida opcional de imagenes a GCS. Graceful: si no hay GCS o falla, guarda
+  // sin fotos y no bloquea (subirImagenes devuelve []).
+  const imgs = Array.isArray(body.imagenes_base64) ? body.imagenes_base64 : null;
+  if (imgs && imgs.length && (tabla === 'compras' || tabla === 'gastos')) {
+    try {
+      const urls = await gcs.subirImagenes(imgs, tabla);
+      if (urls && urls.length) {
+        registro.fotos = JSON.stringify(urls);
+        registro.foto_url = urls[0];
+      }
+    } catch (e) {
+      // No bloquea el guardado del registro.
     }
   }
-
-  // Agrega timestamp de ingestion en formato compatible con BigQuery TIMESTAMP.
-  registro.ts = new Date().toISOString();
 
   await bq.insertRows(tabla, [registro]);
   return json(200, cors, { ok: true, insertados: 1 });
 }
+
+// =============================================================================
+// POST action=actualizar
+// =============================================================================
+async function actualizar(cors, body) {
+  const tabla = String(body.tabla || '');
+  const id    = body.id;
+  const fila  = body.fila;
+
+  if (!TABLAS_INSERTAR.includes(tabla)) {
+    return json(400, cors, { ok: false, error: 'tabla invalida (compras|gastos|nomina)' });
+  }
+  if (!id || typeof id !== 'string') {
+    return json(400, cors, { ok: false, error: 'Falta id (string)' });
+  }
+  if (!fila || typeof fila !== 'object' || Array.isArray(fila)) {
+    return json(400, cors, { ok: false, error: 'Falta fila (objeto)' });
+  }
+  // fecha, si viene, debe ser valida.
+  if (fila.fecha !== undefined && fila.fecha !== null && !fechaValida(fila.fecha)) {
+    return json(400, cors, { ok: false, error: 'fila.fecha debe ser YYYY-MM-DD' });
+  }
+
+  // Solo columnas de la lista blanca; nunca se reescriben id/activo aqui.
+  const campos = filtrarColumnas(tabla, fila);
+  delete campos.id;
+  delete campos.activo;
+  if (Object.keys(campos).length === 0) {
+    return json(400, cors, { ok: false, error: 'No hay campos validos para actualizar' });
+  }
+
+  await bq.actualizar(tabla, id, campos);
+  return json(200, cors, { ok: true, actualizados: 1 });
+}
+
+// =============================================================================
+// POST action=eliminar (soft delete)
+// =============================================================================
+async function eliminar(cors, body) {
+  const tabla = String(body.tabla || '');
+  const id    = body.id;
+
+  if (!TABLAS_INSERTAR.includes(tabla)) {
+    return json(400, cors, { ok: false, error: 'tabla invalida (compras|gastos|nomina)' });
+  }
+  if (!id || typeof id !== 'string') {
+    return json(400, cors, { ok: false, error: 'Falta id (string)' });
+  }
+
+  await bq.softDelete(tabla, id);
+  return json(200, cors, { ok: true, eliminados: 1 });
+}
+
+// =============================================================================
+// Helper: filtra una fila a las columnas permitidas de la tabla y castea tipos.
+// id/activo/ts no se incluyen aqui (los controla el caller / el servidor).
+// =============================================================================
+function filtrarColumnas(tabla, fila) {
+  const COLS_NUMERIC_SET = COLS_NUMERIC;
+  const COLS_BOOL = new Set(['impuestos_estimados', 'activo']);
+  const registro = {};
+  for (const col of COLUMNAS[tabla]) {
+    if (col === 'id' || col === 'activo') continue; // los pone el servidor
+    if (!(col in fila)) continue;
+    const v = fila[col];
+    if (v === undefined || v === null) continue;
+    if (COLS_NUMERIC_SET.has(col)) {
+      const n = Number(v);
+      registro[col] = Number.isFinite(n) ? n : 0;
+    } else if (COLS_BOOL.has(col)) {
+      registro[col] = Boolean(v);
+    } else if (typeof v === 'string') {
+      // conceptos/fotos llegan ya como string JSON desde el frontend: no se
+      // re-serializan para no doble-codificar.
+      registro[col] = v;
+    } else if ((col === 'conceptos' || col === 'fotos') && typeof v === 'object') {
+      registro[col] = JSON.stringify(v);
+    } else {
+      registro[col] = String(v);
+    }
+  }
+  return registro;
+}
+
+// Se exportan helpers para reuso por sc-chat y sc-resumen-diario.
+exports.calcularAlertas      = calcularAlertas;
+exports.kpisRango            = kpisRango;
+exports.serieVentas          = serieVentas;
+exports.topProveedores       = topProveedores;
+exports.topCategoriasGasto   = topCategoriasGasto;
+exports.hoyISO               = hoyISO;
+exports.ayerISO              = ayerISO;
+exports.restarDiasISO        = restarDiasISO;

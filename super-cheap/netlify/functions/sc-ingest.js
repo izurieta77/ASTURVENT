@@ -9,6 +9,7 @@
 // existen en la tabla `ventas` y solo inserta los nuevos. Asi reenviar el mismo
 // lote no duplica filas.
 
+const crypto = require('crypto');
 const { corsHeaders, json, safeEqual } = require('./_lib');
 const bq = require('./_bq');
 
@@ -79,7 +80,9 @@ exports.handler = async (event) => {
     for (const fila of limpias) {
       if (yaExisten.has(fila.ticket_id) || vistos.has(fila.ticket_id)) continue;
       vistos.add(fila.ticket_id);
-      nuevas.push({ ...fila, fuente: 'sicar', ts: new Date().toISOString() });
+      // v2: cada venta trae id (UUID) y activo:true. `ts` lo pone el servidor en
+      // insertRows (CURRENT_TIMESTAMP()), no hace falta mandarlo aqui.
+      nuevas.push({ ...fila, id: crypto.randomUUID(), fuente: 'sicar', activo: true });
     }
 
     if (nuevas.length > 0) {

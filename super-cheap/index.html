@@ -13,6 +13,9 @@
 <!-- Chart.js 4.4 por CDN -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
+<!-- SheetJS (exportar Excel) por CDN -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.20.1/package/dist/xlsx.full.min.js"></script>
+
 <style>
 /* ====================== SUPER CHEAP — TOKENS DE MARCA ====================== */
 :root{
@@ -243,6 +246,68 @@ tr:hover td{background:var(--surface-2)}
 .divider{height:1px;background:var(--border);margin:18px 0}
 .chip{display:inline-block;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700}
 .chip-est{background:var(--warn-bg);color:#b45309;border:1px solid var(--warn-bd)}
+
+/* ====================== MULTI-FOTO ====================== */
+.thumbs{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}
+.thumb{position:relative;width:84px;height:84px;border-radius:var(--r-sm);overflow:hidden;border:1px solid var(--border);box-shadow:var(--shadow)}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb .x{position:absolute;top:3px;right:3px;width:22px;height:22px;border:none;border-radius:50%;background:rgba(220,38,38,0.92);color:#fff;font-size:13px;font-weight:800;cursor:pointer;display:grid;place-items:center;line-height:1}
+.foto-acciones{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+
+/* ====================== ALERTAS ====================== */
+.alerta{display:flex;gap:10px;align-items:flex-start;padding:11px 14px;border-radius:var(--r-xs);font-size:13px;font-weight:500;margin-bottom:8px;border:1px solid}
+.alerta-info{background:var(--info-bg);border-color:var(--info-bd);color:#1d4ed8}
+.alerta-warn{background:var(--warn-bg);border-color:var(--warn-bd);color:#b45309}
+.alerta-alto{background:var(--err-bg);border-color:var(--err-bd);color:#b91c1c}
+.alerta .ico{flex-shrink:0}
+
+/* ====================== COMPARATIVO / ANÁLISIS ====================== */
+.cmp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.cmp{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px 18px;box-shadow:var(--shadow)}
+.cmp-label{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text-3);margin-bottom:8px}
+.cmp-val{font-family:var(--font-d);font-weight:800;font-size:22px;letter-spacing:-0.8px;line-height:1.1}
+.cmp-delta{font-size:12px;font-weight:700;margin-top:6px;display:inline-flex;align-items:center;gap:4px}
+.cmp-up{color:var(--ok)}
+.cmp-down{color:var(--err)}
+.cmp-flat{color:var(--text-3)}
+.cmp-prev{font-size:11px;color:var(--text-3);margin-top:3px}
+
+/* ====================== CHAT / ASISTENTE ====================== */
+.chat-box{display:flex;flex-direction:column;gap:12px}
+.chat-log{display:flex;flex-direction:column;gap:10px;max-height:50vh;overflow-y:auto;padding:4px}
+.chat-msg{padding:11px 14px;border-radius:var(--r-sm);font-size:14px;line-height:1.45;max-width:90%;white-space:pre-wrap}
+.chat-q{align-self:flex-end;background:var(--navy);color:#fff;border-bottom-right-radius:4px}
+.chat-a{align-self:flex-start;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-bottom-left-radius:4px}
+.chat-input-row{display:flex;gap:8px;align-items:flex-end}
+.chat-input-row textarea{resize:none;min-height:46px}
+
+/* ====================== TOOLBAR DE LISTA (buscar/filtrar) ====================== */
+.list-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.list-toolbar .inp{width:auto;flex:1 1 160px;min-width:120px}
+.list-toolbar .grow{flex:1 1 100%}
+.td-acc{white-space:nowrap;text-align:right}
+.icon-btn{padding:5px 9px;border:1px solid var(--border-2);background:var(--surface-2);border-radius:var(--r-xs);font-size:12px;font-weight:700;cursor:pointer;color:var(--text-2);margin-left:4px}
+.icon-btn:hover{background:#eef2f7;color:var(--text)}
+.icon-btn.del:hover{background:var(--err-bg);color:#b91c1c;border-color:var(--err-bd)}
+
+/* ====================== MODAL ====================== */
+.modal-overlay{position:fixed;inset:0;z-index:500;background:rgba(15,23,42,0.55);display:grid;place-items:center;padding:16px;animation:fade .2s ease}
+.modal{background:var(--surface);border-radius:var(--r);width:100%;max-width:560px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-lg)}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:18px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface);z-index:2}
+.modal-body{padding:18px}
+.modal-close{border:none;background:var(--surface-2);width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;color:var(--text-2)}
+.modal-close:hover{background:#eef2f7;color:var(--text)}
+
+/* ====================== IMPRESIÓN (PDF) ====================== */
+@media print{
+  #header,#nav,.range-bar,.range-custom,.list-toolbar,.btn,.icon-btn,.photo-zone,
+  #compra-form-wrap,#gasto-form-wrap,.no-print{display:none!important}
+  body{background:#fff}
+  #app{max-width:none;padding:0}
+  .view:not(.active){display:none}
+  .card,.kpi,.cmp{box-shadow:none;border:1px solid #ccc;break-inside:avoid}
+  .chart-box{height:auto}
+}
 </style>
 </head>
 <body>
@@ -284,10 +349,12 @@ tr:hover td{background:var(--surface-2)}
 
   <nav id="nav">
     <button class="nav-btn active" data-view="resumen">Resumen</button>
+    <button class="nav-btn" data-view="analisis">Análisis</button>
     <button class="nav-btn" data-view="ventas">Ventas</button>
     <button class="nav-btn" data-view="compras">Compras</button>
     <button class="nav-btn" data-view="gastos">Gastos</button>
     <button class="nav-btn" data-view="nomina">Nómina</button>
+    <button class="nav-btn" data-view="asistente">Asistente IA</button>
   </nav>
 
   <main id="app">
@@ -303,6 +370,8 @@ tr:hover td{background:var(--surface-2)}
             <button class="range-btn" data-range="mes">Este mes</button>
             <button class="range-btn" data-range="custom">Personalizado</button>
           </div>
+          <button class="btn btn-sm btn-ghost no-print" onclick="exportarResumenExcel()">Exportar Excel</button>
+          <button class="btn btn-sm btn-ghost no-print" onclick="window.print()">Exportar PDF</button>
         </div>
       </div>
       <div class="range-custom" id="range-custom">
@@ -312,6 +381,7 @@ tr:hover td{background:var(--surface-2)}
         <button id="r-aplicar" class="btn btn-sm btn-navy">Aplicar</button>
       </div>
 
+      <div id="alertas-box" style="margin-top:14px"></div>
       <div id="resumen-msg" style="margin-top:14px"></div>
 
       <div class="kpi-grid" id="kpi-grid" style="margin-top:14px">
@@ -357,17 +427,25 @@ tr:hover td{background:var(--surface-2)}
         <div class="card-title"><h2 class="h2">Nueva compra desde foto</h2></div>
         <label class="photo-zone" for="foto-compra">
           <span class="ico">📷</span>
-          <span class="t">Toma o sube la foto del ticket</span>
-          <span class="s">La leemos automáticamente con IA</span>
+          <span class="t">Toma o sube las fotos del ticket</span>
+          <span class="s">Puedes agregar varias fotos del mismo ticket. Las leemos con IA.</span>
         </label>
-        <input id="foto-compra" type="file" accept="image/*" capture="environment" class="hidden">
+        <input id="foto-compra" type="file" accept="image/*" capture="environment" multiple class="hidden">
+        <div id="compra-thumbs" class="thumbs"></div>
+        <div id="compra-foto-acciones" class="foto-acciones hidden">
+          <label class="btn btn-sm btn-ghost" for="foto-compra">＋ Agregar otra foto</label>
+          <button class="btn btn-sm btn-navy" onclick="leerTicketIA('compra')">Leer con IA</button>
+        </div>
         <div id="compra-foto-msg" style="margin-top:12px"></div>
         <div id="compra-form-wrap" class="hidden"></div>
       </div>
 
       <div class="card">
         <div class="card-title"><h2 class="h2">Compras registradas</h2>
-          <button class="btn btn-sm btn-ghost" onclick="cargarCompras()">Actualizar</button>
+          <span>
+            <button class="btn btn-sm btn-ghost no-print" onclick="exportarListaExcel('compras')">Exportar Excel</button>
+            <button class="btn btn-sm btn-ghost" onclick="cargarCompras()">Actualizar</button>
+          </span>
         </div>
         <div id="compras-list"><div class="loading-state">Cargando…</div></div>
       </div>
@@ -381,17 +459,25 @@ tr:hover td{background:var(--surface-2)}
         <div class="card-title"><h2 class="h2">Nuevo gasto desde foto</h2></div>
         <label class="photo-zone" for="foto-gasto">
           <span class="ico">📷</span>
-          <span class="t">Toma o sube la foto del ticket</span>
-          <span class="s">La leemos automáticamente con IA</span>
+          <span class="t">Toma o sube las fotos del ticket</span>
+          <span class="s">Puedes agregar varias fotos del mismo ticket. Las leemos con IA.</span>
         </label>
-        <input id="foto-gasto" type="file" accept="image/*" capture="environment" class="hidden">
+        <input id="foto-gasto" type="file" accept="image/*" capture="environment" multiple class="hidden">
+        <div id="gasto-thumbs" class="thumbs"></div>
+        <div id="gasto-foto-acciones" class="foto-acciones hidden">
+          <label class="btn btn-sm btn-ghost" for="foto-gasto">＋ Agregar otra foto</label>
+          <button class="btn btn-sm btn-navy" onclick="leerTicketIA('gasto')">Leer con IA</button>
+        </div>
         <div id="gasto-foto-msg" style="margin-top:12px"></div>
         <div id="gasto-form-wrap" class="hidden"></div>
       </div>
 
       <div class="card">
         <div class="card-title"><h2 class="h2">Gastos registrados</h2>
-          <button class="btn btn-sm btn-ghost" onclick="cargarGastos()">Actualizar</button>
+          <span>
+            <button class="btn btn-sm btn-ghost no-print" onclick="exportarListaExcel('gastos')">Exportar Excel</button>
+            <button class="btn btn-sm btn-ghost" onclick="cargarGastos()">Actualizar</button>
+          </span>
         </div>
         <div id="gastos-list"><div class="loading-state">Cargando…</div></div>
       </div>
@@ -424,14 +510,83 @@ tr:hover td{background:var(--surface-2)}
 
       <div class="card">
         <div class="card-title"><h2 class="h2">Nómina registrada</h2>
-          <button class="btn btn-sm btn-ghost" onclick="cargarNomina()">Actualizar</button>
+          <span>
+            <button class="btn btn-sm btn-ghost no-print" onclick="exportarListaExcel('nomina')">Exportar Excel</button>
+            <button class="btn btn-sm btn-ghost" onclick="cargarNomina()">Actualizar</button>
+          </span>
         </div>
         <div id="nomina-list"><div class="loading-state">Cargando…</div></div>
       </div>
     </section>
 
+    <!-- ====================== ANÁLISIS ====================== -->
+    <section id="view-analisis" class="view">
+      <div class="section-head">
+        <h1 class="h1">Análisis</h1>
+        <div class="range-bar">
+          <div class="range-btns" id="an-range-btns">
+            <button class="range-btn" data-range="hoy">Hoy</button>
+            <button class="range-btn" data-range="semana">Semana</button>
+            <button class="range-btn active" data-range="mes">Mes</button>
+            <button class="range-btn" data-range="custom">Personalizado</button>
+          </div>
+          <button class="btn btn-sm btn-ghost no-print" onclick="window.print()">Exportar PDF</button>
+        </div>
+      </div>
+      <div class="range-custom" id="an-range-custom">
+        <input type="date" id="an-desde" class="inp" style="width:auto">
+        <span class="muted">a</span>
+        <input type="date" id="an-hasta" class="inp" style="width:auto">
+        <button id="an-aplicar" class="btn btn-sm btn-navy">Aplicar</button>
+      </div>
+
+      <div id="analisis-msg" style="margin-top:14px"></div>
+
+      <div class="card" style="margin-top:14px">
+        <div class="card-title"><h2 class="h2">Período actual vs anterior</h2></div>
+        <div class="cmp-grid" id="cmp-grid">
+          <div class="loading-state" style="grid-column:1/-1">Cargando…</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><h2 class="h2">Proyección de fin de mes</h2></div>
+        <div id="proyeccion-box"><div class="loading-state">Cargando…</div></div>
+      </div>
+
+      <div class="chart-grid">
+        <div class="card">
+          <div class="card-title"><h2 class="h2">Top proveedores</h2></div>
+          <div id="top-proveedores"><div class="loading-state">Cargando…</div></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><h2 class="h2">Top categorías de gasto</h2></div>
+          <div id="top-categorias"><div class="loading-state">Cargando…</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====================== ASISTENTE IA ====================== -->
+    <section id="view-asistente" class="view">
+      <div class="section-head"><h1 class="h1">Pregúntale a tu negocio</h1></div>
+      <div class="card">
+        <div class="chat-box">
+          <div class="chat-log" id="chat-log">
+            <div class="chat-msg chat-a">Hola. Pregúntame sobre tus ventas, compras, gastos, márgenes o tendencias. Por ejemplo: «¿cómo van mis ventas este mes comparado con el anterior?»</div>
+          </div>
+          <div class="chat-input-row">
+            <textarea id="chat-input" class="inp" rows="1" placeholder="Escribe tu pregunta…"></textarea>
+            <button id="chat-enviar" class="btn btn-orange">Enviar</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </main>
 </div>
+
+<!-- ============================== MODAL (editar) ============================== -->
+<div id="modal-root"></div>
 
 <script>
 /* ============================================================
@@ -560,11 +715,13 @@ function cerrarSesion(silencioso){
    NAVEGACIÓN
    ============================================================ */
 const cargadores = {
-  resumen: () => cargarResumen(),
-  ventas:  () => cargarVentas(),
-  compras: () => cargarCompras(),
-  gastos:  () => cargarGastos(),
-  nomina:  () => cargarNomina(),
+  resumen:   () => cargarResumen(),
+  analisis:  () => cargarAnalisis(),
+  ventas:    () => cargarVentas(),
+  compras:   () => cargarCompras(),
+  gastos:    () => cargarGastos(),
+  nomina:    () => cargarNomina(),
+  asistente: () => {},
 };
 
 function irA(vista){
@@ -646,6 +803,33 @@ async function cargarResumen(){
 
   pintarGraficaVentas(data.serie_ventas || []);
   pintarGraficaGastos(data.gastos_por_categoria || []);
+
+  cargarAlertas();
+}
+
+/* ---------- Alertas inteligentes ---------- */
+async function cargarAlertas(){
+  const box = $('alertas-box');
+  let data;
+  try{
+    data = await apiFetch('/sc-data?action=alertas');
+  }catch(e){
+    box.innerHTML = '';   // no bloquear el resumen si fallan las alertas
+    return;
+  }
+  const alertas = data.alertas || [];
+  if(!alertas.length){
+    box.innerHTML = '<div class="alerta alerta-info"><span class="ico">✅</span><span>Todo en orden. No hay alertas.</span></div>';
+    return;
+  }
+  const icoPorNivel = { info:'ℹ️', warn:'⚠️', alto:'🚨' };
+  let html = '';
+  alertas.forEach(a => {
+    const nivel = (a.nivel === 'warn' || a.nivel === 'alto') ? a.nivel : 'info';
+    html += '<div class="alerta alerta-' + nivel + '"><span class="ico">' + (icoPorNivel[nivel] || 'ℹ️') +
+            '</span><span>' + esc(a.mensaje || '') + '</span></div>';
+  });
+  box.innerHTML = html;
 }
 
 function pintarGraficaVentas(serie){
@@ -693,9 +877,109 @@ function pintarGraficaGastos(cats){
 }
 
 /* ============================================================
-   LISTAS (tablas)
+   LISTAS (tablas) — con búsqueda, filtros, editar y borrar
    ============================================================ */
-async function cargarLista(tabla, contenedorId, columnas){
+
+/* Definición de columnas por tabla */
+const COLS = {
+  ventas: [
+    { key:'fecha', label:'Fecha' },
+    { key:'ticket_id', label:'Ticket', strong:true },
+    { key:'items', label:'Artículos' },
+    { key:'forma_pago', label:'Forma de pago' },
+    { key:'total', label:'Total', num:true },
+  ],
+  compras: [
+    { key:'fecha', label:'Fecha' },
+    { key:'hora', label:'Hora' },
+    { key:'proveedor', label:'Proveedor', strong:true },
+    { key:'categoria', label:'Categoría' },
+    { key:'subtotal', label:'Subtotal', num:true },
+    { key:'iva', label:'IVA', num:true },
+    { key:'ieps', label:'IEPS', num:true },
+    { key:'total', label:'Total', num:true },
+  ],
+  gastos: [
+    { key:'fecha', label:'Fecha' },
+    { key:'hora', label:'Hora' },
+    { key:'concepto', label:'Concepto', strong:true },
+    { key:'categoria', label:'Categoría' },
+    { key:'subtotal', label:'Subtotal', num:true },
+    { key:'iva', label:'IVA', num:true },
+    { key:'ieps', label:'IEPS', num:true },
+    { key:'total', label:'Total', num:true },
+  ],
+  nomina: [
+    { key:'fecha', label:'Fecha' },
+    { key:'empleado', label:'Empleado', strong:true },
+    { key:'periodo', label:'Periodo' },
+    { key:'tipo', label:'Tipo' },
+    { key:'monto', label:'Monto', num:true },
+  ],
+};
+
+/* Campos del formulario de edición (modal) por tabla */
+const EDIT_FIELDS = {
+  compras: [
+    { key:'fecha', label:'Fecha', type:'date' },
+    { key:'hora', label:'Hora', type:'time' },
+    { key:'proveedor', label:'Proveedor', type:'text' },
+    { key:'categoria', label:'Categoría', type:'text' },
+    { key:'subtotal', label:'Subtotal', type:'number' },
+    { key:'iva', label:'IVA', type:'number' },
+    { key:'ieps', label:'IEPS', type:'number' },
+    { key:'total', label:'Total', type:'number' },
+  ],
+  gastos: [
+    { key:'fecha', label:'Fecha', type:'date' },
+    { key:'hora', label:'Hora', type:'time' },
+    { key:'concepto', label:'Concepto', type:'text' },
+    { key:'categoria', label:'Categoría', type:'text' },
+    { key:'subtotal', label:'Subtotal', type:'number' },
+    { key:'iva', label:'IVA', type:'number' },
+    { key:'ieps', label:'IEPS', type:'number' },
+    { key:'total', label:'Total', type:'number' },
+  ],
+  nomina: [
+    { key:'fecha', label:'Fecha', type:'date' },
+    { key:'empleado', label:'Empleado', type:'text' },
+    { key:'periodo', label:'Periodo', type:'text' },
+    { key:'tipo', label:'Tipo', type:'text' },
+    { key:'monto', label:'Monto', type:'number' },
+  ],
+};
+
+/* Cache de filas por tabla (para filtrar/exportar sin re-fetch) */
+const filasCache = { ventas:[], compras:[], gastos:[], nomina:[] };
+/* Estado de filtros por tabla */
+const filtros = {
+  ventas:  { q:'', cat:'', desde:'', hasta:'' },
+  compras: { q:'', cat:'', desde:'', hasta:'' },
+  gastos:  { q:'', cat:'', desde:'', hasta:'' },
+  nomina:  { q:'', cat:'', desde:'', hasta:'' },
+};
+
+/* Aplica filtros de UI a las filas en cache */
+function filtrarFilas(tabla){
+  const f = filtros[tabla];
+  const q = (f.q || '').toLowerCase().trim();
+  return filasCache[tabla].filter(fila => {
+    if(f.desde && String(fila.fecha || '') < f.desde) return false;
+    if(f.hasta && String(fila.fecha || '') > f.hasta) return false;
+    if(f.cat){
+      const campoCat = (fila.categoria ?? fila.proveedor ?? fila.tipo ?? '');
+      if(String(campoCat).toLowerCase() !== f.cat.toLowerCase()) return false;
+    }
+    if(q){
+      const blob = Object.values(fila).map(v => String(v ?? '')).join(' ').toLowerCase();
+      if(blob.indexOf(q) < 0) return false;
+    }
+    return true;
+  });
+}
+
+/* Carga genérica de una lista (fetch + render). editable=true muestra acciones/toolbar */
+async function cargarLista(tabla, contenedorId, editable){
   const cont = $(contenedorId);
   cont.innerHTML = '<div class="loading-state">Cargando…</div>';
   let data;
@@ -705,13 +989,47 @@ async function cargarLista(tabla, contenedorId, columnas){
     cont.innerHTML = '<div class="msg msg-err">' + esc(e.message) + '</div>';
     return;
   }
-  const filas = data.filas || [];
-  if(!filas.length){
-    cont.innerHTML = '<div class="empty-state">Sin registros todavía.</div>';
+  filasCache[tabla] = data.filas || [];
+  renderLista(tabla, contenedorId, editable);
+}
+
+/* Render con toolbar de filtros (si editable) + tabla filtrada */
+function renderLista(tabla, contenedorId, editable){
+  const cont = $(contenedorId);
+  const columnas = COLS[tabla];
+
+  let toolbar = '';
+  if(editable){
+    // opciones de categoría únicas
+    const catKey = tabla === 'nomina' ? 'tipo' : 'categoria';
+    const cats = Array.from(new Set(filasCache[tabla].map(f => f[catKey]).filter(Boolean))).sort();
+    const f = filtros[tabla];
+    let opts = '<option value="">' + (tabla === 'nomina' ? 'Todos los tipos' : 'Todas las categorías') + '</option>';
+    cats.forEach(c => opts += '<option value="' + esc(c) + '"' + (f.cat === c ? ' selected' : '') + '>' + esc(c) + '</option>');
+    toolbar =
+      '<div class="list-toolbar no-print">' +
+        '<input class="inp" type="search" placeholder="Buscar…" value="' + esc(f.q) + '" oninput="onFiltro(\'' + tabla + '\',\'' + contenedorId + '\',\'q\',this.value)">' +
+        '<select class="inp" onchange="onFiltro(\'' + tabla + '\',\'' + contenedorId + '\',\'cat\',this.value)">' + opts + '</select>' +
+        '<input class="inp" type="date" title="Desde" value="' + esc(f.desde) + '" onchange="onFiltro(\'' + tabla + '\',\'' + contenedorId + '\',\'desde\',this.value)">' +
+        '<input class="inp" type="date" title="Hasta" value="' + esc(f.hasta) + '" onchange="onFiltro(\'' + tabla + '\',\'' + contenedorId + '\',\'hasta\',this.value)">' +
+        '<button class="btn btn-sm btn-ghost" onclick="limpiarFiltros(\'' + tabla + '\',\'' + contenedorId + '\')">Limpiar</button>' +
+      '</div>';
+  }
+
+  const filas = editable ? filtrarFilas(tabla) : filasCache[tabla];
+
+  if(!filasCache[tabla].length){
+    cont.innerHTML = toolbar + '<div class="empty-state">Sin registros todavía.</div>';
     return;
   }
-  let html = '<div class="tbl-wrap"><table><thead><tr>';
+  if(!filas.length){
+    cont.innerHTML = toolbar + '<div class="empty-state">Ningún registro coincide con los filtros.</div>';
+    return;
+  }
+
+  let html = toolbar + '<div class="tbl-wrap"><table><thead><tr>';
   columnas.forEach(c => html += '<th' + (c.num ? ' style="text-align:right"' : '') + '>' + esc(c.label) + '</th>');
+  if(editable) html += '<th class="no-print" style="text-align:right">Acciones</th>';
   html += '</tr></thead><tbody>';
   filas.forEach(f => {
     html += '<tr>';
@@ -720,55 +1038,114 @@ async function cargarLista(tabla, contenedorId, columnas){
       if(c.num){ html += '<td class="td-num">' + mxn(v) + '</td>'; }
       else { html += '<td' + (c.strong ? ' class="td-strong"' : '') + '>' + esc(v ?? '') + '</td>'; }
     });
+    if(editable){
+      const id = esc(f.id ?? '');
+      html += '<td class="td-acc no-print">' +
+        '<button class="icon-btn" onclick="abrirEdicion(\'' + tabla + '\',\'' + id + '\')">Editar</button>' +
+        '<button class="icon-btn del" onclick="borrarFila(\'' + tabla + '\',\'' + id + '\')">Borrar</button>' +
+        '</td>';
+    }
     html += '</tr>';
   });
   html += '</tbody></table></div>';
   cont.innerHTML = html;
 }
 
-function cargarVentas(){
-  return cargarLista('ventas', 'ventas-list', [
-    { key:'fecha', label:'Fecha' },
-    { key:'ticket_id', label:'Ticket', strong:true },
-    { key:'items', label:'Artículos' },
-    { key:'forma_pago', label:'Forma de pago' },
-    { key:'total', label:'Total', num:true },
-  ]);
+function onFiltro(tabla, contenedorId, campo, valor){
+  filtros[tabla][campo] = valor;
+  renderLista(tabla, contenedorId, true);
 }
-function cargarCompras(){
-  return cargarLista('compras', 'compras-list', [
-    { key:'fecha', label:'Fecha' },
-    { key:'proveedor', label:'Proveedor', strong:true },
-    { key:'categoria', label:'Categoría' },
-    { key:'subtotal', label:'Subtotal', num:true },
-    { key:'iva', label:'IVA', num:true },
-    { key:'ieps', label:'IEPS', num:true },
-    { key:'total', label:'Total', num:true },
-  ]);
+function limpiarFiltros(tabla, contenedorId){
+  filtros[tabla] = { q:'', cat:'', desde:'', hasta:'' };
+  renderLista(tabla, contenedorId, true);
 }
-function cargarGastos(){
-  return cargarLista('gastos', 'gastos-list', [
-    { key:'fecha', label:'Fecha' },
-    { key:'concepto', label:'Concepto', strong:true },
-    { key:'categoria', label:'Categoría' },
-    { key:'subtotal', label:'Subtotal', num:true },
-    { key:'iva', label:'IVA', num:true },
-    { key:'ieps', label:'IEPS', num:true },
-    { key:'total', label:'Total', num:true },
-  ]);
+
+function cargarVentas(){ return cargarLista('ventas', 'ventas-list', false); }
+function cargarCompras(){ return cargarLista('compras', 'compras-list', true); }
+function cargarGastos(){ return cargarLista('gastos', 'gastos-list', true); }
+function cargarNomina(){ return cargarLista('nomina', 'nomina-list', true); }
+
+/* ---------- Editar (modal) ---------- */
+function abrirEdicion(tabla, id){
+  const fila = filasCache[tabla].find(f => String(f.id) === String(id));
+  if(!fila){ alert('No se encontró el registro.'); return; }
+  const campos = EDIT_FIELDS[tabla] || [];
+  let inputs = '<div class="form-grid">';
+  campos.forEach(c => {
+    inputs += '<div class="field"><label>' + esc(c.label) + '</label>' +
+      '<input id="ed-' + c.key + '" class="inp" type="' + c.type + '"' +
+      (c.type === 'number' ? ' step="0.01"' : '') +
+      ' value="' + esc(fila[c.key] ?? '') + '"></div>';
+  });
+  inputs += '</div>';
+
+  $('modal-root').innerHTML =
+    '<div class="modal-overlay" onclick="if(event.target===this)cerrarModal()">' +
+      '<div class="modal">' +
+        '<div class="modal-head"><h2 class="h2">Editar ' + esc(tabla) + '</h2>' +
+          '<button class="modal-close" onclick="cerrarModal()">×</button></div>' +
+        '<div class="modal-body">' +
+          '<div id="ed-msg"></div>' + inputs +
+          '<button id="ed-guardar" class="btn btn-orange btn-full">Guardar cambios</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  $('ed-guardar').addEventListener('click', () => guardarEdicion(tabla, id));
 }
-function cargarNomina(){
-  return cargarLista('nomina', 'nomina-list', [
-    { key:'fecha', label:'Fecha' },
-    { key:'empleado', label:'Empleado', strong:true },
-    { key:'periodo', label:'Periodo' },
-    { key:'tipo', label:'Tipo' },
-    { key:'monto', label:'Monto', num:true },
-  ]);
+
+function cerrarModal(){ $('modal-root').innerHTML = ''; }
+
+async function guardarEdicion(tabla, id){
+  const campos = EDIT_FIELDS[tabla] || [];
+  const fila = {};
+  campos.forEach(c => {
+    let v = $('ed-' + c.key).value;
+    if(c.type === 'number') v = Number(v) || 0;
+    else v = (v || '').trim();
+    fila[c.key] = (c.type !== 'number' && v === '') ? null : v;
+  });
+
+  const btn = $('ed-guardar');
+  const orig = btn.textContent;
+  btn.disabled = true; btn.innerHTML = '<span class="loader"></span>';
+  showMsg('ed-msg','');
+  try{
+    await apiFetch('/sc-data', {
+      method:'POST',
+      body: JSON.stringify({ action:'actualizar', tabla, id, fila }),
+    });
+  }catch(e){
+    btn.disabled = false; btn.textContent = orig;
+    showMsg('ed-msg', e.message, 'err');
+    return;
+  }
+  cerrarModal();
+  recargarTabla(tabla);
+}
+
+async function borrarFila(tabla, id){
+  if(!confirm('¿Seguro que quieres borrar este registro? Esta acción no se puede deshacer.')) return;
+  try{
+    await apiFetch('/sc-data', {
+      method:'POST',
+      body: JSON.stringify({ action:'eliminar', tabla, id }),
+    });
+  }catch(e){
+    alert('No se pudo borrar: ' + e.message);
+    return;
+  }
+  recargarTabla(tabla);
+}
+
+function recargarTabla(tabla){
+  if(tabla === 'compras') cargarCompras();
+  else if(tabla === 'gastos') cargarGastos();
+  else if(tabla === 'nomina') cargarNomina();
+  else if(tabla === 'ventas') cargarVentas();
 }
 
 /* ============================================================
-   TICKETS (foto → IA → formulario editable)
+   TICKETS (multi-foto → IA → formulario editable)
    ============================================================ */
 
 /* Convierte un File de imagen a base64 SIN el prefijo "data:...;base64," */
@@ -785,29 +1162,66 @@ function fileABase64(file){
   });
 }
 
-/* Procesa la foto de un ticket. tipo = 'compra' | 'gasto' */
-async function procesarTicket(tipo, file){
+/* Estado del set de fotos por tipo. Cada item: { id, base64, dataUrl } */
+const fotosTicket = { compra: [], gasto: [] };
+let fotoUid = 0;
+
+/* Agrega archivos (FileList) al set del tipo y refresca miniaturas */
+async function agregarFotosTicket(tipo, fileList){
+  const arr = Array.from(fileList || []).filter(f => f && f.type && f.type.indexOf('image/') === 0);
+  for(const f of arr){
+    try{
+      const base64 = await fileABase64(f);
+      fotosTicket[tipo].push({ id: ++fotoUid, base64, dataUrl: 'data:' + (f.type || 'image/jpeg') + ';base64,' + base64 });
+    }catch(_){ /* ignora imagen ilegible */ }
+  }
+  renderThumbs(tipo);
+}
+
+function renderThumbs(tipo){
+  const set = fotosTicket[tipo];
+  const cont  = $(tipo + '-thumbs');
+  const accs  = $(tipo + '-foto-acciones');
+  let html = '';
+  set.forEach(it => {
+    html += '<div class="thumb"><img src="' + it.dataUrl + '" alt="foto">' +
+            '<button class="x" type="button" title="Quitar" onclick="quitarFotoTicket(\'' + tipo + '\',' + it.id + ')">×</button></div>';
+  });
+  cont.innerHTML = html;
+  accs.classList.toggle('hidden', set.length === 0);
+}
+
+function quitarFotoTicket(tipo, id){
+  fotosTicket[tipo] = fotosTicket[tipo].filter(it => it.id !== id);
+  renderThumbs(tipo);
+}
+
+function limpiarFotosTicket(tipo){
+  fotosTicket[tipo] = [];
+  renderThumbs(tipo);
+}
+
+/* Lee TODAS las fotos del set en una sola llamada a sc-ticket */
+async function leerTicketIA(tipo){
   const esCompra = tipo === 'compra';
   const msgId  = esCompra ? 'compra-foto-msg' : 'gasto-foto-msg';
   const wrapId = esCompra ? 'compra-form-wrap' : 'gasto-form-wrap';
+  const set = fotosTicket[tipo];
+
+  if(!set.length){ showMsg(msgId, 'Agrega al menos una foto del ticket.', 'warn'); return; }
 
   $(wrapId).classList.add('hidden');
   $(wrapId).innerHTML = '';
-  $(msgId).innerHTML = '<div class="msg msg-info"><span class="loader loader-navy"></span> Leyendo el ticket… esto puede tardar unos segundos.</div>';
+  $(msgId).innerHTML = '<div class="msg msg-info"><span class="loader loader-navy"></span> Leyendo ' +
+    (set.length === 1 ? 'el ticket' : ('las ' + set.length + ' fotos')) + '… esto puede tardar unos segundos.</div>';
 
-  let imagen_base64;
-  try{
-    imagen_base64 = await fileABase64(file);
-  }catch(e){
-    showMsg(msgId, e.message, 'err');
-    return;
-  }
+  const imagenes_base64 = set.map(it => it.base64);
 
   let data;
   try{
     data = await apiFetch('/sc-ticket', {
       method:'POST',
-      body: JSON.stringify({ imagen_base64, tipo }),
+      body: JSON.stringify({ imagenes_base64, tipo }),
     });
   }catch(e){
     showMsg(msgId, 'No se pudo leer el ticket: ' + e.message, 'err');
@@ -828,8 +1242,8 @@ function mostrarFormularioTicket(tipo, d){
   if(avisar){
     const partes = [];
     if(d.impuestos_estimados === true) partes.push('El IVA/IEPS fue estimado (no venía desglosado en el ticket).');
-    if(d.revisar === true) partes.push('Los montos no cuadran exactamente. Revísalos.');
-    banner = '<div class="banner-warn"><span>⚠️</span><span><b>Revisa los montos</b>' +
+    if(d.revisar === true) partes.push('Los montos o la fecha no se leyeron con certeza. Revísalos.');
+    banner = '<div class="banner-warn"><span>⚠️</span><span><b>Revisa los montos/fecha</b>' +
              esc(partes.join(' ')) + '</span></div>';
   }
   let nota = '';
@@ -851,6 +1265,7 @@ function mostrarFormularioTicket(tipo, d){
     '<div id="tk-guardar-msg"></div>' +
     '<div class="form-grid">' +
       '<div class="field"><label>Fecha</label><input id="tk-fecha" type="date" class="inp" value="' + esc(d.fecha || hoyISO()) + '"></div>' +
+      '<div class="field"><label>Hora</label><input id="tk-hora" type="time" class="inp" value="' + esc(d.hora || '') + '"></div>' +
       campoNombre +
       '<div class="field"><label>Categoría</label><input id="tk-categoria" class="inp" value="' + esc(d.categoria || '') + '" placeholder="' + (esCompra ? 'ej. abarrotes, bebidas' : 'ej. renta, luz, agua, otros') + '"></div>' +
       '<div class="field"><label>Subtotal</label><input id="tk-subtotal" type="number" step="0.01" class="inp" value="' + (Number(d.subtotal)||0) + '"></div>' +
@@ -881,7 +1296,7 @@ function parseConceptos(txt){
     });
 }
 
-/* Guarda compra o gasto vía sc-data action=insertar */
+/* Guarda compra o gasto vía sc-data action=insertar (manda también las imágenes) */
 async function guardarTicket(tipo){
   const esCompra = tipo === 'compra';
   const tabla = esCompra ? 'compras' : 'gastos';
@@ -889,11 +1304,13 @@ async function guardarTicket(tipo){
 
   const conceptos = parseConceptos($('tk-conceptos').value);
   const estimados = $('tk-estimados').value === '1';
+  const hora = ($('tk-hora').value || '').trim();
 
   let fila;
   if(esCompra){
     fila = {
       fecha: $('tk-fecha').value,
+      hora: hora || null,
       proveedor: $('tk-proveedor').value.trim(),
       categoria: $('tk-categoria').value.trim(),
       subtotal: Number($('tk-subtotal').value) || 0,
@@ -906,6 +1323,7 @@ async function guardarTicket(tipo){
   }else{
     fila = {
       fecha: $('tk-fecha').value,
+      hora: hora || null,
       concepto: $('tk-concepto').value.trim(),
       categoria: $('tk-categoria').value.trim(),
       subtotal: Number($('tk-subtotal').value) || 0,
@@ -924,10 +1342,14 @@ async function guardarTicket(tipo){
   btn.disabled = true; btn.innerHTML = '<span class="loader"></span>';
   showMsg(msgId,'');
 
+  const imagenes_base64 = fotosTicket[tipo].map(it => it.base64);
+  const payload = { action:'insertar', tabla, fila };
+  if(imagenes_base64.length) payload.imagenes_base64 = imagenes_base64;
+
   try{
     await apiFetch('/sc-data', {
       method:'POST',
-      body: JSON.stringify({ action:'insertar', tabla, fila }),
+      body: JSON.stringify(payload),
     });
   }catch(e){
     btn.disabled = false; btn.textContent = orig;
@@ -935,13 +1357,215 @@ async function guardarTicket(tipo){
     return;
   }
 
-  // Éxito: limpiar formulario y refrescar lista
+  // Éxito: limpiar formulario, fotos y refrescar lista
   const wrapId = esCompra ? 'compra-form-wrap' : 'gasto-form-wrap';
   const fotoMsgId = esCompra ? 'compra-foto-msg' : 'gasto-foto-msg';
   $(wrapId).classList.add('hidden');
   $(wrapId).innerHTML = '';
+  limpiarFotosTicket(tipo);
   showMsg(fotoMsgId, (esCompra ? 'Compra' : 'Gasto') + ' guardado correctamente.', 'ok');
   if(esCompra) cargarCompras(); else cargarGastos();
+}
+
+/* ============================================================
+   ANÁLISIS (comparativos, proyección, tops)
+   ============================================================ */
+let anRangoActual = 'mes';
+
+function anRangoFechas(tipo){
+  const hoy = new Date();
+  if(tipo === 'hoy'){ const d = isoDe(hoy); return { desde:d, hasta:d }; }
+  if(tipo === 'semana'){
+    const dia = (hoy.getDay() + 6) % 7;
+    const lunes = new Date(hoy); lunes.setDate(hoy.getDate() - dia);
+    return { desde: isoDe(lunes), hasta: isoDe(hoy) };
+  }
+  if(tipo === 'custom'){ return { desde: $('an-desde').value, hasta: $('an-hasta').value }; }
+  // mes (default)
+  const primero = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  return { desde: isoDe(primero), hasta: isoDe(hoy) };
+}
+
+const CMP_METRICAS = [
+  { key:'ventas',   label:'Ventas',   bueno:'up' },
+  { key:'compras',  label:'Compras',  bueno:'down' },
+  { key:'gastos',   label:'Gastos',   bueno:'down' },
+  { key:'nomina',   label:'Nómina',   bueno:'down' },
+  { key:'utilidad', label:'Utilidad', bueno:'up' },
+];
+
+async function cargarAnalisis(){
+  const { desde, hasta } = anRangoFechas(anRangoActual);
+  if(!desde || !hasta){
+    showMsg('analisis-msg','Selecciona las dos fechas del rango personalizado.','warn');
+    return;
+  }
+  showMsg('analisis-msg','');
+  $('cmp-grid').innerHTML = '<div class="loading-state" style="grid-column:1/-1">Cargando…</div>';
+  $('proyeccion-box').innerHTML = '<div class="loading-state">Cargando…</div>';
+  $('top-proveedores').innerHTML = '<div class="loading-state">Cargando…</div>';
+  $('top-categorias').innerHTML = '<div class="loading-state">Cargando…</div>';
+
+  let data;
+  try{
+    data = await apiFetch('/sc-data?action=analitica&desde=' + encodeURIComponent(desde) + '&hasta=' + encodeURIComponent(hasta));
+  }catch(e){
+    showMsg('analisis-msg', e.message, 'err');
+    ['cmp-grid','proyeccion-box','top-proveedores','top-categorias'].forEach(id => $(id).innerHTML = '');
+    return;
+  }
+
+  pintarComparativo(data.comparativo || {});
+  pintarProyeccion(data.proyeccion_mes || {});
+  pintarTopProveedores(data.top_proveedores || []);
+  pintarTopCategorias(data.top_categorias_gasto || []);
+}
+
+function pintarComparativo(cmp){
+  const actual = cmp.actual || {};
+  const anterior = cmp.anterior || {};
+  const pct = cmp.cambio_pct || {};
+  let html = '';
+  CMP_METRICAS.forEach(m => {
+    const valActual = Number(actual[m.key]) || 0;
+    const valPrev   = Number(anterior[m.key]) || 0;
+    const p = (pct[m.key] === undefined || pct[m.key] === null) ? null : Number(pct[m.key]);
+    let delta = '<span class="cmp-delta cmp-flat">— sin cambio</span>';
+    if(p !== null && isFinite(p) && Math.abs(p) >= 0.05){
+      const sube = p > 0;
+      const favorable = (m.bueno === 'up') ? sube : !sube;
+      const cls = favorable ? 'cmp-up' : 'cmp-down';
+      const flecha = sube ? '↑' : '↓';
+      delta = '<span class="cmp-delta ' + cls + '">' + flecha + ' ' + Math.abs(p).toFixed(1) + '%</span>';
+    }
+    html += '<div class="cmp"><div class="cmp-label">' + esc(m.label) + '</div>' +
+            '<div class="cmp-val">' + mxn(valActual) + '</div>' + delta +
+            '<div class="cmp-prev">Anterior: ' + mxn(valPrev) + '</div></div>';
+  });
+  $('cmp-grid').innerHTML = html;
+}
+
+function pintarProyeccion(p){
+  if(!p || (p.ventas_proy === undefined && p.utilidad_proy === undefined)){
+    $('proyeccion-box').innerHTML = '<div class="empty-state">Sin datos de proyección.</div>';
+    return;
+  }
+  const dias = (p.dias_transcurridos != null && p.dias_mes != null)
+    ? '<div class="cmp-prev" style="margin-top:8px">Basado en ' + esc(p.dias_transcurridos) + ' de ' + esc(p.dias_mes) + ' días del mes.</div>'
+    : '';
+  $('proyeccion-box').innerHTML =
+    '<div class="cmp-grid" style="margin-bottom:0">' +
+      '<div class="cmp"><div class="cmp-label">Ventas proyectadas</div><div class="cmp-val">' + mxn(p.ventas_proy) + '</div></div>' +
+      '<div class="cmp"><div class="cmp-label">Utilidad proyectada</div><div class="cmp-val">' + mxn(p.utilidad_proy) + '</div></div>' +
+    '</div>' + dias;
+}
+
+function pintarTopProveedores(arr){
+  if(!arr.length){ $('top-proveedores').innerHTML = '<div class="empty-state">Sin datos.</div>'; return; }
+  let html = '<div class="tbl-wrap"><table><thead><tr><th>Proveedor</th><th style="text-align:right">Compras</th><th style="text-align:right">Total</th></tr></thead><tbody>';
+  arr.forEach(r => {
+    html += '<tr><td class="td-strong">' + esc(r.proveedor || 'Sin proveedor') + '</td>' +
+            '<td class="td-num">' + (Number(r.conteo) || 0) + '</td>' +
+            '<td class="td-num">' + mxn(r.total) + '</td></tr>';
+  });
+  html += '</tbody></table></div>';
+  $('top-proveedores').innerHTML = html;
+}
+
+function pintarTopCategorias(arr){
+  if(!arr.length){ $('top-categorias').innerHTML = '<div class="empty-state">Sin datos.</div>'; return; }
+  let html = '<div class="tbl-wrap"><table><thead><tr><th>Categoría</th><th style="text-align:right">Total</th></tr></thead><tbody>';
+  arr.forEach(r => {
+    html += '<tr><td class="td-strong">' + esc(r.categoria || 'Sin categoría') + '</td>' +
+            '<td class="td-num">' + mxn(r.total) + '</td></tr>';
+  });
+  html += '</tbody></table></div>';
+  $('top-categorias').innerHTML = html;
+}
+
+/* ============================================================
+   ASISTENTE IA (chat → sc-chat)
+   ============================================================ */
+let chatCargando = false;
+
+function agregarChat(clase, texto){
+  const log = $('chat-log');
+  const div = document.createElement('div');
+  div.className = 'chat-msg ' + clase;
+  div.textContent = texto;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+  return div;
+}
+
+async function enviarPregunta(){
+  if(chatCargando) return;
+  const input = $('chat-input');
+  const pregunta = (input.value || '').trim();
+  if(!pregunta) return;
+
+  input.value = '';
+  agregarChat('chat-q', pregunta);
+  const pensando = agregarChat('chat-a', 'Pensando…');
+
+  chatCargando = true;
+  $('chat-enviar').disabled = true;
+
+  let data;
+  try{
+    data = await apiFetch('/sc-chat', {
+      method:'POST',
+      body: JSON.stringify({ pregunta }),
+    });
+  }catch(e){
+    pensando.textContent = 'No pude responder: ' + e.message;
+    chatCargando = false; $('chat-enviar').disabled = false;
+    return;
+  }
+
+  pensando.textContent = data.respuesta || 'Sin respuesta.';
+  chatCargando = false; $('chat-enviar').disabled = false;
+  input.focus();
+}
+
+/* ============================================================
+   EXPORTAR (Excel via SheetJS / PDF via print)
+   ============================================================ */
+
+/* Exporta una lista (compras/gastos/nomina/ventas) a .xlsx con los filtros aplicados */
+function exportarListaExcel(tabla){
+  if(typeof XLSX === 'undefined'){ alert('La librería de exportación aún no carga. Intenta de nuevo.'); return; }
+  const columnas = COLS[tabla] || [];
+  const filas = (tabla === 'ventas') ? filasCache[tabla] : filtrarFilas(tabla);
+  if(!filas.length){ alert('No hay registros para exportar.'); return; }
+
+  const datos = filas.map(f => {
+    const row = {};
+    columnas.forEach(c => { row[c.label] = c.num ? (Number(f[c.key]) || 0) : (f[c.key] ?? ''); });
+    return row;
+  });
+  const ws = XLSX.utils.json_to_sheet(datos);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, tabla);
+  XLSX.writeFile(wb, 'super-cheap-' + tabla + '-' + hoyISO() + '.xlsx');
+}
+
+/* Exporta los KPIs del resumen a .xlsx */
+function exportarResumenExcel(){
+  if(typeof XLSX === 'undefined'){ alert('La librería de exportación aún no carga. Intenta de nuevo.'); return; }
+  const lee = (id) => ($(id) ? $(id).textContent : '');
+  const datos = [
+    { Indicador:'Ventas',   Valor: lee('kpi-ventas') },
+    { Indicador:'Compras',  Valor: lee('kpi-compras') },
+    { Indicador:'Gastos',   Valor: lee('kpi-gastos') },
+    { Indicador:'Nómina',   Valor: lee('kpi-nomina') },
+    { Indicador:'Utilidad', Valor: lee('kpi-utilidad') },
+    { Indicador:'Margen',   Valor: lee('kpi-margen') },
+  ];
+  const ws = XLSX.utils.json_to_sheet(datos);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Resumen');
+  XLSX.writeFile(wb, 'super-cheap-resumen-' + hoyISO() + '.xlsx');
 }
 
 /* ============================================================
@@ -1011,16 +1635,32 @@ function init(){
   });
   $('r-aplicar').addEventListener('click', () => { rangoActual = 'custom'; cargarResumen(); });
 
-  // Fotos de tickets
+  // Fotos de tickets (multi-foto)
   $('foto-compra').addEventListener('change', (e) => {
-    const f = e.target.files && e.target.files[0];
-    if(f) procesarTicket('compra', f);
-    e.target.value = ''; // permitir re-subir la misma foto
+    if(e.target.files && e.target.files.length) agregarFotosTicket('compra', e.target.files);
+    e.target.value = ''; // permitir re-subir las mismas fotos
   });
   $('foto-gasto').addEventListener('change', (e) => {
-    const f = e.target.files && e.target.files[0];
-    if(f) procesarTicket('gasto', f);
+    if(e.target.files && e.target.files.length) agregarFotosTicket('gasto', e.target.files);
     e.target.value = '';
+  });
+
+  // Análisis: selector de rango
+  document.querySelectorAll('#an-range-btns .range-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('#an-range-btns .range-btn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      anRangoActual = b.dataset.range;
+      $('an-range-custom').classList.toggle('show', anRangoActual === 'custom');
+      if(anRangoActual !== 'custom') cargarAnalisis();
+    });
+  });
+  $('an-aplicar').addEventListener('click', () => { anRangoActual = 'custom'; cargarAnalisis(); });
+
+  // Asistente IA
+  $('chat-enviar').addEventListener('click', enviarPregunta);
+  $('chat-input').addEventListener('keydown', (e) => {
+    if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); enviarPregunta(); }
   });
 
   // Nómina
