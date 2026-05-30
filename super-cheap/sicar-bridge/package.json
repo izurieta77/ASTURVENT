@@ -5,7 +5,8 @@
   "private": true,
   "main": "sync.js",
   "scripts": {
-    "start": "node sync.js"
+    "start": "node sync.js",
+    "descubrir": "node descubrir.js"
   },
   "engines": {
     "node": ">=18"
