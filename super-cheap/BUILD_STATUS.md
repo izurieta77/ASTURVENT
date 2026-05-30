@@ -36,6 +36,7 @@ Arnés de seguimiento para no perder nada ni repetir pasos. Se actualiza tras ca
 - [x] Skill 6 — Editar / borrar (soft delete) + búsqueda/filtros ✅ CRUD probado
 - [x] Skill 7 — Exportar Excel/PDF (frontend)
 - [x] Skill 8 — Captura multi-foto + fecha/hora auto + notas a mano (sc-ticket)
-- [~] Skill 4 — Resumen diario por correo: CÓDIGO listo; falta `RESEND_API_KEY` (Resend) para activar
-- [~] Skill 5 — Guardar fotos en GCS: CÓDIGO listo (graceful); falta crear bucket + permiso Storage
+- [x] Skill 4 — Resumen diario por correo (Resend) ✅ probado (correo enviado, schedule 0 14 * * *)
+- [x] Skill 5 — Guardar fotos en GCS (bucket privado + enlace firmado) ✅ probado (subida + signed URL 200)
 - Construido con arnés de 3 agentes (2 constructores + 1 revisor) sobre `CONTRACT.md` v2.
+- TODAS las skills v2 desplegadas y verificadas en producción (supercheapp.netlify.app).
