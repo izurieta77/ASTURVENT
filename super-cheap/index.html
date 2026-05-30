@@ -1040,7 +1040,14 @@ function renderLista(tabla, contenedorId, editable){
     });
     if(editable){
       const id = esc(f.id ?? '');
+      // ¿Tiene foto(s) guardada(s)? `fotos` es JSON array o, si no, foto_url.
+      let refFoto = '';
+      if(tabla === 'compras' || tabla === 'gastos'){
+        try { const a = JSON.parse(f.fotos || '[]'); if(Array.isArray(a) && a.length) refFoto = a[0]; } catch(e){}
+        if(!refFoto && f.foto_url) refFoto = f.foto_url;
+      }
       html += '<td class="td-acc no-print">' +
+        (refFoto ? '<button class="icon-btn" onclick="verFoto(\'' + esc(refFoto) + '\')">Ver foto</button>' : '') +
         '<button class="icon-btn" onclick="abrirEdicion(\'' + tabla + '\',\'' + id + '\')">Editar</button>' +
         '<button class="icon-btn del" onclick="borrarFila(\'' + tabla + '\',\'' + id + '\')">Borrar</button>' +
         '</td>';
@@ -1049,6 +1056,18 @@ function renderLista(tabla, contenedorId, editable){
   });
   html += '</tbody></table></div>';
   cont.innerHTML = html;
+}
+
+/* Abre la foto de un ticket. Si es una referencia privada (gs://...) pide al
+   backend un enlace firmado temporal; si ya es una URL http la abre directo. */
+async function verFoto(ref){
+  if(!ref){ return; }
+  if(/^https?:\/\//.test(ref)){ window.open(ref, '_blank'); return; }
+  try{
+    const r = await apiFetch('/sc-data?action=foto&ref=' + encodeURIComponent(ref));
+    if(r && r.ok && r.url){ window.open(r.url, '_blank'); }
+    else { alert('No se pudo abrir la foto.'); }
+  }catch(e){ alert('No se pudo abrir la foto.'); }
 }
 
 function onFiltro(tabla, contenedorId, campo, valor){
