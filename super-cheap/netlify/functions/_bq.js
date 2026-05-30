@@ -32,11 +32,17 @@ function getClient() {
     throw new Error('Falta GCP_SA_KEY en las variables de entorno.');
   }
 
+  // Aceptamos GCP_SA_KEY de dos formas para evitar problemas de formato al
+  // guardarla: (1) el JSON tal cual, o (2) ese mismo JSON codificado en Base64.
+  // Si no empieza con '{', asumimos Base64 y lo decodificamos primero.
   let credentials;
   try {
-    credentials = JSON.parse(saKeyRaw);
+    const txt = saKeyRaw.trim().startsWith('{')
+      ? saKeyRaw
+      : Buffer.from(saKeyRaw, 'base64').toString('utf8');
+    credentials = JSON.parse(txt);
   } catch (e) {
-    throw new Error('GCP_SA_KEY no es un JSON valido: ' + (e.message || e));
+    throw new Error('GCP_SA_KEY no es un JSON valido (ni Base64 de un JSON): ' + (e.message || e));
   }
 
   _client = new BigQuery({ projectId, credentials });
