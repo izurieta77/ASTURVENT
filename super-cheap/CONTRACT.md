@@ -76,3 +76,78 @@ Lee un ticket con IA. Requiere Bearer token válido.
 - Funciones CommonJS (`exports.handler`), Node 18+. Reusar `_lib.js` para CORS/token.
 - Cliente BigQuery centralizado en `_bq.js` (no instanciar en cada función).
 - Sin secretos en el frontend. Montos en MXN, números con 2 decimales en la UI.
+
+---
+
+# CONTRATO v2 — Mejoras "Skills de Dirección"
+
+## Esquema (columnas nuevas; ver bigquery-migracion-v2.sql)
+- TODAS las tablas: `id STRING` (UUID generado en backend), `activo BOOL` (soft delete).
+- `compras`/`gastos`: además `hora STRING` (HH:MM o null) y `fotos STRING` (JSON array de URLs).
+- Las consultas de lectura/agregado SIEMPRE filtran `activo = TRUE` (o `activo IS NULL` para
+  compatibilidad con filas viejas → usar `COALESCE(activo, TRUE)`).
+
+## `_bq.js` (interfaz que deben respetar las funciones)
+- `query(sql, params)` — igual que antes.
+- `insertRows(tabla, filas)` — ahora usa **DML `INSERT INTO`** parametrizado (no streaming),
+  para permitir editar/borrar de inmediato. Aplica CAST por nombre de columna:
+  `fecha`→`DATE(@x)`, `total|subtotal|iva|ieps|monto`→`CAST(@x AS NUMERIC)`,
+  `items`→`CAST(@x AS INT64)`, `impuestos_estimados|activo`→`CAST(@x AS BOOL)`,
+  `ts`→`CURRENT_TIMESTAMP()` (no param), resto STRING. Valida que los nombres de columna
+  sean `[a-z_]+`.
+- `actualizar(tabla, id, campos)` — `UPDATE ... SET ... WHERE id=@id` (DML parametrizado).
+- `softDelete(tabla, id)` — `UPDATE ... SET activo=FALSE WHERE id=@id`.
+
+## sc-data — acciones nuevas
+### GET `?action=analitica&desde&hasta`
+```
+{ ok:true,
+  comparativo:{
+    actual:{ventas,compras,gastos,nomina,utilidad},
+    anterior:{...}, cambio_pct:{ventas,compras,gastos,nomina,utilidad} },
+  top_proveedores:[ {proveedor, total, conteo} ],   // de compras
+  top_categorias_gasto:[ {categoria, total} ],
+  proyeccion_mes:{ ventas_proy:Number, utilidad_proy:Number, dias_transcurridos:Int, dias_mes:Int }
+}
+```
+### GET `?action=alertas`
+```
+{ ok:true, alertas:[ { nivel:"info|warn|alto", tipo:String, mensaje:String } ] }
+```
+Reglas: margen < META_MARGEN (default 20); gasto/compra del día > 2× promedio diario del
+mes; ventas de ayer < 60% del mismo día de la semana pasada; salud SICAR (sin ventas
+`fuente='sicar'` ayer/hoy).
+### POST `{action:"insertar", tabla, fila, imagenes_base64?:[...] }`
+- `fila` puede incluir `hora`. El backend SIEMPRE genera `id` (UUID) y pone `activo:true`.
+- Si vienen `imagenes_base64`, el backend las sube a GCS (Skill 5) y llena `fotos`/`foto_url`.
+  Si GCS no está configurado o falla, se guarda igual SIN fotos (no bloquea).
+### POST `{action:"actualizar", tabla, id, fila}` → `{ ok:true, actualizados:1 }`
+### POST `{action:"eliminar", tabla, id}` → `{ ok:true, eliminados:1 }` (soft delete)
+
+## sc-ticket — multi-foto + fecha/hora + manuscritos (Skill 8)
+- Entrada: `{ imagenes_base64:[...], tipo:"compra|gasto" }` (acepta también `imagen_base64`).
+- Manda TODAS las imágenes en una sola llamada de visión; son **partes del MISMO** ticket/nota
+  → fusiona conceptos/totales sin duplicar. Lee documentos **impresos o a mano**.
+- Respuesta `datos` ahora incluye **`hora`** (HH:MM|null) además de `fecha`. Si la fecha no es
+  legible → `revisar:true`. Resto igual (subtotal/iva/ieps/total/conceptos/impuestos_estimados/nota).
+
+## sc-chat (nuevo) — `/.netlify/functions/sc-chat`
+- `POST { pregunta }` + Bearer. Arma contexto acotado desde BigQuery (KPIs mes actual y
+  anterior, serie de ventas, top proveedores/categorías, alertas) y pregunta a OpenAI.
+- Respuesta `{ ok:true, respuesta:String }`. NO ejecuta SQL arbitrario del modelo.
+
+## sc-resumen-diario (nuevo, programada) — Netlify Scheduled Function
+- `export const config = { schedule: "0 14 * * *" }`. Calcula resumen del día anterior +
+  alertas, redacta con OpenAI y envía correo vía Resend (`RESEND_API_KEY`, `MAIL_TO`,
+  `MAIL_FROM`). Si falta `RESEND_API_KEY`, no envía (log y salir OK).
+
+## _gcs.js (nuevo)
+- `subirImagenes(base64Array, prefijo)` → sube a `GCS_BUCKET` y devuelve `[url,...]`.
+- Si `GCS_BUCKET`/credenciales no están, devuelve `[]` sin lanzar error (graceful).
+
+## Frontend (index.html) v2
+- Reusa el helper `apiFetch` (Bearer). Nuevas vistas/zonas: Análisis (comparativos,
+  proyección, tops), Asistente (chat a sc-chat), banner de Alertas en Resumen,
+  editar/borrar + buscador/filtros en listas, botones Exportar Excel (SheetJS por CDN) y
+  PDF (print), y captura **multi-foto** (varias imágenes → sc-ticket → formulario con
+  fecha/hora rellenadas).

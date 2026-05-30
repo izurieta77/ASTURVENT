@@ -24,18 +24,22 @@ CREATE SCHEMA IF NOT EXISTS `TU_PROYECTO.super_cheap`
 
 -- Tabla de ventas (alimentada por sc-ingest desde el bridge de SICAR).
 CREATE TABLE IF NOT EXISTS `TU_PROYECTO.super_cheap.ventas` (
+  id         STRING,
   fecha      DATE,
   ticket_id  STRING,
   total      NUMERIC,
   forma_pago STRING,
   items      INT64,
   fuente     STRING,
+  activo     BOOL,
   ts         TIMESTAMP
 );
 
 -- Tabla de compras (capturadas a mano o via sc-ticket/sc-data).
 CREATE TABLE IF NOT EXISTS `TU_PROYECTO.super_cheap.compras` (
+  id                   STRING,
   fecha                DATE,
+  hora                 STRING,
   proveedor            STRING,
   subtotal             NUMERIC,
   iva                  NUMERIC,
@@ -45,13 +49,17 @@ CREATE TABLE IF NOT EXISTS `TU_PROYECTO.super_cheap.compras` (
   categoria            STRING,
   conceptos            STRING,
   foto_url             STRING,
+  fotos                STRING,
   raw_ocr              STRING,
+  activo               BOOL,
   ts                   TIMESTAMP
 );
 
 -- Tabla de gastos.
 CREATE TABLE IF NOT EXISTS `TU_PROYECTO.super_cheap.gastos` (
+  id                   STRING,
   fecha                DATE,
+  hora                 STRING,
   concepto             STRING,
   categoria            STRING,
   subtotal             NUMERIC,
@@ -60,15 +68,19 @@ CREATE TABLE IF NOT EXISTS `TU_PROYECTO.super_cheap.gastos` (
   total                NUMERIC,
   impuestos_estimados  BOOL,
   foto_url             STRING,
+  fotos                STRING,
+  activo               BOOL,
   ts                   TIMESTAMP
 );
 
 -- Tabla de nomina.
 CREATE TABLE IF NOT EXISTS `TU_PROYECTO.super_cheap.nomina` (
+  id        STRING,
   periodo   STRING,
   fecha     DATE,
   empleado  STRING,
   monto     NUMERIC,
   tipo      STRING,
+  activo    BOOL,
   ts        TIMESTAMP
 );
