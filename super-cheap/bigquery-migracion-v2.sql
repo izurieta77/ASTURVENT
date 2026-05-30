@@ -26,6 +26,11 @@ ALTER TABLE `supercheap-app.super_cheap.compras` ADD COLUMN IF NOT EXISTS fotos 
 ALTER TABLE `supercheap-app.super_cheap.gastos`  ADD COLUMN IF NOT EXISTS hora STRING;
 ALTER TABLE `supercheap-app.super_cheap.gastos`  ADD COLUMN IF NOT EXISTS fotos STRING;
 
+-- 3b) Clasificacion inteligente del ticket (maquila|reventa|mixto|otro).
+--     El detalle por concepto (uso/ingrediente) viaja dentro de `conceptos` (JSON).
+ALTER TABLE `supercheap-app.super_cheap.compras` ADD COLUMN IF NOT EXISTS clasificacion STRING;
+ALTER TABLE `supercheap-app.super_cheap.gastos`  ADD COLUMN IF NOT EXISTS clasificacion STRING;
+
 -- 4) Backfill: marcar como activas las filas existentes y darles un id.
 --    (Si alguna fila fue insertada hace < ~90 min puede fallar por el streaming
 --    buffer; en ese caso vuelve a correr este bloque más tarde.)

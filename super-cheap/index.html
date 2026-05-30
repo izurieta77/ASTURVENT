@@ -1273,6 +1273,40 @@ function mostrarFormularioTicket(tipo, d){
     ? d.conceptos.map(c => (c.descripcion ?? '') + ' | ' + (c.importe ?? '')).join('\n')
     : '';
 
+  /* Guardamos el detalle entendido por la IA (uso/ingrediente) para no perderlo
+     aunque el usuario edite el texto. */
+  window._ticketConceptosIA = Array.isArray(d.conceptos) ? d.conceptos : [];
+
+  /* Resumen de lo que ENTENDIÓ la IA: cuánto va a maquila vs reventa + ingredientes. */
+  let bloqueEntendido = '';
+  if (esCompra && Array.isArray(d.conceptos) && d.conceptos.length) {
+    let maq = 0, rev = 0, otr = 0;
+    const ings = {};
+    d.conceptos.forEach(c => {
+      const imp = Number(c.importe) || 0;
+      if (c.uso === 'maquila') { maq += imp; if (c.ingrediente) ings[c.ingrediente] = (ings[c.ingrediente]||0) + imp; }
+      else if (c.uso === 'reventa') rev += imp;
+      else otr += imp;
+    });
+    const ingList = Object.keys(ings).sort((a,b)=>ings[b]-ings[a]).map(k => esc(k) + ' (' + mxn(ings[k]) + ')').join(', ');
+    bloqueEntendido =
+      '<div class="msg msg-info" style="margin-top:8px">' +
+      '<b>La IA entendió este ticket:</b><br>' +
+      '🥪 Insumos de maquila: <b>' + mxn(maq) + '</b>' +
+      ' &nbsp;·&nbsp; 🛒 Reventa: <b>' + mxn(rev) + '</b>' +
+      (otr ? ' &nbsp;·&nbsp; Otro: <b>' + mxn(otr) + '</b>' : '') +
+      (ingList ? '<br>Ingredientes: ' + ingList : '') +
+      '</div>';
+  }
+
+  const clasif = (d.clasificacion || 'otro');
+  const opcCl = ['maquila','reventa','mixto','otro']
+    .map(o => '<option value="'+o+'"'+(o===clasif?' selected':'')+'>'+
+      ({maquila:'Insumos de maquila',reventa:'Mercancía de reventa',mixto:'Mixto',otro:'Otro'})[o]+'</option>').join('');
+  const campoClasif = esCompra
+    ? '<div class="field"><label>Clasificación</label><select id="tk-clasificacion" class="inp">'+opcCl+'</select></div>'
+    : '';
+
   const campoNombre = esCompra
     ? '<div class="field"><label>Proveedor</label><input id="tk-proveedor" class="inp" value="' + esc(d.proveedor || '') + '"></div>'
     : '<div class="field"><label>Concepto</label><input id="tk-concepto" class="inp" value="' + esc(d.proveedor || d.categoria || '') + '"></div>';
@@ -1280,12 +1314,13 @@ function mostrarFormularioTicket(tipo, d){
   wrap.innerHTML =
     '<div class="divider"></div>' +
     '<h3 class="h3" style="margin-bottom:12px">Revisa y guarda</h3>' +
-    banner + nota +
+    banner + nota + bloqueEntendido +
     '<div id="tk-guardar-msg"></div>' +
     '<div class="form-grid">' +
       '<div class="field"><label>Fecha</label><input id="tk-fecha" type="date" class="inp" value="' + esc(d.fecha || hoyISO()) + '"></div>' +
       '<div class="field"><label>Hora</label><input id="tk-hora" type="time" class="inp" value="' + esc(d.hora || '') + '"></div>' +
       campoNombre +
+      campoClasif +
       '<div class="field"><label>Categoría</label><input id="tk-categoria" class="inp" value="' + esc(d.categoria || '') + '" placeholder="' + (esCompra ? 'ej. abarrotes, bebidas' : 'ej. renta, luz, agua, otros') + '"></div>' +
       '<div class="field"><label>Subtotal</label><input id="tk-subtotal" type="number" step="0.01" class="inp" value="' + (Number(d.subtotal)||0) + '"></div>' +
       '<div class="field"><label>IVA</label><input id="tk-iva" type="number" step="0.01" class="inp" value="' + (Number(d.iva)||0) + '"></div>' +
@@ -1301,8 +1336,11 @@ function mostrarFormularioTicket(tipo, d){
   $('tk-guardar').addEventListener('click', () => guardarTicket(tipo));
 }
 
-/* Convierte el textarea de conceptos a array de objetos */
+/* Convierte el textarea de conceptos a array de objetos. Conserva el uso/ingrediente
+   que entendió la IA (los empareja por descripción desde window._ticketConceptosIA). */
 function parseConceptos(txt){
+  const ia = Array.isArray(window._ticketConceptosIA) ? window._ticketConceptosIA : [];
+  const buscarIA = (desc) => ia.find(c => String(c.descripcion||'').trim().toLowerCase() === desc.toLowerCase());
   return String(txt || '')
     .split('\n')
     .map(l => l.trim())
@@ -1311,7 +1349,13 @@ function parseConceptos(txt){
       const partes = l.split('|');
       const descripcion = (partes[0] || '').trim();
       const importe = Number((partes[1] || '').trim()) || 0;
-      return { descripcion, importe };
+      const match = buscarIA(descripcion);
+      return {
+        descripcion,
+        importe,
+        uso: match && match.uso ? match.uso : 'otro',
+        ingrediente: match && match.ingrediente ? match.ingrediente : null,
+      };
     });
 }
 
@@ -1337,6 +1381,7 @@ async function guardarTicket(tipo){
       ieps: Number($('tk-ieps').value) || 0,
       total: Number($('tk-total').value) || 0,
       impuestos_estimados: estimados,
+      clasificacion: ($('tk-clasificacion') ? $('tk-clasificacion').value : 'otro'),
       conceptos: JSON.stringify(conceptos),
     };
   }else{

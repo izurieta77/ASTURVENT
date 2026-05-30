@@ -37,9 +37,9 @@ const REQUERIDOS = {
 // columnas ni romper el INSERT/UPDATE de BigQuery.
 const COLUMNAS = {
   compras: ['id', 'fecha', 'hora', 'proveedor', 'subtotal', 'iva', 'ieps', 'total',
-            'impuestos_estimados', 'categoria', 'conceptos', 'foto_url', 'fotos',
+            'impuestos_estimados', 'categoria', 'clasificacion', 'conceptos', 'foto_url', 'fotos',
             'raw_ocr', 'activo'],
-  gastos:  ['id', 'fecha', 'hora', 'concepto', 'categoria', 'subtotal', 'iva', 'ieps',
+  gastos:  ['id', 'fecha', 'hora', 'concepto', 'categoria', 'clasificacion', 'subtotal', 'iva', 'ieps',
             'total', 'impuestos_estimados', 'foto_url', 'fotos', 'activo'],
   nomina:  ['id', 'periodo', 'fecha', 'empleado', 'monto', 'tipo', 'activo'],
 };
