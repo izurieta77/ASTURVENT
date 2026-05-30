@@ -1,7 +1,12 @@
 // Subida de imagenes a Google Cloud Storage para SUPER CHEAP.
 //
-// Uso: subir las fotos de un ticket/nota a un bucket de GCS y devolver sus URLs
-// publicas para guardarlas en BigQuery (columnas foto_url / fotos).
+// Uso: subir las fotos de un ticket/nota a un bucket de GCS y devolver una
+// referencia para guardarlas en BigQuery (columnas foto_url / fotos).
+//
+// PRIVACIDAD: el bucket es PRIVADO (la organizacion puede tener activada la
+// "prevencion de acceso publico"). Por eso NO publicamos las imagenes; se
+// guarda la ruta del objeto (formato "gs://bucket/objeto") y se generan
+// enlaces FIRMADOS temporales bajo demanda con firmarUrl() para mostrarlas.
 //
 // Es GRACEFUL: si no hay GCS_BUCKET o credenciales, o si la subida falla, NO
 // lanza error; devuelve [] para que la captura del registro no se bloquee.
@@ -78,10 +83,11 @@ async function subirImagenes(base64Array, prefijo) {
       await file.save(buffer, {
         contentType: 'image/jpeg',
         resumable: false,
-        metadata: { cacheControl: 'public, max-age=31536000' },
+        metadata: { cacheControl: 'private, max-age=3600' },
       });
-      // URL publica estandar de GCS (requiere que el bucket/objeto sea legible).
-      urls.push(`https://storage.googleapis.com/${bucket.name}/${nombre}`);
+      // Guardamos la REFERENCIA privada (gs://bucket/objeto). Para mostrarla,
+      // el frontend pide un enlace firmado temporal via firmarUrl().
+      urls.push(`gs://${bucket.name}/${nombre}`);
     } catch (e) {
       // Una imagen que falla no debe tumbar las demas ni el guardado del registro.
       continue;
@@ -91,4 +97,24 @@ async function subirImagenes(base64Array, prefijo) {
   return urls;
 }
 
-module.exports = { subirImagenes };
+// Genera un enlace firmado temporal (lectura) para una referencia gs://...
+// Devuelve null si no se puede (sin bucket, ref invalida o error).
+async function firmarUrl(ref, minutos) {
+  const r = String(ref || '');
+  const m = /^gs:\/\/([^/]+)\/(.+)$/.exec(r);
+  if (!m) return null;
+  const bucket = getBucket();
+  if (!bucket || bucket.name !== m[1]) return null;
+  try {
+    const [url] = await bucket.file(m[2]).getSignedUrl({
+      version: 'v4',
+      action: 'read',
+      expires: Date.now() + (Number(minutos) > 0 ? Number(minutos) : 60) * 60 * 1000,
+    });
+    return url;
+  } catch (e) {
+    return null;
+  }
+}
+
+module.exports = { subirImagenes, firmarUrl };

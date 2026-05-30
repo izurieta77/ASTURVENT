@@ -76,7 +76,12 @@ exports.handler = async (event) => {
       if (action === 'lista')     return await lista(cors, q);
       if (action === 'analitica') return await analitica(cors, q);
       if (action === 'alertas')   return await alertas(cors, q);
-      return json(400, cors, { ok: false, error: 'action invalida (resumen|lista|analitica|alertas)' });
+      if (action === 'foto') {
+        // Devuelve un enlace firmado temporal para ver una foto privada (gs://...).
+        const url = await gcs.firmarUrl(String(q.ref || ''), 60);
+        return json(url ? 200 : 404, cors, url ? { ok: true, url } : { ok: false, error: 'Foto no disponible' });
+      }
+      return json(400, cors, { ok: false, error: 'action invalida (resumen|lista|analitica|alertas|foto)' });
     }
 
     if (event.httpMethod === 'POST') {
