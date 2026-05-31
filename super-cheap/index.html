@@ -631,9 +631,26 @@ html.dark #header .range-pill.active { background:#f1f5f9; color:#1e3a8a; }
       </div>
 
       <!-- Global range is now in header — show current selection -->
-      <div class="mb-4 flex items-center gap-2 text-sm">
+      <div class="mb-4 flex flex-wrap items-center gap-2 text-sm">
         <div id="current-range-label" class="font-semibold text-[var(--text)] px-3 py-1 bg-[var(--surface-2)] rounded-xl border border-[var(--border)] text-xs tracking-wide"></div>
         <div id="compare-status" class="text-xs px-2.5 py-1 rounded-xl border border-[var(--border)] text-[var(--text-2)] hidden"></div>
+        <div id="dash-range-tools" class="no-print flex flex-wrap items-center gap-2 ml-0 md:ml-auto text-xs">
+          <select id="dash-range-preset" class="input !py-1.5 !text-xs !w-auto min-w-[132px]">
+            <option value="hoy">Hoy</option>
+            <option value="ayer">Ayer</option>
+            <option value="7d">Últimos 7 días</option>
+            <option value="mes">Mes actual</option>
+            <option value="mes_anterior">Mes anterior</option>
+            <option value="90d">Últimos 90 días</option>
+            <option value="12m">Últimos 12 meses</option>
+            <option value="anio">Este año</option>
+            <option value="anio_pasado">Año pasado</option>
+            <option value="custom">Personalizado</option>
+          </select>
+          <input id="dash-desde" type="date" class="input !py-1.5 !text-xs !w-auto">
+          <input id="dash-hasta" type="date" class="input !py-1.5 !text-xs !w-auto">
+          <button id="dash-apply-range" type="button" class="px-3 py-1.5 rounded-lg bg-[var(--navy)] text-white font-semibold">Aplicar</button>
+        </div>
       </div>
 
       <!-- HERO KPIs — Sales first, comparison aware -->
@@ -2326,6 +2343,25 @@ window.SC_DASH = {
 function fmtMXN(n){ return (n||0).toLocaleString('es-MX',{style:'currency',currency:'MXN',minimumFractionDigits:0}); }
 function pct(n){ return (n>0?'+':'') + n.toFixed(1) + '%'; }
 
+function dashISO(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function dashRangeLabel(key, desde, hasta) {
+  const labels = {
+    hoy: 'HOY',
+    ayer: 'AYER',
+    '7d': 'ÚLTIMOS 7 DÍAS',
+    mes: 'MES ACTUAL',
+    mes_anterior: 'MES ANTERIOR',
+    '90d': 'ÚLTIMOS 90 DÍAS',
+    '12m': 'ÚLTIMOS 12 MESES',
+    anio: 'ESTE AÑO',
+    anio_pasado: 'AÑO PASADO'
+  };
+  return labels[key] || `${desde} → ${hasta}`;
+}
+
 function calcRange(rangeKey) {
   const today = new Date();
   today.setHours(0,0,0,0);
@@ -2340,48 +2376,91 @@ function calcRange(rangeKey) {
     desde = new Date(today); desde.setDate(desde.getDate()-6);
   } else if (rangeKey === 'mes') {
     desde = new Date(today.getFullYear(), today.getMonth(), 1);
+  } else if (rangeKey === 'mes_anterior') {
+    desde = new Date(today.getFullYear(), today.getMonth()-1, 1);
+    hasta = new Date(today.getFullYear(), today.getMonth(), 0);
+  } else if (rangeKey === '90d') {
+    desde = new Date(today); desde.setDate(desde.getDate()-89);
+  } else if (rangeKey === '12m') {
+    desde = new Date(today); desde.setMonth(desde.getMonth()-11, 1);
+  } else if (rangeKey === 'anio') {
+    desde = new Date(today.getFullYear(), 0, 1);
+  } else if (rangeKey === 'anio_pasado') {
+    desde = new Date(today.getFullYear()-1, 0, 1);
+    hasta = new Date(today.getFullYear()-1, 11, 31);
+  } else if (rangeKey === 'custom') {
+    const customDesde = $('dash-desde')?.value;
+    const customHasta = $('dash-hasta')?.value;
+    if (!customDesde || !customHasta) return null;
+    return { desde: customDesde, hasta: customHasta };
   } else {
-    // custom will be handled separately
     return null;
   }
   return {
-    desde: desde.toISOString().slice(0,10),
-    hasta: hasta.toISOString().slice(0,10)
+    desde: dashISO(desde),
+    hasta: dashISO(hasta)
   };
 }
 
 function updateGlobalRangeUI(desde, hasta, label) {
   const el = $('current-range-label');
-  if (el) el.textContent = label || `${desde} → ${hasta}`;
+  if (el) el.textContent = label ? `${label} · ${desde} → ${hasta}` : `${desde} → ${hasta}`;
+}
+
+function syncDashboardRangeControls(key, desde, hasta) {
+  const preset = $('dash-range-preset');
+  const desdeEl = $('dash-desde');
+  const hastaEl = $('dash-hasta');
+  if (preset) preset.value = key || 'custom';
+  if (desdeEl && desde) desdeEl.value = desde;
+  if (hastaEl && hasta) hastaEl.value = hasta;
+}
+
+function persistDashboardRange(key, desde, hasta) {
+  try {
+    localStorage.setItem('sc-dash-range', JSON.stringify({
+      key,
+      desde,
+      hasta,
+      compare: window.SC_DASH.compare || false,
+      compareMode: window.SC_DASH.compareMode || 'off'
+    }));
+  } catch(e){}
 }
 
 function setGlobalRange(rangeKey) {
   const r = calcRange(rangeKey);
-  if (!r) return;
+  if (!r) {
+    syncDashboardRangeControls('custom', window.SC_DASH.desde, window.SC_DASH.hasta);
+    $('dash-desde')?.focus();
+    return;
+  }
+  if (r.desde.localeCompare(r.hasta) > 0) {
+    showMsg('resumen-msg','La fecha inicial no puede ser mayor que la final.','warn');
+    return;
+  }
 
   window.SC_DASH.desde = r.desde;
   window.SC_DASH.hasta = r.hasta;
   window.SC_DASH.currentRangeKey = rangeKey;
 
-  // Persist
-  try {
-    localStorage.setItem('sc-dash-range', JSON.stringify({
-      key: rangeKey,
-      desde: r.desde,
-      hasta: r.hasta,
-      compare: window.SC_DASH.compare || false
-    }));
-  } catch(e){}
+  persistDashboardRange(rangeKey, r.desde, r.hasta);
 
   // Update pills (header + old ones if visible)
   document.querySelectorAll('.range-pill, #global-range .range-btn, #global-range-mobile button').forEach(b => {
     b.classList.toggle('active', b.dataset.range === rangeKey);
   });
 
-  updateGlobalRangeUI(r.desde, r.hasta, rangeKey.toUpperCase());
+  syncDashboardRangeControls(rangeKey, r.desde, r.hasta);
+  updateGlobalRangeUI(r.desde, r.hasta, dashRangeLabel(rangeKey, r.desde, r.hasta));
 
   // Load the rich operational dashboard
   cargarDashboardOperativo();
+}
+
+function applyDashboardCustomRange() {
+  const preset = $('dash-range-preset')?.value || 'custom';
+  setGlobalRange(preset);
 }
 
 /* Main new function: rich sales operational dashboard */
@@ -2414,7 +2493,8 @@ async function cargarDashboardOperativo(forceRefresh = false) {
             label.textContent = 'Período ant.';
           }
         }
-        updateGlobalRangeUI(dash.desde, dash.hasta, (dash.currentRangeKey || 'RANGO').toUpperCase());
+        syncDashboardRangeControls(dash.currentRangeKey || 'custom', dash.desde, dash.hasta);
+        updateGlobalRangeUI(dash.desde, dash.hasta, dashRangeLabel(dash.currentRangeKey || 'custom', dash.desde, dash.hasta));
       }
     } catch(e){}
   }
@@ -2424,6 +2504,7 @@ async function cargarDashboardOperativo(forceRefresh = false) {
     const r = calcRange('hoy');
     dash.desde = r.desde; dash.hasta = r.hasta;
     dash.currentRangeKey = 'hoy';
+    syncDashboardRangeControls('hoy', dash.desde, dash.hasta);
     updateGlobalRangeUI(dash.desde, dash.hasta, 'HOY');
   }
 
@@ -2888,15 +2969,48 @@ function wireGlobalControls() {
   // Mobile range
   const mob = $('global-range-mobile');
   if (mob) {
-    ['hoy','ayer','7d','mes'].forEach(k => {
+    [
+      ['hoy','HOY'],
+      ['ayer','AYER'],
+      ['7d','7D'],
+      ['mes','MES'],
+      ['anio','AÑO'],
+      ['custom','RANGO']
+    ].forEach(([k, label]) => {
       const b = document.createElement('button');
       b.className = 'range-pill px-3 py-1 text-xs';
-      b.textContent = k.toUpperCase();
+      b.textContent = label;
       b.dataset.range = k;
       b.addEventListener('click', () => setGlobalRange(k));
       mob.appendChild(b);
     });
   }
+
+  const preset = $('dash-range-preset');
+  const desde = $('dash-desde');
+  const hasta = $('dash-hasta');
+  const apply = $('dash-apply-range');
+  if (preset) {
+    preset.addEventListener('change', () => {
+      if (preset.value === 'custom') {
+        syncDashboardRangeControls('custom', window.SC_DASH.desde, window.SC_DASH.hasta);
+        desde?.focus();
+        return;
+      }
+      setGlobalRange(preset.value);
+    });
+  }
+  [desde, hasta].forEach(input => {
+    if (!input) return;
+    input.addEventListener('change', () => {
+      if (preset) preset.value = 'custom';
+      window.SC_DASH.currentRangeKey = 'custom';
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') applyDashboardCustomRange();
+    });
+  });
+  if (apply) apply.addEventListener('click', applyDashboardCustomRange);
 
   // Compare toggle - cycles: off → Período anterior → YoY → off
   const cmpBtn = $('btn-compare-toggle');
