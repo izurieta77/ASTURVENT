@@ -4,3 +4,5 @@ node_modules/
 sicar-bridge/config.json
 sicar-bridge/node_modules/
 *.log
+# Bitácora con secretos/claves: NO subir a git.
+CONVERSACION-SUPER-CHEAP.txt
