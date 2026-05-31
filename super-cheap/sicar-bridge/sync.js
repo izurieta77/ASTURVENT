@@ -200,10 +200,16 @@ function mapearFila(raw, fechaDefault, prefix) {
     forma_pago,
   };
 
+  if (raw.hora) venta.hora = texto(raw.hora);
+  if (caja) venta.caja = caja;
   if (producto) venta.producto = producto;
+  if (clave) venta.clave = clave;
   if (cantidad !== null) venta.cantidad = cantidad;
+  if (precio !== null) venta.precio = precio;
   if (importe !== null) venta.importe = importe;
   if (total !== null) venta.total = total;
+  if (raw.departamento) venta.departamento = texto(raw.departamento);
+  if (raw.categoria) venta.categoria = texto(raw.categoria);
 
   return venta;
 }
@@ -239,10 +245,14 @@ async function leerDesdeMysql(cfg, fecha) {
       venta_key: r.venta_key,
       caja: r.caja || r.terminal || r.sucursal,
       producto: r.producto,
+      clave: r.clave,
       cantidad: r.cantidad,
+      precio: r.precio,
       importe: r.importe,
       total: r.total,
       forma_pago: r.forma_pago || r.metodo_pago,
+      departamento: r.departamento,
+      categoria: r.categoria,
     }, fecha, 'sicar')).filter(Boolean);
   } finally {
     await conn.end().catch(() => {});

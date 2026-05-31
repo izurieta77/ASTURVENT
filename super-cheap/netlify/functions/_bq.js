@@ -94,7 +94,8 @@ function validarTabla(tabla) {
 function exprCast(col, param) {
   const c = col.toLowerCase();
   if (c === 'fecha') return `DATE(@${param})`;
-  if (c === 'total' || c === 'subtotal' || c === 'iva' || c === 'ieps' || c === 'monto') {
+  if (c === 'total' || c === 'subtotal' || c === 'iva' || c === 'ieps' || c === 'monto' ||
+      c === 'cantidad' || c === 'precio' || c === 'importe') {
     return `CAST(@${param} AS NUMERIC)`;
   }
   if (c === 'items') return `CAST(@${param} AS INT64)`;
@@ -112,7 +113,8 @@ function exprCast(col, param) {
 function tipoParam(col) {
   const c = col.toLowerCase();
   if (c === 'fecha') return 'STRING';   // se castea con DATE(@x); el valor viaja como STRING 'YYYY-MM-DD'
-  if (c === 'total' || c === 'subtotal' || c === 'iva' || c === 'ieps' || c === 'monto') return 'NUMERIC';
+  if (c === 'total' || c === 'subtotal' || c === 'iva' || c === 'ieps' || c === 'monto' ||
+      c === 'cantidad' || c === 'precio' || c === 'importe') return 'NUMERIC';
   if (c === 'items') return 'INT64';
   if (c === 'impuestos_estimados' || c === 'activo') return 'BOOL';
   return 'STRING';
@@ -123,7 +125,8 @@ function valorParam(col, v) {
   if (v === undefined) v = null;
   const c = col.toLowerCase();
   if (v === null) return null;
-  if (c === 'total' || c === 'subtotal' || c === 'iva' || c === 'ieps' || c === 'monto') {
+  if (c === 'total' || c === 'subtotal' || c === 'iva' || c === 'ieps' || c === 'monto' ||
+      c === 'cantidad' || c === 'precio' || c === 'importe') {
     // RIESGO ALTO de precision: el cliente de BigQuery, al recibir un Number JS
     // con type 'NUMERIC', lo serializa con toString() y puede caer en notacion
     // cientifica (ej. 1e-7) o perder/rechazar decimales. Lo mas robusto es

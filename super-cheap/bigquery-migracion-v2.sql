@@ -43,3 +43,25 @@ UPDATE `supercheap-app.super_cheap.ventas`  SET id = GENERATE_UUID() WHERE id IS
 UPDATE `supercheap-app.super_cheap.compras` SET id = GENERATE_UUID() WHERE id IS NULL;
 UPDATE `supercheap-app.super_cheap.gastos`  SET id = GENERATE_UUID() WHERE id IS NULL;
 UPDATE `supercheap-app.super_cheap.nomina`  SET id = GENERATE_UUID() WHERE id IS NULL;
+
+-- 5) Detalle por articulo de SICAR para dashboards de producto/caja/hora.
+--    Es una tabla nueva: no modifica la tabla `ventas` existente.
+CREATE TABLE IF NOT EXISTS `supercheap-app.super_cheap.ventas_articulos` (
+  id           STRING,
+  fecha        DATE,
+  ticket_id    STRING,
+  linea_key    STRING,
+  caja         STRING,
+  hora         STRING,
+  producto     STRING,
+  clave        STRING,
+  cantidad     NUMERIC,
+  precio       NUMERIC,
+  importe      NUMERIC,
+  forma_pago   STRING,
+  departamento STRING,
+  categoria    STRING,
+  fuente       STRING,
+  activo       BOOL,
+  ts           TIMESTAMP
+);

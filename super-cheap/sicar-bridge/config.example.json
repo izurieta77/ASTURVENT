@@ -9,7 +9,7 @@
   },
   "siteUrl": "https://supercheapp.netlify.app",
   "ingestToken": "PEGA_AQUI_EL_SICAR_INGEST_TOKEN",
-  "sqlVentas": "-- Esta consulta se ajusta DESPUES de correr 'node descubrir.js'. Debe devolver fecha, ticket_id, total, forma_pago. Opcional: venta_key, caja, producto, cantidad, importe. Usa :fecha como parametro. Ejemplo ticket-level: SELECT DATE(v.fecha) AS fecha, v.idVenta AS ticket_id, v.total AS total, fp.nombre AS forma_pago FROM venta v LEFT JOIN forma_pago fp ON fp.idFormaPago = v.idFormaPago WHERE DATE(v.fecha) = :fecha",
+  "sqlVentas": "-- Esta consulta se ajusta DESPUES de correr 'node descubrir.js'. Debe devolver fecha, ticket_id, total, forma_pago. Opcional recomendado para panel por articulo: venta_key, hora, caja, producto, clave, cantidad, precio, importe, departamento, categoria. Usa :fecha como parametro. Ejemplo ticket-level: SELECT DATE(v.fecha) AS fecha, v.idVenta AS ticket_id, v.total AS total, fp.nombre AS forma_pago FROM venta v LEFT JOIN forma_pago fp ON fp.idFormaPago = v.idFormaPago WHERE DATE(v.fecha) = :fecha",
   "excel": {
     "_ayuda": "Plan B: exporta ventas de SICAR a Excel/CSV y ejecuta node sync.js --excel archivo.xlsx. Encabezados reconocidos: fecha, ticket/folio, producto, cantidad, importe, total, forma_pago, caja."
   }

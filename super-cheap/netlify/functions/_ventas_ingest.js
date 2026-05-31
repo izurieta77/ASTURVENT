@@ -14,9 +14,11 @@ function getBq() {
   if (!bqClient) bqClient = require('./_bq');
   return bqClient;
 }
+let detalleTableReady = false;
 
 const MAX_RECIBIDOS = 5000;
 const EXISTING_CHUNK = 500;
+const NUMERIC_ZERO = 0;
 
 function fechaValida(s) {
   return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
@@ -56,6 +58,55 @@ function entero(v) {
   const n = numero(v);
   if (n === null) return null;
   return Math.max(0, Math.round(n));
+}
+
+function lineaKey(ticketId, v, index) {
+  const clave = texto(primero(v, ['clave', 'codigo', 'sku', 'codigo_producto']));
+  const producto = texto(primero(v, ['producto', 'descripcion', 'articulo', 'nombre_articulo']));
+  const precio = numero(primero(v, ['precio', 'precio_unitario']));
+  const base = [
+    ticketId,
+    clave || producto || 'sin-producto',
+    precio === null ? '' : precio.toFixed(4),
+  ].join(':');
+  return base.replace(/\s+/g, '-').toLowerCase() || `${ticketId}:linea:${index}`;
+}
+
+function errorTablaDetalleNoExiste(err) {
+  const msg = String((err && err.message) || err || '').toLowerCase();
+  return msg.includes('ventas_articulos') && (
+    msg.includes('not found') ||
+    msg.includes('notfound') ||
+    msg.includes('no such') ||
+    msg.includes('not found: table')
+  );
+}
+
+async function ensureDetalleTable() {
+  if (detalleTableReady) return;
+  const bq = getBq();
+  await bq.query(`
+    CREATE TABLE IF NOT EXISTS \`${bq.DATASET}.ventas_articulos\` (
+      id STRING,
+      fecha DATE,
+      ticket_id STRING,
+      linea_key STRING,
+      caja STRING,
+      hora STRING,
+      producto STRING,
+      clave STRING,
+      cantidad NUMERIC,
+      precio NUMERIC,
+      importe NUMERIC,
+      forma_pago STRING,
+      departamento STRING,
+      categoria STRING,
+      fuente STRING,
+      activo BOOL,
+      ts TIMESTAMP
+    )
+  `);
+  detalleTableReady = true;
 }
 
 function normalizarFecha(v) {
@@ -100,12 +151,13 @@ function llaveDesdeCampos(v, fecha) {
 
 function normalizarVentas(ventas) {
   const recibidos = Array.isArray(ventas) ? ventas.length : 0;
-  if (!Array.isArray(ventas)) return { recibidos: 0, validos: 0, descartados: 0, filas: [] };
+  if (!Array.isArray(ventas)) return { recibidos: 0, validos: 0, descartados: 0, filas: [], articulos: [] };
 
   const grupos = new Map();
+  const detalle = new Map();
   let descartados = 0;
 
-  ventas.slice(0, MAX_RECIBIDOS).forEach((raw) => {
+  ventas.slice(0, MAX_RECIBIDOS).forEach((raw, index) => {
     const v = raw && typeof raw === 'object' ? raw : {};
     const fecha = normalizarFecha(primero(v, ['fecha', 'date', 'dia']));
     const ticket_id = llaveDesdeCampos(v, fecha);
@@ -125,6 +177,8 @@ function normalizarVentas(ventas) {
 
     const items = entero(primero(v, ['items', 'articulos', 'cantidad', 'cant', 'qty']));
     const forma_pago = texto(primero(v, ['forma_pago', 'metodo_pago', 'pago', 'payment_method'])) || 'desconocido';
+    const hora = texto(primero(v, ['hora', 'time', 'hora_venta']));
+    const caja = texto(primero(v, ['caja', 'terminal', 'pos', 'sucursal', 'estacion']));
 
     if (!grupos.has(ticket_id)) {
       grupos.set(ticket_id, {
@@ -132,6 +186,8 @@ function normalizarVentas(ventas) {
         ticket_id,
         total: 0,
         forma_pago,
+        caja,
+        hora,
         items: 0,
         _lineas: 0,
         _ticketRow: false,
@@ -149,6 +205,45 @@ function normalizarVentas(ventas) {
       g._ticketRow = true;
     }
     if ((!g.forma_pago || g.forma_pago === 'desconocido') && forma_pago) g.forma_pago = forma_pago;
+    if (!g.caja && caja) g.caja = caja;
+    if (!g.hora && hora) g.hora = hora;
+
+    if (linea) {
+      const producto = texto(primero(v, ['producto', 'descripcion', 'articulo', 'nombre_articulo']));
+      const clave = texto(primero(v, ['clave', 'codigo', 'sku', 'codigo_producto']));
+      const cantidad = numero(primero(v, ['cantidad', 'cant', 'qty', 'items', 'articulos'])) || 1;
+      const precio = numero(primero(v, ['precio', 'precio_unitario']));
+      const importe = totalLinea ?? totalTicket ?? NUMERIC_ZERO;
+      const departamento = texto(primero(v, ['departamento', 'depto']));
+      const categoria = texto(primero(v, ['categoria']));
+
+      if ((producto || clave) && importe > 0) {
+        const key = lineaKey(ticket_id, v, index);
+        if (!detalle.has(key)) {
+          detalle.set(key, {
+            fecha,
+            ticket_id,
+            linea_key: key,
+            caja,
+            hora,
+            producto: producto || clave || 'Sin nombre',
+            clave,
+            cantidad: 0,
+            precio: precio === null ? null : precio,
+            importe: 0,
+            forma_pago,
+            departamento,
+            categoria,
+          });
+        }
+        const d = detalle.get(key);
+        d.cantidad += cantidad;
+        d.importe += importe;
+        if ((!d.forma_pago || d.forma_pago === 'desconocido') && forma_pago) d.forma_pago = forma_pago;
+        if (!d.caja && caja) d.caja = caja;
+        if (!d.hora && hora) d.hora = hora;
+      }
+    }
   });
 
   if (recibidos > MAX_RECIBIDOS) descartados += recibidos - MAX_RECIBIDOS;
@@ -161,11 +256,28 @@ function normalizarVentas(ventas) {
     items: g.items || g._lineas || null,
   })).filter((g) => g.total > 0);
 
+  const articulos = Array.from(detalle.values()).map((d) => ({
+    fecha: d.fecha,
+    ticket_id: d.ticket_id,
+    linea_key: d.linea_key,
+    caja: d.caja || null,
+    hora: d.hora || null,
+    producto: d.producto || 'Sin nombre',
+    clave: d.clave || null,
+    cantidad: Number((d.cantidad || 0).toFixed(4)),
+    precio: d.precio === null ? null : Number(d.precio.toFixed(4)),
+    importe: Number((d.importe || 0).toFixed(2)),
+    forma_pago: d.forma_pago || 'desconocido',
+    departamento: d.departamento || null,
+    categoria: d.categoria || null,
+  })).filter((d) => d.importe > 0);
+
   return {
     recibidos,
     validos: filas.length,
     descartados,
     filas,
+    articulos,
   };
 }
 
@@ -191,6 +303,11 @@ async function insertarVentas(ventas, opts = {}) {
   const fuente = texto(opts.fuente) || 'sicar';
   const replaceFecha = texto(opts.replaceFecha || opts.replaceDate);
   const normalizadas = normalizarVentas(ventas);
+  const hayDetalle = normalizadas.articulos.length > 0;
+  let detalleDisponible = true;
+  if (hayDetalle || replaceFecha) {
+    await ensureDetalleTable().catch(() => { detalleDisponible = false; });
+  }
   if (replaceFecha && fechaValida(replaceFecha)) {
     await bq.query(
       `DELETE FROM \`${bq.DATASET}.ventas\`
@@ -198,15 +315,36 @@ async function insertarVentas(ventas, opts = {}) {
           AND fuente IN UNNEST(@fuentes)`,
       { fecha: replaceFecha, fuentes: ['sicar', 'excel'] }
     );
+    if (detalleDisponible) {
+      await bq.query(
+        `DELETE FROM \`${bq.DATASET}.ventas_articulos\`
+          WHERE fecha=DATE(@fecha)
+            AND fuente IN UNNEST(@fuentes)`,
+        { fecha: replaceFecha, fuentes: ['sicar', 'excel'] }
+      ).catch((err) => {
+        if (!errorTablaDetalleNoExiste(err)) throw err;
+      });
+    }
   }
   if (normalizadas.filas.length === 0) {
-    return { ok: true, ...normalizadas, insertados: 0, duplicados: 0 };
+    return {
+      ok: true,
+      recibidos: normalizadas.recibidos,
+      validos: normalizadas.validos,
+      descartados: normalizadas.descartados,
+      detalle_validos: normalizadas.articulos.length,
+      insertados: 0,
+      duplicados: 0,
+      articulos_insertados: 0,
+    };
   }
 
   const existentes = await ticketIdsExistentes(normalizadas.filas.map((f) => f.ticket_id));
   const nuevas = [];
+  const ticketsNuevos = new Set();
   for (const fila of normalizadas.filas) {
     if (existentes.has(fila.ticket_id)) continue;
+    ticketsNuevos.add(fila.ticket_id);
     nuevas.push({
       ...fila,
       id: crypto.randomUUID(),
@@ -217,11 +355,36 @@ async function insertarVentas(ventas, opts = {}) {
 
   if (nuevas.length) await bq.insertRows('ventas', nuevas);
 
+  let articulosInsertados = 0;
+  const nuevosDetalles = normalizadas.articulos
+    .filter((fila) => ticketsNuevos.has(fila.ticket_id))
+    .map((fila) => ({
+      ...fila,
+      id: crypto.randomUUID(),
+      fuente,
+      activo: true,
+    }));
+
+  if (detalleDisponible && nuevosDetalles.length) {
+    try {
+      await bq.insertRows('ventas_articulos', nuevosDetalles);
+      articulosInsertados = nuevosDetalles.length;
+    } catch (err) {
+      if (!errorTablaDetalleNoExiste(err)) throw err;
+      detalleDisponible = false;
+    }
+  }
+
   return {
     ok: true,
-    ...normalizadas,
+    recibidos: normalizadas.recibidos,
+    validos: normalizadas.validos,
+    descartados: normalizadas.descartados,
+    detalle_validos: normalizadas.articulos.length,
     insertados: nuevas.length,
     duplicados: normalizadas.filas.length - nuevas.length,
+    articulos_insertados: articulosInsertados,
+    detalle_disponible: detalleDisponible,
   };
 }
 

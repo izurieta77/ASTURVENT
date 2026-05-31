@@ -22,7 +22,7 @@ const gcs = require('./_gcs');
 const ventasIngest = require('./_ventas_ingest');
 
 // Tablas validas para lectura/listado.
-const TABLAS_LISTA    = ['ventas', 'compras', 'gastos', 'nomina'];
+const TABLAS_LISTA    = ['ventas', 'ventas_articulos', 'compras', 'gastos', 'nomina'];
 // Tablas validas para insercion/edicion manual (ventas NO: entra por sc-ingest).
 const TABLAS_INSERTAR = ['compras', 'gastos', 'nomina'];
 
@@ -47,7 +47,7 @@ const COLUMNAS = {
 };
 
 // Columnas NUMERIC en BigQuery: se castean a Number JS al normalizar/leer.
-const COLS_NUMERIC = new Set(['subtotal', 'iva', 'ieps', 'total', 'monto']);
+const COLS_NUMERIC = new Set(['subtotal', 'iva', 'ieps', 'total', 'monto', 'cantidad', 'precio', 'importe']);
 
 // Margen meta por defecto (%); configurable via env META_MARGEN.
 const META_MARGEN = Number(process.env.META_MARGEN) || 20;
@@ -75,6 +75,7 @@ exports.handler = async (event) => {
       const action = String(q.action || '');
 
       if (action === 'resumen')   return await resumen(cors, q);
+      if (action === 'ventas_panel') return await ventasPanel(cors, q);
       if (action === 'lista')     return await lista(cors, q);
       if (action === 'analitica') return await analitica(cors, q);
       if (action === 'alertas')   return await alertas(cors, q);
@@ -83,7 +84,7 @@ exports.handler = async (event) => {
         const url = await gcs.firmarUrl(String(q.ref || ''), 60);
         return json(url ? 200 : 404, cors, url ? { ok: true, url } : { ok: false, error: 'Foto no disponible' });
       }
-      return json(400, cors, { ok: false, error: 'action invalida (resumen|lista|analitica|alertas|foto)' });
+      return json(400, cors, { ok: false, error: 'action invalida (resumen|ventas_panel|lista|analitica|alertas|foto)' });
     }
 
     if (event.httpMethod === 'POST') {
@@ -176,6 +177,38 @@ async function serieVentas(desde, hasta) {
       GROUP BY fecha
       ORDER BY fecha ASC`, { desde, hasta });
   return rows.map(r => ({ fecha: r.fecha, total: Number(r.total || 0) }));
+}
+
+function errorTablaNoExiste(err, tabla) {
+  const msg = String((err && err.message) || err || '').toLowerCase();
+  return msg.includes(String(tabla).toLowerCase()) && (
+    msg.includes('not found') ||
+    msg.includes('notfound') ||
+    msg.includes('no such') ||
+    msg.includes('not found: table')
+  );
+}
+
+async function queryDetalleArticulos(sql, params = {}) {
+  try {
+    return await bq.query(sql, params);
+  } catch (err) {
+    if (errorTablaNoExiste(err, 'ventas_articulos')) return null;
+    throw err;
+  }
+}
+
+function filtroDetalle(params, opts = {}) {
+  const filtros = ['fecha BETWEEN @desde AND @hasta', ACTIVO];
+  if (opts.caja) {
+    filtros.push('caja = @caja');
+    params.caja = opts.caja;
+  }
+  if (opts.pago) {
+    filtros.push('forma_pago = @pago');
+    params.pago = opts.pago;
+  }
+  return 'WHERE ' + filtros.join(' AND ');
 }
 
 // Top proveedores (desde compras) por monto en un rango.
@@ -274,6 +307,178 @@ async function resumen(cors, q) {
 }
 
 // =============================================================================
+// GET action=ventas_panel
+// =============================================================================
+async function ventasPanel(cors, q) {
+  const desde = q.desde;
+  const hasta = q.hasta;
+  const caja = String(q.caja || '').trim();
+  const pago = String(q.pago || '').trim();
+  const limite = Math.min(50, Math.max(5, Number(q.limite) || 10));
+
+  if (!fechaValida(desde) || !fechaValida(hasta)) {
+    return json(400, cors, { ok: false, error: 'desde/hasta deben ser fechas YYYY-MM-DD' });
+  }
+
+  const ds = bq.DATASET;
+  const baseKpis = await kpisRango(desde, hasta);
+
+  const ticketParams = { desde, hasta };
+  const ticketFiltros = ['fecha BETWEEN @desde AND @hasta', ACTIVO];
+  if (pago && !caja) {
+    ticketFiltros.push('forma_pago = @pago');
+    ticketParams.pago = pago;
+  }
+  const ticketWhere = 'WHERE ' + ticketFiltros.join(' AND ');
+
+  const detalleParams = { desde, hasta };
+  const detalleWhere = filtroDetalle(detalleParams, { caja, pago });
+
+  const [ticketAggRows, ticketSerieRows, detalleAggRows, topRows, detalleSerieRows, horasRows, cajasRows, pagosRows, pagosDetalleRows] = await Promise.all([
+    bq.query(
+      `SELECT IFNULL(SUM(CAST(total AS FLOAT64)), 0) AS ventas,
+              COUNT(*) AS tickets,
+              IFNULL(SUM(CAST(items AS INT64)), 0) AS items,
+              MAX(ts) AS ultima_venta
+         FROM \`${ds}.ventas\`
+        ${ticketWhere}`,
+      ticketParams),
+    bq.query(
+      `SELECT FORMAT_DATE('%Y-%m-%d', fecha) AS fecha,
+              IFNULL(SUM(CAST(total AS FLOAT64)), 0) AS total,
+              COUNT(*) AS tickets,
+              IFNULL(SUM(CAST(items AS INT64)), 0) AS items
+         FROM \`${ds}.ventas\`
+        ${ticketWhere}
+        GROUP BY fecha
+        ORDER BY fecha ASC`,
+      ticketParams),
+    queryDetalleArticulos(
+      `SELECT IFNULL(SUM(CAST(importe AS FLOAT64)), 0) AS ventas,
+              COUNT(DISTINCT ticket_id) AS tickets,
+              IFNULL(SUM(CAST(cantidad AS FLOAT64)), 0) AS items,
+              MAX(ts) AS ultima_venta
+         FROM \`${ds}.ventas_articulos\`
+        ${detalleWhere}`,
+      detalleParams),
+    queryDetalleArticulos(
+      `SELECT COALESCE(NULLIF(producto, ''), NULLIF(clave, ''), 'Sin nombre') AS producto,
+              ANY_VALUE(clave) AS clave,
+              IFNULL(SUM(CAST(cantidad AS FLOAT64)), 0) AS cantidad,
+              IFNULL(SUM(CAST(importe AS FLOAT64)), 0) AS importe,
+              COUNT(DISTINCT ticket_id) AS tickets
+         FROM \`${ds}.ventas_articulos\`
+        ${detalleWhere}
+        GROUP BY producto
+        ORDER BY importe DESC
+        LIMIT @limite`,
+      { ...detalleParams, limite }),
+    queryDetalleArticulos(
+      `SELECT FORMAT_DATE('%Y-%m-%d', fecha) AS fecha,
+              IFNULL(SUM(CAST(importe AS FLOAT64)), 0) AS total,
+              COUNT(DISTINCT ticket_id) AS tickets,
+              IFNULL(SUM(CAST(cantidad AS FLOAT64)), 0) AS items
+         FROM \`${ds}.ventas_articulos\`
+        ${detalleWhere}
+        GROUP BY fecha
+        ORDER BY fecha ASC`,
+      detalleParams),
+    queryDetalleArticulos(
+      `SELECT SUBSTR(hora, 1, 2) AS hora,
+              IFNULL(SUM(CAST(importe AS FLOAT64)), 0) AS total,
+              COUNT(DISTINCT ticket_id) AS tickets
+         FROM \`${ds}.ventas_articulos\`
+        ${detalleWhere}
+          AND hora IS NOT NULL
+          AND hora != ''
+        GROUP BY hora
+        ORDER BY hora ASC`,
+      detalleParams),
+    queryDetalleArticulos(
+      `SELECT DISTINCT caja
+         FROM \`${ds}.ventas_articulos\`
+        WHERE fecha BETWEEN @desde AND @hasta
+          AND ${ACTIVO}
+          AND caja IS NOT NULL
+          AND caja != ''
+        ORDER BY caja ASC`,
+      { desde, hasta }),
+    bq.query(
+      `SELECT forma_pago,
+              IFNULL(SUM(CAST(total AS FLOAT64)), 0) AS total,
+              COUNT(*) AS tickets
+         FROM \`${ds}.ventas\`
+        ${ticketWhere}
+        GROUP BY forma_pago
+        ORDER BY total DESC`,
+      ticketParams),
+    queryDetalleArticulos(
+      `SELECT forma_pago,
+              IFNULL(SUM(CAST(importe AS FLOAT64)), 0) AS total,
+              COUNT(DISTINCT ticket_id) AS tickets
+         FROM \`${ds}.ventas_articulos\`
+        ${detalleWhere}
+        GROUP BY forma_pago
+        ORDER BY total DESC`,
+      detalleParams),
+  ]);
+
+  const detalleDisponible = detalleAggRows !== null;
+  const useDetalle = Boolean(caja) && detalleDisponible;
+  const ventasAgg = useDetalle ? (detalleAggRows[0] || {}) : (ticketAggRows[0] || {});
+  const ventas = Number(ventasAgg.ventas || 0);
+  const tickets = Number(ventasAgg.tickets || 0);
+  const itemsDetalle = detalleDisponible ? Number((detalleAggRows[0] || {}).items || 0) : 0;
+  const itemsTicket = Number(ventasAgg.items || 0);
+  const items = itemsDetalle || itemsTicket;
+  const serie = useDetalle && detalleSerieRows ? detalleSerieRows : ticketSerieRows;
+  const pagosBase = useDetalle && pagosDetalleRows ? pagosDetalleRows : pagosRows;
+  const pagosTotal = pagosBase.reduce((sum, r) => sum + Number(r.total || 0), 0) || 1;
+
+  return json(200, cors, {
+    ok: true,
+    detalle_disponible: detalleDisponible,
+    filtros: { desde, hasta, caja, pago },
+    kpis: {
+      ...baseKpis,
+      ventas,
+      utilidad: ventas - baseKpis.compras - baseKpis.gastos - baseKpis.nomina,
+      margen: ventas > 0 ? ((ventas - baseKpis.compras - baseKpis.gastos - baseKpis.nomina) / ventas) * 100 : 0,
+      tickets,
+      items,
+      ticket_promedio: tickets > 0 ? ventas / tickets : 0,
+    },
+    serie_ventas: serie.map(r => ({
+      fecha: r.fecha,
+      total: Number(r.total || 0),
+      tickets: Number(r.tickets || 0),
+      items: Number(r.items || 0),
+    })),
+    top_articulos: (topRows || []).map(r => ({
+      producto: r.producto || 'Sin nombre',
+      clave: r.clave || '',
+      cantidad: Number(r.cantidad || 0),
+      importe: Number(r.importe || 0),
+      tickets: Number(r.tickets || 0),
+    })),
+    formas_pago: pagosBase.map(r => ({
+      forma_pago: r.forma_pago || 'desconocido',
+      total: Number(r.total || 0),
+      tickets: Number(r.tickets || 0),
+      pct: Number(((Number(r.total || 0) / pagosTotal) * 100).toFixed(1)),
+    })),
+    por_hora: (horasRows || []).map(r => ({
+      hora: `${String(r.hora || '').padStart(2, '0')}:00`,
+      total: Number(r.total || 0),
+      tickets: Number(r.tickets || 0),
+    })),
+    cajas: (cajasRows || []).map(r => r.caja).filter(Boolean),
+    pagos: pagosRows.map(r => r.forma_pago || 'desconocido').filter(Boolean),
+    ultima_venta: ventasAgg.ultima_venta || null,
+  });
+}
+
+// =============================================================================
 // GET action=lista
 // =============================================================================
 async function lista(cors, q) {
@@ -282,7 +487,7 @@ async function lista(cors, q) {
   const hasta = q.hasta;
 
   if (!TABLAS_LISTA.includes(tabla)) {
-    return json(400, cors, { ok: false, error: 'tabla invalida (ventas|compras|gastos|nomina)' });
+    return json(400, cors, { ok: false, error: 'tabla invalida (ventas|ventas_articulos|compras|gastos|nomina)' });
   }
   const tieneDesde = desde !== undefined && desde !== '';
   const tieneHasta = hasta !== undefined && hasta !== '';

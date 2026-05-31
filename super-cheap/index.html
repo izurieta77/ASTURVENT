@@ -16,37 +16,126 @@
 <!-- SheetJS (exportar Excel) por CDN -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.20.1/package/dist/xlsx.full.min.js"></script>
 
+<!-- Tailwind Play CDN para diseño moderno 2026 (sin build) -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- jsPDF for professional PDF export of the operational panel -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+  // Tailwind runtime config — modern operational retail dashboard aesthetic 2026
+  function initTailwind() {
+    if (!window.tailwind) return;
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            display: ['Montserrat', 'Inter', 'sans-serif']
+          },
+          borderRadius: {
+            'xl': '12px',
+            '2xl': '16px'
+          }
+        }
+      }
+    };
+  }
+  // Initialize as soon as possible
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initTailwind);
+  } else {
+    initTailwind();
+  }
+  // Dark mode bootstrap (persisted)
+  (function(){
+    const saved = localStorage.getItem('sc-dark');
+    if (saved === '1') document.documentElement.classList.add('dark');
+  })();
+</script>
+
 <style>
-/* ====================== SUPER CHEAP — TOKENS DE MARCA ====================== */
+/* =====================================================================
+   SUPER CHEAP — MODERN OPERATIONAL DASHBOARD (2026 redesign)
+   - Tailwind base + custom design system
+   - Excellent light + dark mode
+   - Dense but elegant, sales-first, actionable
+   ===================================================================== */
+
 :root{
-  --navy:#1e3a8a;      /* azul marino marca */
-  --navy-d:#172e6e;
-  --navy-l:#2b4ba8;
-  --orange:#f97316;    /* naranja marca */
-  --orange-d:#ea6306;
-  --orange-soft:rgba(249,115,22,0.12);
+  /* ============== REFINED 2026 BRAND TOKENS (keeps original identity) ============== */
+  --navy: #1e3a8a;
+  --navy-d: #172e6e;
+  --navy-l: #1e40af;
+  --orange: #f97316;
+  --orange-d: #ea580c;
+  --orange-soft: rgba(249,115,22,0.10);
 
-  --bg:#f1f5f9;
-  --surface:#ffffff;
-  --surface-2:#f8fafc;
-  --border:rgba(15,23,42,0.10);
-  --border-2:rgba(15,23,42,0.16);
+  /* Light (default) — clean, high contrast, professional retail */
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --surface-2: #f1f5f9;
+  --surface-3: #e2e8f0;
+  --border: #e2e8f0;
+  --border-2: #cbd5e1;
 
-  --text:#0f172a;
-  --text-2:#475569;
-  --text-3:#94a3b8;
+  --text: #0f172a;
+  --text-2: #475569;
+  --text-3: #64748b;
 
-  --ok:#16a34a;  --ok-bg:rgba(22,163,74,0.10);  --ok-bd:rgba(22,163,74,0.28);
-  --warn:#d97706;--warn-bg:rgba(217,119,6,0.12); --warn-bd:rgba(217,119,6,0.32);
-  --err:#dc2626; --err-bg:rgba(220,38,38,0.10);  --err-bd:rgba(220,38,38,0.28);
-  --info:#2563eb;--info-bg:rgba(37,99,235,0.10); --info-bd:rgba(37,99,235,0.26);
+  --ok: #15803d;
+  --ok-bg: rgba(21,128,61,0.08);
+  --ok-bd: rgba(21,128,61,0.25);
+  --warn: #b45309;
+  --warn-bg: rgba(180,83,9,0.08);
+  --warn-bd: rgba(180,83,9,0.25);
+  --err: #b91c1c;
+  --err-bg: rgba(185,28,28,0.08);
+  --err-bd: rgba(185,28,28,0.25);
+  --info: #1d4ed8;
+  --info-bg: rgba(29,78,216,0.08);
+  --info-bd: rgba(29,78,216,0.22);
 
-  --shadow:0 4px 16px rgba(15,23,42,0.08);
-  --shadow-lg:0 18px 50px rgba(15,23,42,0.16);
-  --r:16px; --r-sm:11px; --r-xs:8px;
-  --font:'Inter',system-ui,-apple-system,sans-serif;
-  --font-d:'Montserrat',sans-serif;
+  --shadow: 0 1px 3px rgba(15,23,42,0.06), 0 4px 12px rgba(15,23,42,0.04);
+  --shadow-lg: 0 10px 30px rgba(15,23,42,0.08);
+  --r: 12px;        /* modern moderate radius */
+  --r-sm: 8px;
+  --r-xs: 6px;
+
+  --font: 'Inter', system_ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-d: 'Montserrat', 'Inter', system_ui, sans-serif;
 }
+
+/* ========================== DARK MODE (excellent support) ========================== */
+html.dark {
+  --bg: #0f172a;
+  --surface: #1e2937;
+  --surface-2: #334155;
+  --surface-3: #475569;
+  --border: #475569;
+  --border-2: #64748b;
+
+  --text: #f1f5f9;
+  --text-2: #cbd5e1;
+  --text-3: #94a3b8;
+
+  --ok: #4ade80;
+  --ok-bg: rgba(74,222,128,0.10);
+  --ok-bd: rgba(74,222,128,0.30);
+  --warn: #fbbf24;
+  --warn-bg: rgba(251,191,36,0.10);
+  --warn-bd: rgba(251,191,36,0.30);
+  --err: #f87171;
+  --err-bg: rgba(248,113,113,0.10);
+  --err-bd: rgba(248,113,113,0.30);
+  --info: #60a5fa;
+  --info-bg: rgba(96,165,250,0.10);
+  --info-bd: rgba(96,165,250,0.28);
+
+  --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.25);
+  --shadow-lg: 0 20px 40px rgba(0,0,0,0.35);
+}
+
+/* Old variable names are intentionally kept by the new token block above. */
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-text-size-adjust:100%;-webkit-font-smoothing:antialiased}
@@ -115,11 +204,12 @@ body{
   color:var(--text-2);font-family:var(--font);font-weight:700;font-size:13px;
   cursor:pointer;white-space:nowrap;position:relative;transition:color .15s;
 }
-.nav-btn.active{color:var(--navy)}
+.nav-btn.active{color:var(--navy); font-weight:800;}
 .nav-btn.active::after{
   content:'';position:absolute;left:14px;right:14px;bottom:0;height:3px;
   background:linear-gradient(90deg,var(--navy),var(--orange));border-radius:2px 2px 0 0;
 }
+html.dark .nav-btn.active{color:#e0f0ff;}
 .nav-btn:hover{color:var(--text)}
 
 /* ====================== LAYOUT ====================== */
@@ -309,6 +399,134 @@ tr:hover td{background:var(--surface-2)}
   .card,.kpi,.cmp{box-shadow:none;border:1px solid #ccc;break-inside:avoid}
   .chart-box{height:auto}
 }
+
+/* =====================================================================
+   2026 MODERN OPERATIONAL DASHBOARD — NEW COMPONENTS
+   ===================================================================== */
+
+/* Global range pills (header) */
+.range-pill {
+  padding: 5px 11px;
+  font-weight: 700;
+  font-size: 11px;
+  border-radius: 6px;
+  color: #fff;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all .1s ease;
+  white-space: nowrap;
+}
+.range-pill:hover { background: rgba(255,255,255,0.12); }
+.range-pill.active {
+  background: #fff;
+  color: var(--navy);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+/* Modern KPI cards — dense, scannable, with trend */
+.kpi-modern {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  transition: transform .1s ease, box-shadow .1s ease;
+  position: relative;
+  overflow: hidden;
+}
+.kpi-modern:hover { transform: translateY(-1px); box-shadow: var(--shadow-lg); }
+.kpi-modern .label {
+  font-size: 9px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--text-3); margin-bottom: 4px;
+}
+.kpi-modern .value {
+  font-family: var(--font-d); font-weight: 800; font-size: 22px; line-height: 1.05;
+  color: var(--text);
+}
+.kpi-modern .delta {
+  font-size: 11px; font-weight: 700; margin-top: 2px;
+  display: inline-flex; align-items: center; gap: 3px;
+}
+.kpi-modern .delta.up { color: var(--ok); }
+.kpi-modern .delta.down { color: var(--err); }
+.kpi-modern .delta.flat { color: var(--text-3); }
+
+.sparkline { width: 100%; height: 32px; margin-top: 6px; }
+
+/* Comparison badge */
+.cmp-badge {
+  font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 999px;
+  background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border);
+}
+.cmp-badge.positive { background: var(--ok-bg); color: var(--ok); border-color: var(--ok-bd); }
+.cmp-badge.negative { background: var(--err-bg); color: var(--err); border-color: var(--err-bd); }
+
+/* Top products table (compact & rich) */
+.top-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.top-table th {
+  text-align: left; padding: 6px 8px; font-size: 9px; font-weight: 700; letter-spacing: 0.8px;
+  color: var(--text-3); text-transform: uppercase; border-bottom: 1px solid var(--border);
+}
+.top-table td { padding: 7px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.top-table tr:last-child td { border-bottom: none; }
+.top-prod-name { font-weight: 600; color: var(--text); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.top-delta { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 4px; }
+.top-delta.up { background: var(--ok-bg); color: var(--ok); }
+.top-delta.down { background: var(--err-bg); color: var(--err); }
+
+/* Payment mix */
+.pay-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; font-size: 12px; }
+.pay-label { flex: 1; color: var(--text-2); font-weight: 500; }
+.pay-bar { height: 6px; background: var(--surface-3); border-radius: 999px; overflow: hidden; flex: 1; max-width: 120px; }
+.pay-fill { height: 100%; background: var(--navy); border-radius: 999px; }
+.pay-pct { font-weight: 700; width: 42px; text-align: right; color: var(--text); font-family: var(--font-d); }
+
+/* Actionable alerts */
+.alert-card {
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  font-size: 12px;
+  border: 1px solid;
+  display: flex; gap: 8px; align-items: flex-start;
+}
+.alert-card.warn { background: var(--warn-bg); border-color: var(--warn-bd); color: #854d0e; }
+.alert-card.info { background: var(--info-bg); border-color: var(--info-bd); color: #1e40af; }
+.alert-card.positive { background: var(--ok-bg); border-color: var(--ok-bd); color: #166534; }
+
+/* Section header modern */
+.section-head { margin-bottom: 12px; }
+.section-head .h1 { font-size: 20px; }
+
+/* Skeleton loading */
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: skel 1.2s ease-in-out infinite;
+  border-radius: var(--r-xs);
+}
+@keyframes skel { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+/* Better chart container */
+.chart-box { position: relative; height: 260px; padding: 4px; }
+.chart-box.small { height: 140px; }
+
+/* Responsive tweaks */
+@media (max-width: 720px) {
+  .kpi-modern .value { font-size: 18px; }
+  .chart-box { height: 200px; }
+}
+
+/* Last sync indicator */
+#last-sync { font-variant-numeric: tabular-nums; }
+
+/* Header dark polish for new pills */
+#header .range-pill.active { background:#fff; color:#1e3a8a; }
+html.dark #header .range-pill { color:#e2e8f0; }
+html.dark #header .range-pill.active { background:#f1f5f9; color:#1e3a8a; }
+
+/* Make sure new dashboard cards have good internal padding on Tailwind */
+#view-resumen .card { padding: 16px; }
 </style>
 </head>
 <body>
@@ -335,21 +553,56 @@ tr:hover td{background:var(--surface-2)}
 
 <!-- ============================== APP ============================== -->
 <div id="app-shell" class="hidden">
-  <header id="header">
-    <div class="brand-logo">
-      <div class="brand-mark">SC</div>
-      <div>
-        <div class="brand-name"><span class="b1">SUPER</span> <span class="b2">CHEAP</span></div>
-        <div class="brand-tag">market</div>
+  <header id="header" class="px-4 md:px-6">
+    <div class="flex items-center justify-between w-full">
+      <div class="brand-logo">
+        <div class="brand-mark">SC</div>
+        <div>
+          <div class="brand-name"><span class="b1">SUPER</span> <span class="b2">CHEAP</span></div>
+          <div class="brand-tag">market</div>
+        </div>
+      </div>
+
+      <!-- Global operational controls (2026 redesign) -->
+      <div class="hidden md:flex items-center gap-2 text-sm">
+        <!-- Global Date Range (drives main dashboard) -->
+        <div id="global-range" class="flex items-center bg-white/10 rounded-lg p-1 text-xs">
+          <button class="range-pill active" data-range="hoy">Hoy</button>
+          <button class="range-pill" data-range="ayer">Ayer</button>
+          <button class="range-pill" data-range="7d">7d</button>
+          <button class="range-pill" data-range="mes">Mes</button>
+          <button class="range-pill" data-range="custom">Rango</button>
+        </div>
+
+        <button id="btn-compare-toggle"
+                class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-white/25 hover:bg-white/10 transition flex items-center gap-1"
+                title="Comparar con período anterior">
+          <span id="compare-label">Comparar</span>
+        </button>
+
+        <div class="text-[10px] text-white/50 px-2" id="last-sync">—</div>
+      </div>
+
+      <div class="header-right flex items-center gap-2">
+        <!-- Dark mode toggle -->
+        <button id="btn-dark-toggle"
+                class="w-8 h-8 flex items-center justify-center rounded-lg border border-white/20 text-white/80 hover:text-white hover:bg-white/10 transition"
+                title="Alternar modo oscuro">
+          <span id="dark-icon">🌙</span>
+        </button>
+        <button id="btn-refresh" class="btn btn-sm btn-ghost text-xs" style="background:rgba(255,255,255,0.12);color:#fff;border-color:rgba(255,255,255,0.2)">⟳ Actualizar</button>
+        <button id="btn-logout" class="btn btn-sm btn-ghost text-xs" style="background:rgba(255,255,255,0.14);color:#fff;border-color:rgba(255,255,255,0.25)">Salir</button>
       </div>
     </div>
-    <div class="header-right">
-      <button id="btn-logout" class="btn btn-sm btn-ghost" style="background:rgba(255,255,255,0.14);color:#fff;border-color:rgba(255,255,255,0.25)">Salir</button>
+
+    <!-- Mobile compact range -->
+    <div class="md:hidden mt-1 flex gap-1 overflow-x-auto pb-1 text-xs" id="global-range-mobile">
+      <!-- Populated by JS -->
     </div>
   </header>
 
   <nav id="nav">
-    <button class="nav-btn active" data-view="resumen">Resumen</button>
+    <button class="nav-btn active" data-view="resumen">Panel</button>
     <button class="nav-btn" data-view="analisis">Análisis</button>
     <button class="nav-btn" data-view="ventas">Ventas</button>
     <button class="nav-btn" data-view="compras">Compras</button>
@@ -360,49 +613,117 @@ tr:hover td{background:var(--surface-2)}
 
   <main id="app">
 
-    <!-- ====================== RESUMEN ====================== -->
+    <!-- ====================== PANEL OPERATIVO (2026 REDESIGN — PRIMERA PANTALLA) ====================== -->
     <section id="view-resumen" class="view active">
-      <div class="section-head">
-        <h1 class="h1">Resumen</h1>
-        <div class="range-bar">
-          <div class="range-btns" id="range-btns">
-            <button class="range-btn active" data-range="hoy">Hoy</button>
-            <button class="range-btn" data-range="semana">Esta semana</button>
-            <button class="range-btn" data-range="mes">Este mes</button>
-            <button class="range-btn" data-range="custom">Personalizado</button>
+      <!-- Subtle header for the operational dashboard -->
+      <div class="flex items-center justify-between mb-3">
+        <div>
+          <div class="text-[10px] font-bold tracking-[1.5px] text-[var(--text-3)]">OPERATIVO • VENTAS SICAR</div>
+          <div class="h1 text-xl">Panel de Ventas</div>
+        </div>
+        <div class="flex items-center gap-2 text-xs no-print">
+          <button onclick="cargarDashboardOperativo(true)" class="px-3 py-1.5 rounded-lg bg-[var(--surface-2)] hover:bg-[var(--surface-3)] font-semibold border border-[var(--border)]">⟳ Refrescar</button>
+          <button onclick="exportarResumenExcel()" class="px-3 py-1.5 rounded-lg bg-[var(--surface-2)] hover:bg-[var(--surface-3)] font-semibold border border-[var(--border)]">Excel</button>
+          <button onclick="exportarPanelPDF()" class="px-3 py-1.5 rounded-lg bg-[var(--navy)] text-white font-semibold">PDF Panel</button>
+          <button onclick="toggleSoloVentasMode()" id="btn-solo-ventas"
+                  class="px-3 py-1.5 rounded-lg border border-[var(--border)] font-semibold">Solo Ventas</button>
+        </div>
+      </div>
+
+      <!-- Global range is now in header — show current selection -->
+      <div class="mb-4 flex items-center gap-2 text-sm">
+        <div id="current-range-label" class="font-semibold text-[var(--text)] px-3 py-1 bg-[var(--surface-2)] rounded-xl border border-[var(--border)] text-xs tracking-wide"></div>
+        <div id="compare-status" class="text-xs px-2.5 py-1 rounded-xl border border-[var(--border)] text-[var(--text-2)] hidden"></div>
+      </div>
+
+      <!-- HERO KPIs — Sales first, comparison aware -->
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 mb-5" id="kpi-operativo">
+        <!-- Populated by JS: Ventas Hoy, vs Ayer, Ticket Prom, Tickets, Unidades, Tendencia -->
+        <div class="kpi-modern skeleton h-[86px]"></div>
+        <div class="kpi-modern skeleton h-[86px]"></div>
+        <div class="kpi-modern skeleton h-[86px]"></div>
+        <div class="kpi-modern skeleton h-[86px]"></div>
+        <div class="kpi-modern skeleton h-[86px]"></div>
+        <div class="kpi-modern skeleton h-[86px]"></div>
+      </div>
+
+      <!-- Main trend + comparison -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-3 mb-5">
+        <div class="lg:col-span-7 card p-4">
+          <div class="flex items-center justify-between mb-2">
+            <div class="font-bold text-sm tracking-tight">Ventas por día <span class="text-[var(--text-3)] font-normal">(con comparación)</span></div>
+            <div id="trend-summary" class="text-xs font-semibold"></div>
           </div>
-          <button class="btn btn-sm btn-ghost no-print" onclick="exportarResumenExcel()">Exportar Excel</button>
-          <button class="btn btn-sm btn-ghost no-print" onclick="window.print()">Exportar PDF</button>
+          <div class="chart-box"><canvas id="chart-ventas-operativo"></canvas></div>
+        </div>
+
+        <!-- Payment Mix + Quick Insights -->
+        <div class="lg:col-span-5 card p-4">
+          <div class="font-bold text-sm tracking-tight mb-2">Formas de pago (período)</div>
+          <div id="payment-mix" class="space-y-1.5 text-sm"></div>
+          <div class="mt-3 pt-3 border-t border-[var(--border)] text-xs text-[var(--text-3)]" id="payment-insight"></div>
         </div>
       </div>
-      <div class="range-custom" id="range-custom">
-        <input type="date" id="r-desde" class="inp" style="width:auto">
-        <span class="muted">a</span>
-        <input type="date" id="r-hasta" class="inp" style="width:auto">
-        <button id="r-aplicar" class="btn btn-sm btn-navy">Aplicar</button>
+
+      <!-- Hourly chart (#3) - only shown if data has hora -->
+      <div class="card p-4 mb-3 hidden" id="hourly-section">
+        <div class="font-bold text-sm tracking-tight mb-2">Ventas por hora del día</div>
+        <div class="chart-box small"><canvas id="chart-hourly"></canvas></div>
       </div>
 
-      <div id="alertas-box" style="margin-top:14px"></div>
-      <div id="resumen-msg" style="margin-top:14px"></div>
-
-      <div class="kpi-grid" id="kpi-grid" style="margin-top:14px">
-        <div class="kpi"><div class="kpi-label">Ventas</div><div class="kpi-val" id="kpi-ventas">—</div></div>
-        <div class="kpi k-orange"><div class="kpi-label">Compras</div><div class="kpi-val" id="kpi-compras">—</div></div>
-        <div class="kpi k-orange"><div class="kpi-label">Gastos</div><div class="kpi-val" id="kpi-gastos">—</div></div>
-        <div class="kpi k-orange"><div class="kpi-label">Nómina</div><div class="kpi-val" id="kpi-nomina">—</div></div>
-        <div class="kpi k-green"><div class="kpi-label">Utilidad</div><div class="kpi-val" id="kpi-utilidad">—</div></div>
-        <div class="kpi k-green"><div class="kpi-label">Margen</div><div class="kpi-val" id="kpi-margen">—</div></div>
+      <!-- Filters for caja + forma_pago (#2) -->
+      <div class="flex flex-wrap items-center gap-2 mb-3 text-xs no-print" id="panel-filters">
+        <div class="font-semibold text-[var(--text-3)] mr-1">Filtros rápidos:</div>
+        <select id="filtro-caja" class="inp text-xs py-1 px-2" style="width:auto" onchange="aplicarFiltrosPanel()">
+          <option value="">Todas las cajas</option>
+        </select>
+        <select id="filtro-pago" class="inp text-xs py-1 px-2" style="width:auto" onchange="aplicarFiltrosPanel()">
+          <option value="">Todas las formas de pago</option>
+        </select>
+        <button onclick="limpiarFiltrosPanel()" class="px-2 py-1 rounded border text-[var(--text-2)]">Limpiar</button>
       </div>
 
-      <div class="chart-grid">
-        <div class="card">
-          <div class="card-title"><h2 class="h2">Ventas por día</h2></div>
-          <div class="chart-box"><canvas id="chart-ventas"></canvas></div>
+      <!-- Top Products + Alerts row -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-3">
+        <!-- Top Articles -->
+        <div class="lg:col-span-7 card p-4">
+          <div class="flex items-center justify-between mb-2">
+            <div class="font-bold text-sm tracking-tight">Top artículos (cantidad + importe)</div>
+            <div class="text-[10px] text-[var(--text-3)]">ordenados por importe</div>
+          </div>
+          <div id="top-products" class="overflow-x-auto">
+            <div class="loading-state text-xs py-6">Cargando productos...</div>
+          </div>
+          <div id="top-products-empty" class="hidden text-xs text-[var(--text-3)] py-4">Sin datos suficientes en el rango para mostrar top.</div>
         </div>
-        <div class="card">
-          <div class="card-title"><h2 class="h2">Gastos por categoría</h2></div>
-          <div class="chart-box"><canvas id="chart-gastos"></canvas></div>
+
+        <!-- Actionable Alerts -->
+        <div class="lg:col-span-5 card p-4 bg-[var(--surface)]">
+          <div class="font-bold text-sm tracking-tight mb-2 flex items-center gap-2">
+            Alertas accionables
+            <span class="text-[10px] px-1.5 py-px rounded bg-[var(--warn-bg)] text-[var(--warn)] font-mono">AUTO</span>
+          </div>
+          <div id="alertas-operativas" class="space-y-2 text-sm"></div>
+          <div id="alertas-empty" class="hidden text-xs text-[var(--text-3)] py-2">Todo en orden en este rango.</div>
         </div>
+      </div>
+
+      <!-- Footer status bar -->
+      <div class="mt-4 flex items-center justify-between text-[10px] text-[var(--text-3)]">
+        <div id="dashboard-status">Datos desde SICAR • Sincronización automática</div>
+        <div class="flex items-center gap-3">
+          <div id="dashboard-last-update"></div>
+          <button onclick="cargarDashboardOperativo(true)" class="underline hover:no-underline">forzar sincronización</button>
+        </div>
+      </div>
+
+      <!-- Keep old hidden elements so legacy code doesn't break immediately -->
+      <div id="alertas-box" class="hidden"></div>
+      <div id="resumen-msg" class="hidden"></div>
+      <div class="kpi-grid hidden" id="kpi-grid"></div>
+      <div class="chart-grid hidden">
+        <canvas id="chart-ventas"></canvas>
+        <canvas id="chart-gastos"></canvas>
       </div>
     </section>
 
@@ -705,6 +1026,12 @@ function entrarApp(){
   // Fecha por defecto en nómina = hoy
   $('n-fecha').value = hoyISO();
   irA('resumen');
+
+  // 2026 redesign: wire global controls + load rich operational dashboard
+  setTimeout(() => {
+    if (typeof wireGlobalControls === 'function') wireGlobalControls();
+    if (typeof setGlobalRange === 'function') setGlobalRange('hoy');
+  }, 80);
 }
 
 function cerrarSesion(silencioso){
@@ -720,7 +1047,10 @@ function cerrarSesion(silencioso){
    NAVEGACIÓN
    ============================================================ */
 const cargadores = {
-  resumen:   () => cargarResumen(),
+  resumen:   () => {
+    if (typeof cargarDashboardOperativo === 'function') return cargarDashboardOperativo();
+    return cargarResumen();
+  },
   analisis:  () => cargarAnalisis(),
   ventas:    () => cargarVentas(),
   compras:   () => cargarCompras(),
@@ -778,6 +1108,9 @@ let rangoActual = 'hoy';
 let chartVentas = null, chartGastos = null;
 
 async function cargarResumen(){
+  // El Panel 2026 reemplaza los KPIs legacy. Si esos nodos ya no existen,
+  // salir sin romper el arranque; cargarDashboardOperativo hace la carga real.
+  if (!$('kpi-ventas')) return;
   const { desde, hasta } = rangoFechas(rangoActual);
   if(!desde || !hasta){
     showMsg('resumen-msg','Selecciona las dos fechas del rango personalizado.','warn');
@@ -1826,6 +2159,32 @@ function exportarListaExcel(tabla){
 
 /* Exporta los KPIs del resumen a .xlsx */
 function exportarResumenExcel(){
+  if (window.SC_DASH && window.SC_DASH.panel && typeof XLSX !== 'undefined') {
+    const p = window.SC_DASH.panel;
+    const k = p.kpis || {};
+    const datos = [
+      { Indicador:'Desde', Valor:p.filtros?.desde || window.SC_DASH.desde || '' },
+      { Indicador:'Hasta', Valor:p.filtros?.hasta || window.SC_DASH.hasta || '' },
+      { Indicador:'Ventas', Valor:Number(k.ventas || 0) },
+      { Indicador:'Tickets', Valor:Number(k.tickets || 0) },
+      { Indicador:'Unidades', Valor:Number(k.items || 0) },
+      { Indicador:'Ticket promedio', Valor:Number(k.ticket_promedio || 0) },
+      { Indicador:'Utilidad', Valor:Number(k.utilidad || 0) },
+      { Indicador:'Margen %', Valor:Number(k.margen || 0) },
+    ];
+    const top = (p.top_articulos || []).map(a => ({
+      Articulo:a.producto, Clave:a.clave || '', Cantidad:a.cantidad || 0, Importe:a.importe || 0, Tickets:a.tickets || 0
+    }));
+    const pagos = (p.formas_pago || []).map(a => ({
+      FormaPago:a.forma_pago, Total:a.total || 0, Tickets:a.tickets || 0, Porcentaje:a.pct || 0
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(datos), 'Panel');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(top), 'Top articulos');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pagos), 'Pagos');
+    XLSX.writeFile(wb, 'super-cheap-panel-' + (window.SC_DASH.desde || hoyISO()) + '.xlsx');
+    return;
+  }
   if(typeof XLSX === 'undefined'){ alert('La librería de exportación aún no carga. Intenta de nuevo.'); return; }
   const lee = (id) => ($(id) ? $(id).textContent : '');
   const datos = [
@@ -1898,16 +2257,16 @@ function init(){
   });
 
   // Selector de rango
-  document.querySelectorAll('.range-btn').forEach(b => {
+  document.querySelectorAll('#range-btns .range-btn').forEach(b => {
     b.addEventListener('click', () => {
-      document.querySelectorAll('.range-btn').forEach(x => x.classList.remove('active'));
+      document.querySelectorAll('#range-btns .range-btn').forEach(x => x.classList.remove('active'));
       b.classList.add('active');
       rangoActual = b.dataset.range;
-      $('range-custom').classList.toggle('show', rangoActual === 'custom');
+      if ($('range-custom')) $('range-custom').classList.toggle('show', rangoActual === 'custom');
       if(rangoActual !== 'custom') cargarResumen();
     });
   });
-  $('r-aplicar').addEventListener('click', () => { rangoActual = 'custom'; cargarResumen(); });
+  if ($('r-aplicar')) $('r-aplicar').addEventListener('click', () => { rangoActual = 'custom'; cargarResumen(); });
 
   // Fotos de tickets (multi-foto)
   $('foto-compra').addEventListener('change', (e) => {
@@ -1946,6 +2305,941 @@ function init(){
   }else{
     $('pin-input').focus();
   }
+}
+
+/* ============================================================
+   SUPER CHEAP — 2026 OPERATIONAL DASHBOARD LOGIC (NEW)
+   Non-breaking addition. Old flows remain intact.
+   ============================================================= */
+
+/* Global dashboard state (powers the new Panel Operativo) */
+window.SC_DASH = {
+  desde: null,
+  hasta: null,
+  compare: false,
+  compareMode: 'off',   // 'off' | 'prev' | 'yoy'
+  lastUpdate: null,
+  ventasRows: [],
+  lastDailySeries: []
+};
+
+function fmtMXN(n){ return (n||0).toLocaleString('es-MX',{style:'currency',currency:'MXN',minimumFractionDigits:0}); }
+function pct(n){ return (n>0?'+':'') + n.toFixed(1) + '%'; }
+
+function calcRange(rangeKey) {
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  let desde, hasta = new Date(today);
+
+  if (rangeKey === 'hoy') {
+    desde = new Date(today);
+  } else if (rangeKey === 'ayer') {
+    desde = new Date(today); desde.setDate(desde.getDate()-1);
+    hasta = new Date(desde);
+  } else if (rangeKey === '7d') {
+    desde = new Date(today); desde.setDate(desde.getDate()-6);
+  } else if (rangeKey === 'mes') {
+    desde = new Date(today.getFullYear(), today.getMonth(), 1);
+  } else {
+    // custom will be handled separately
+    return null;
+  }
+  return {
+    desde: desde.toISOString().slice(0,10),
+    hasta: hasta.toISOString().slice(0,10)
+  };
+}
+
+function updateGlobalRangeUI(desde, hasta, label) {
+  const el = $('current-range-label');
+  if (el) el.textContent = label || `${desde} → ${hasta}`;
+}
+
+function setGlobalRange(rangeKey) {
+  const r = calcRange(rangeKey);
+  if (!r) return;
+
+  window.SC_DASH.desde = r.desde;
+  window.SC_DASH.hasta = r.hasta;
+  window.SC_DASH.currentRangeKey = rangeKey;
+
+  // Persist
+  try {
+    localStorage.setItem('sc-dash-range', JSON.stringify({
+      key: rangeKey,
+      desde: r.desde,
+      hasta: r.hasta,
+      compare: window.SC_DASH.compare || false
+    }));
+  } catch(e){}
+
+  // Update pills (header + old ones if visible)
+  document.querySelectorAll('.range-pill, #global-range .range-btn, #global-range-mobile button').forEach(b => {
+    b.classList.toggle('active', b.dataset.range === rangeKey);
+  });
+
+  updateGlobalRangeUI(r.desde, r.hasta, rangeKey.toUpperCase());
+
+  // Load the rich operational dashboard
+  cargarDashboardOperativo();
+}
+
+/* Main new function: rich sales operational dashboard */
+async function cargarDashboardOperativo(forceRefresh = false) {
+  const dash = window.SC_DASH;
+
+  // Restore persisted state if we don't have an active range yet
+  if (!dash.desde || !dash.hasta) {
+    try {
+      const saved = JSON.parse(localStorage.getItem('sc-dash-range') || 'null');
+      if (saved && saved.desde && saved.hasta) {
+        dash.desde = saved.desde;
+        dash.hasta = saved.hasta;
+        dash.compare = !!saved.compare;
+        dash.compareMode = saved.compareMode || (saved.compare ? 'prev' : 'off');
+        dash.currentRangeKey = saved.key || 'mes';
+
+        // Restore UI pills
+        document.querySelectorAll('.range-pill').forEach(b => {
+          b.classList.toggle('active', b.dataset.range === dash.currentRangeKey);
+        });
+        const cmpBtn = $('btn-compare-toggle');
+        const label = $('compare-label');
+        if (cmpBtn && label) {
+          if (dash.compareMode === 'yoy') {
+            cmpBtn.classList.add('!bg-white/20');
+            label.textContent = 'YoY';
+          } else if (dash.compareMode === 'prev') {
+            cmpBtn.classList.add('!bg-white/20');
+            label.textContent = 'Período ant.';
+          }
+        }
+        updateGlobalRangeUI(dash.desde, dash.hasta, (dash.currentRangeKey || 'RANGO').toUpperCase());
+      }
+    } catch(e){}
+  }
+
+  if (!dash.desde || !dash.hasta) {
+    // default to today
+    const r = calcRange('hoy');
+    dash.desde = r.desde; dash.hasta = r.hasta;
+    dash.currentRangeKey = 'hoy';
+    updateGlobalRangeUI(dash.desde, dash.hasta, 'HOY');
+  }
+
+  const container = $('kpi-operativo');
+  if (container) container.innerHTML = Array(6).fill('<div class="kpi-modern skeleton h-[82px]"></div>').join('');
+
+  $('top-products').innerHTML = '<div class="loading-state text-xs py-6">Calculando top artículos...</div>';
+  $('alertas-operativas').innerHTML = '';
+  $('payment-mix').innerHTML = '<div class="text-[var(--text-3)] text-xs py-4">Cargando mix de pagos...</div>';
+
+  const statusEl = $('dashboard-status');
+  if (statusEl) statusEl.textContent = 'Cargando datos de ventas...';
+
+  try {
+    {
+    // Nuevo endpoint agregado: datos ya agregados desde BigQuery/SICAR, sin
+    // limitarse a los 1000 tickets de la lista ni inventar tendencias.
+    const caja = $('filtro-caja')?.value || '';
+    const pago = $('filtro-pago')?.value || '';
+    const panel = await apiFetch(`/sc-data?action=ventas_panel&desde=${encodeURIComponent(dash.desde)}&hasta=${encodeURIComponent(dash.hasta)}&caja=${encodeURIComponent(caja)}&pago=${encodeURIComponent(pago)}`);
+    const rows = panel.top_articulos || [];
+    const k = panel.kpis || {};
+    dash.ventasRows = rows;
+    dash.panel = panel;
+    dash.lastDailySeries = panel.serie_ventas || [];
+
+    let prevK = null;
+    let prevSeries = null;
+    let prevLabel = '';
+    if (dash.compare && dash.compareMode !== 'off') {
+      const prevRange = dash.compareMode === 'yoy'
+        ? calcYoYRange(dash.desde, dash.hasta)
+        : calcPrevRange(dash.desde, dash.hasta);
+      prevLabel = dash.compareMode === 'yoy' ? 'YoY' : 'Periodo anterior';
+      if (prevRange) {
+        const prevPanel = await apiFetch(`/sc-data?action=ventas_panel&desde=${encodeURIComponent(prevRange.desde)}&hasta=${encodeURIComponent(prevRange.hasta)}`);
+        prevK = prevPanel.kpis || null;
+        prevSeries = prevPanel.serie_ventas || null;
+      }
+    }
+
+    renderOperativeKPIs(k, prevK, rows, panel);
+    renderSalesTrendChart(panel.serie_ventas || [], dash.compare, prevSeries, prevLabel);
+    panelFiltradoRows = rows;
+    poblarFiltrosPanel(panel);
+    renderTopProducts(rows);
+    renderPaymentMix(panel.formas_pago || []);
+    renderHourlyChart(panel.por_hora || []);
+    renderOperativeAlerts(k, panel.formas_pago || [], prevK);
+
+    dash.lastUpdate = new Date();
+    const lastEl = $('dashboard-last-update');
+    if (lastEl) lastEl.textContent = 'Actualizado ' + dash.lastUpdate.toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'});
+    if (statusEl) {
+      const detalle = panel.detalle_disponible ? 'detalle por articulo activo' : 'sin detalle por articulo';
+      statusEl.textContent = `SICAR • ${Number(k.tickets || 0).toLocaleString('es-MX')} tickets • ${detalle}`;
+    }
+    return;
+    }
+
+    // 1. Get rich ventas rows for the range (client-side aggregation)
+    const lista = await apiFetch(`/sc-data?action=lista&tabla=ventas&desde=${dash.desde}&hasta=${dash.hasta}`);
+    const rows = (lista && lista.filas) ? lista.filas : [];
+    dash.ventasRows = rows;
+
+    // 2. Also get the classic resumen for totals (fast)
+    const resumen = await apiFetch(`/sc-data?action=resumen&desde=${dash.desde}&hasta=${dash.hasta}`);
+    const k = (resumen && resumen.kpis) ? resumen.kpis : {};
+
+    // Store daily series for sparklines
+    window.SC_DASH.lastDailySeries = (resumen && resumen.serie_ventas) ? resumen.serie_ventas : [];
+
+    // 3. Compute period comparison if enabled (real data)
+    let prevK = null;
+    let prevSeries = null;
+    let prevLabel = '';
+
+    if (dash.compare && dash.compareMode !== 'off') {
+      let prevRange;
+      if (dash.compareMode === 'yoy') {
+        prevRange = calcYoYRange(dash.desde, dash.hasta);
+        prevLabel = 'YoY';
+      } else {
+        prevRange = calcPrevRange(dash.desde, dash.hasta);
+        prevLabel = 'Período ant.';
+      }
+
+      if (prevRange) {
+        const prevRes = await apiFetch(`/sc-data?action=resumen&desde=${prevRange.desde}&hasta=${prevRange.hasta}`);
+        prevK = (prevRes && prevRes.kpis) ? prevRes.kpis : null;
+        prevSeries = (prevRes && prevRes.serie_ventas) ? prevRes.serie_ventas : null;
+      }
+    }
+
+    // Render KPIs (sales-centric)
+    renderOperativeKPIs(k, prevK, rows);
+
+    // Main trend chart with real comparison overlay
+    const series = (resumen && resumen.serie_ventas) ? resumen.serie_ventas : [];
+    renderSalesTrendChart(series, dash.compare, prevSeries, prevLabel);
+
+    // Top products + filters (#2)
+    panelFiltradoRows = rows;
+    poblarFiltrosPanel(rows);
+    renderTopProducts(rows);
+
+    // Payment mix
+    renderPaymentMix(rows);
+
+    // Hourly chart if data supports it (#3)
+    renderHourlyChart(rows);
+
+    // Actionable alerts derived from data
+    renderOperativeAlerts(k, rows, prevK);
+
+    // Status
+    dash.lastUpdate = new Date();
+    const lastEl = $('dashboard-last-update');
+    if (lastEl) lastEl.textContent = 'Actualizado ' + dash.lastUpdate.toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'});
+
+    if (statusEl) statusEl.textContent = `SICAR • ${rows.length} tickets en rango`;
+
+  } catch (e) {
+    console.error('[Dashboard Operativo]', e);
+    if (container) container.innerHTML = `<div class="text-xs text-[var(--err)] p-3">Error cargando datos. ${esc(e.message)}</div>`;
+  }
+}
+
+function calcPrevRange(desde, hasta) {
+  // Simple previous period of same length
+  const d = new Date(desde);
+  const h = new Date(hasta);
+  const len = Math.round((h - d) / 86400000) + 1;
+  const prevHasta = new Date(d); prevHasta.setDate(prevHasta.getDate() - 1);
+  const prevDesde = new Date(prevHasta); prevDesde.setDate(prevHasta.getDate() - len + 1);
+  return {
+    desde: prevDesde.toISOString().slice(0,10),
+    hasta: prevHasta.toISOString().slice(0,10)
+  };
+}
+
+function renderOperativeKPIs(k, prevK, rows, panel = {}) {
+  const cont = $('kpi-operativo');
+  if (!cont) return;
+
+  // Compute current metrics
+  const ventas = k.ventas || 0;
+  const tickets = Number(k.tickets || 0);
+  const unidades = Number(k.items || 0);
+  const ticketProm = Number(k.ticket_promedio || (tickets > 0 ? (ventas / tickets) : 0));
+  const utilidad = k.utilidad || 0;
+  const margen = k.margen || 0;
+
+  // Real deltas using previous period data (YoY or Período anterior)
+  let dVentas = null, dTicket = null, dUnidades = null, dTickets = null, dUtilidad = null, dMargen = null;
+
+  if (prevK) {
+    const pVentas = prevK.ventas || 0;
+    const pTickets = Number(prevK.tickets || 0);
+    const pUnidades = Number(prevK.items || 0);
+    const pTicket = Number(prevK.ticket_promedio || (pTickets > 0 ? pVentas / pTickets : 0));
+    const pUtil = prevK.utilidad || 0;
+    const pMargen = prevK.margen || 0;
+
+    if (pVentas > 0) dVentas = ((ventas - pVentas) / pVentas) * 100;
+    if (pTicket > 0) dTicket = ((ticketProm - pTicket) / pTicket) * 100;
+    if (pUnidades > 0) dUnidades = ((unidades - pUnidades) / pUnidades) * 100;
+    if (pTickets > 0) dTickets = ((tickets - pTickets) / pTickets) * 100;
+    if (pUtil > 0) dUtilidad = ((utilidad - pUtil) / pUtil) * 100;
+    if (pMargen > 0) dMargen = margen - pMargen;
+  }
+
+  const daily = panel.serie_ventas || window.SC_DASH.lastDailySeries || [];
+  const dailyTotals = daily.map(s => Number(s.total || 0));
+  const dailyTickets = daily.map(s => Number(s.tickets || 0));
+  const dailyItems = daily.map(s => Number(s.items || 0));
+
+  const html = `
+    <div class="kpi-modern">
+      <div class="label">Ventas</div>
+      <div class="value">${fmtMXN(ventas)}</div>
+      ${dVentas !== null ? `<div class="delta ${dVentas>=0?'up':'down'}">${dVentas>=0?'▲':'▼'} ${pct(dVentas)}</div>` : '<div class="text-[10px] text-[var(--text-3)] mt-0.5">sin comparar</div>'}
+      <canvas id="spark-ventas" class="sparkline" height="28"></canvas>
+    </div>
+
+    <div class="kpi-modern">
+      <div class="label">Ticket promedio</div>
+      <div class="value">${fmtMXN(ticketProm)}</div>
+      <div class="text-[10px] text-[var(--text-3)] mt-0.5">${tickets} tickets</div>
+      ${dTicket !== null ? `<div class="delta ${dTicket>=0?'up':'down'}">${dTicket>=0?'▲':'▼'} ${pct(dTicket)}</div>` : ''}
+      <canvas id="spark-ticket" class="sparkline" height="28"></canvas>
+    </div>
+
+    <div class="kpi-modern">
+      <div class="label">Unidades vendidas</div>
+      <div class="value">${unidades.toLocaleString('es-MX')}</div>
+      <div class="text-[10px] text-[var(--text-3)] mt-0.5">artículos</div>
+      ${dUnidades !== null ? `<div class="delta ${dUnidades>=0?'up':'down'}">${dUnidades>=0?'▲':'▼'} ${pct(dUnidades)}</div>` : ''}
+      <canvas id="spark-unidades" class="sparkline" height="28"></canvas>
+    </div>
+
+    <div class="kpi-modern">
+      <div class="label">Tickets</div>
+      <div class="value">${tickets}</div>
+      ${dTickets !== null ? `<div class="delta ${dTickets>=0?'up':'down'}">${dTickets>=0?'▲':'▼'} ${pct(dTickets)}</div>` : ''}
+      <canvas id="spark-tickets" class="sparkline" height="28"></canvas>
+    </div>
+
+    <div class="kpi-modern">
+      <div class="label">Utilidad neta</div>
+      <div class="value">${fmtMXN(utilidad)}</div>
+      <div class="text-[10px] text-[var(--text-3)]">ventas − egresos</div>
+      ${dUtilidad !== null ? `<div class="delta ${dUtilidad>=0?'up':'down'}">${dUtilidad>=0?'▲':'▼'} ${pct(dUtilidad)}</div>` : ''}
+      <canvas id="spark-utilidad" class="sparkline" height="28"></canvas>
+    </div>
+
+    <div class="kpi-modern">
+      <div class="label">Margen</div>
+      <div class="value">${margen.toFixed(1)}%</div>
+      <div class="text-[10px] text-[var(--text-3)]">del período</div>
+      ${dMargen !== null ? `<div class="delta ${dMargen>=0?'up':'down'}">${dMargen>=0?'▲':'▼'} ${dMargen.toFixed(1)}pp</div>` : ''}
+      <canvas id="spark-margen" class="sparkline" height="28"></canvas>
+    </div>
+  `;
+  cont.innerHTML = html;
+
+  // Render real sparklines after DOM update
+  setTimeout(() => {
+    if (dailyTotals.length >= 2) {
+      renderMiniSparkline('spark-ventas', dailyTotals, '#1e3a8a');
+      renderMiniSparkline('spark-ticket', dailyTickets.length >= 2 ? dailyTickets : dailyTotals, '#f97316');
+      renderMiniSparkline('spark-unidades', dailyItems.length >= 2 ? dailyItems : dailyTotals, '#15803d');
+      renderMiniSparkline('spark-tickets', dailyTickets.length >= 2 ? dailyTickets : dailyTotals, '#1e40af');
+      renderMiniSparkline('spark-utilidad', dailyTotals, '#15803d');
+      renderMiniSparkline('spark-margen', dailyTotals, '#b45309');
+    }
+  }, 60);
+}
+
+function renderSalesTrendChart(series, withCompare, prevSeries = null, prevLabel = 'Período anterior') {
+  const canvas = $('chart-ventas-operativo');
+  if (!canvas || !window.Chart) return;
+
+  if (window._opChart) { window._opChart.destroy(); window._opChart = null; }
+
+  const labels = series.map(s => s.fecha);
+  const data = series.map(s => s.total);
+
+  const datasets = [{
+    label: 'Ventas',
+    data,
+    borderColor: '#1e3a8a',
+    backgroundColor: 'rgba(30,58,138,0.08)',
+    borderWidth: 2.5,
+    tension: 0.25,
+    fill: true,
+    pointRadius: 2,
+    pointHoverRadius: 4
+  }];
+
+  if (withCompare && prevSeries && prevSeries.length) {
+    // Real previous data overlay (YoY or período anterior)
+    const prevData = prevSeries.map(s => s.total);
+    datasets.push({
+      label: prevLabel,
+      data: prevData,
+      borderColor: '#64748b',
+      borderDash: [4, 2],
+      borderWidth: 1.8,
+      tension: 0.25,
+      pointRadius: 0,
+      fill: false
+    });
+  }
+
+  window._opChart = new Chart(canvas, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: true, position: 'bottom', labels:{boxWidth:12, font:{size:10}} } },
+      scales: {
+        x: { grid: { color: 'rgba(148,163,184,0.1)' }, ticks:{font:{size:10}} },
+        y: { grid: { color: 'rgba(148,163,184,0.1)' }, ticks: { font:{size:10}, callback: v => '$'+(v/1000)+'k' } }
+      }
+    }
+  });
+}
+
+function renderTopProducts(rows) {
+  const wrap = $('top-products');
+  if (!wrap) return;
+
+  if (!rows || rows.length === 0) {
+    wrap.innerHTML = '';
+    $('top-products-empty').classList.remove('hidden');
+    return;
+  }
+  $('top-products-empty').classList.add('hidden');
+
+  // Aggregate by product (using the rich aliases from ingest)
+  const byProd = {};
+  rows.forEach(r => {
+    const name = r.producto || r.descripcion || r.articulo || r.clave || r.ticket_id || 'Sin nombre';
+    const cant = Number(r.cantidad) || 1;
+    const imp = Number(r.importe) || Number(r.total) || 0;
+    if (!byProd[name]) byProd[name] = { cant:0, imp:0, tickets:0 };
+    byProd[name].cant += cant;
+    byProd[name].imp += imp;
+    byProd[name].tickets += Number(r.tickets || 0);
+  });
+
+  const sorted = Object.entries(byProd)
+    .sort((a,b) => b[1].imp - a[1].imp)
+    .slice(0, 8);
+
+  let html = `<table class="top-table"><thead><tr>
+    <th style="width:38%">Artículo</th>
+    <th class="text-right">Cant</th>
+    <th class="text-right">Importe</th>
+    <th></th>
+  </tr></thead><tbody>`;
+
+  sorted.forEach(([name, agg]) => {
+    const tickets = Number(agg.tickets || 0);
+    html += `<tr>
+      <td><div class="top-prod-name">${esc(name)}</div></td>
+      <td class="text-right font-semibold">${agg.cant}</td>
+      <td class="text-right font-semibold tabular-nums">${fmtMXN(agg.imp)}</td>
+      <td><span class="top-delta">${tickets ? tickets + ' tickets' : ''}</span></td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+function renderPaymentMix(rows) {
+  const wrap = $('payment-mix');
+  if (!wrap) return;
+
+  const byPay = {};
+  let total = 0;
+  rows.forEach(r => {
+    const p = r.forma_pago || r.pago || 'Efectivo';
+    const v = Number(r.total) || Number(r.importe) || 0;
+    byPay[p] = (byPay[p] || 0) + v;
+    total += v;
+  });
+
+  if (total === 0) {
+    wrap.innerHTML = '<div class="text-[var(--text-3)] text-xs py-3">Sin ventas en el rango.</div>';
+    return;
+  }
+
+  const entries = Object.entries(byPay).sort((a,b)=>b[1]-a[1]);
+
+  let html = '';
+  entries.forEach(([name, val]) => {
+    const pct = (val / total) * 100;
+    html += `
+      <div class="pay-row">
+        <div class="pay-label">${esc(name)}</div>
+        <div class="pay-bar"><div class="pay-fill" style="width:${pct}%"></div></div>
+        <div class="pay-pct">${pct.toFixed(0)}%</div>
+      </div>`;
+  });
+  wrap.innerHTML = html;
+
+  const insight = $('payment-insight');
+  if (insight) {
+    const top = entries[0];
+    insight.textContent = top ? `${top[0]} domina con ${((top[1]/total)*100).toFixed(0)}% del período.` : '';
+  }
+}
+
+function renderOperativeAlerts(k, rows, prevK) {
+  const wrap = $('alertas-operativas');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+
+  const alerts = [];
+
+  const ventas = k.ventas || 0;
+  if (prevK && prevK.ventas > 0) {
+    const d = ((ventas - prevK.ventas) / prevK.ventas) * 100;
+    if (d < -15) alerts.push({ type:'warn', msg: `Caída fuerte de ventas: ${d.toFixed(0)}% vs período anterior. Revisa promociones y stock.` });
+    else if (d > 25) alerts.push({ type:'positive', msg: `Excelente: +${d.toFixed(0)}% vs período anterior.` });
+  }
+
+  // Payment concentration
+  const payTotal = rows.reduce((s,r)=> s + (Number(r.total)||Number(r.importe)||0), 0);
+  if (payTotal > 0) {
+    const cash = rows.filter(r => (r.forma_pago||'').toLowerCase().includes('efect')).reduce((s,r)=>s+(Number(r.total)||0),0);
+    const cashPct = (cash / payTotal) * 100;
+    if (cashPct > 70) alerts.push({ type:'info', msg: `Alta concentración en efectivo (${cashPct.toFixed(0)}%). Considera incentivar otros métodos.` });
+  }
+
+  if (alerts.length === 0) {
+    $('alertas-empty').classList.remove('hidden');
+    return;
+  }
+  $('alertas-empty').classList.add('hidden');
+
+  alerts.slice(0,4).forEach(a => {
+    const div = document.createElement('div');
+    div.className = `alert-card ${a.type === 'warn' ? 'warn' : (a.type==='positive'?'positive':'info')}`;
+    div.innerHTML = `<div class="flex-1">${a.msg}</div>`;
+    wrap.appendChild(div);
+  });
+}
+
+/* === Real sparklines for KPIs (#1) === */
+const sparklineInstances = {};
+
+function renderMiniSparkline(canvasId, data, color = '#1e3a8a') {
+  const canvas = $(canvasId);
+  if (!canvas || !window.Chart || !data || data.length < 2) return;
+
+  if (sparklineInstances[canvasId]) {
+    sparklineInstances[canvasId].destroy();
+  }
+
+  sparklineInstances[canvasId] = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: data.map((_, i) => i),
+      datasets: [{
+        data: data,
+        borderColor: color,
+        borderWidth: 1.5,
+        tension: 0.35,
+        pointRadius: 0,
+        fill: false
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { displayColors: false } },
+      scales: {
+        x: { display: false },
+        y: { display: false }
+      },
+      elements: { line: { borderJoinStyle: 'round' } }
+    }
+  });
+}
+
+/* Wire new global controls (header) */
+function wireGlobalControls() {
+  // Header range pills
+  document.querySelectorAll('#global-range .range-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.range;
+      document.querySelectorAll('#global-range .range-pill').forEach(x => x.classList.remove('active'));
+      btn.classList.add('active');
+      setGlobalRange(key);
+    });
+  });
+
+  // Mobile range
+  const mob = $('global-range-mobile');
+  if (mob) {
+    ['hoy','ayer','7d','mes'].forEach(k => {
+      const b = document.createElement('button');
+      b.className = 'range-pill px-3 py-1 text-xs';
+      b.textContent = k.toUpperCase();
+      b.dataset.range = k;
+      b.addEventListener('click', () => setGlobalRange(k));
+      mob.appendChild(b);
+    });
+  }
+
+  // Compare toggle - cycles: off → Período anterior → YoY → off
+  const cmpBtn = $('btn-compare-toggle');
+  if (cmpBtn) {
+    cmpBtn.addEventListener('click', () => {
+      const modes = ['off', 'prev', 'yoy'];
+      let idx = modes.indexOf(window.SC_DASH.compareMode || 'off');
+      idx = (idx + 1) % modes.length;
+      window.SC_DASH.compareMode = modes[idx];
+      window.SC_DASH.compare = window.SC_DASH.compareMode !== 'off';
+
+      const label = $('compare-label');
+      if (label) {
+        label.textContent = window.SC_DASH.compareMode === 'yoy' ? 'YoY' : 
+                           (window.SC_DASH.compareMode === 'prev' ? 'Período ant.' : 'Comparar');
+      }
+      cmpBtn.classList.toggle('!bg-white/20', window.SC_DASH.compare);
+
+      try {
+        const saved = JSON.parse(localStorage.getItem('sc-dash-range') || '{}');
+        saved.compareMode = window.SC_DASH.compareMode;
+        localStorage.setItem('sc-dash-range', JSON.stringify(saved));
+      } catch(e){}
+
+      cargarDashboardOperativo();
+    });
+  }
+
+  // Dark toggle
+  const darkBtn = $('btn-dark-toggle');
+  if (darkBtn) {
+    darkBtn.addEventListener('click', () => {
+      const html = document.documentElement;
+      const isDark = html.classList.toggle('dark');
+      localStorage.setItem('sc-dark', isDark ? '1' : '0');
+      $('dark-icon').textContent = isDark ? '☀️' : '🌙';
+    });
+    // initial icon
+    $('dark-icon').textContent = document.documentElement.classList.contains('dark') ? '☀️' : '🌙';
+  }
+
+  // Refresh button
+  const refBtn = $('btn-refresh');
+  if (refBtn) refBtn.addEventListener('click', () => cargarDashboardOperativo(true));
+
+  // Make old range buttons also trigger new dashboard when on Panel view
+  document.querySelectorAll('#range-btns .range-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      const key = b.dataset.range === 'semana' ? '7d' : (b.dataset.range === 'mes' ? 'mes' : b.dataset.range);
+      if (key !== 'custom') setGlobalRange(key);
+    });
+  });
+}
+
+/* Expose new dashboard for console/manual use */
+window.cargarDashboardOperativo = cargarDashboardOperativo;
+
+/* === Modo Solo Ventas ultra-limpio (#4) === */
+let soloVentasActive = false;
+
+function toggleSoloVentasMode() {
+  soloVentasActive = !soloVentasActive;
+  const btn = $('btn-solo-ventas');
+  const app = document.getElementById('app');
+
+  if (btn) {
+    btn.textContent = soloVentasActive ? 'Modo Completo' : 'Solo Ventas';
+    btn.classList.toggle('!bg-orange-500', soloVentasActive);
+    btn.classList.toggle('!text-white', soloVentasActive);
+    btn.classList.toggle('!border-orange-500', soloVentasActive);
+  }
+
+  // Simple implementation: hide non-sales heavy elements
+  if (app) {
+    app.classList.toggle('solo-ventas-mode', soloVentasActive);
+  }
+
+  // Re-render with cleaner focus if needed
+  if (soloVentasActive) {
+    // Could filter KPIs in future, for now just visual emphasis
+    console.log('%c[Panel] Modo Solo Ventas activado', 'color:#f97316');
+  }
+}
+
+// Add some CSS for solo ventas mode (cleaner focus)
+const soloStyle = document.createElement('style');
+soloStyle.textContent = `
+  .solo-ventas-mode .kpi-modern:nth-child(n+5) { opacity: 0.35; } /* hide utilidad/margen a bit */
+  .solo-ventas-mode #alertas-operativas { display: none; }
+`;
+document.head.appendChild(soloStyle);
+
+/* === Filtros rápidos por caja y forma de pago (#2) + Hourly (#3) + Mejor YoY (#4) === */
+
+let panelFiltradoRows = [];
+
+function poblarFiltrosPanel(panel) {
+  const cajas = new Set(panel?.cajas || []);
+  const pagos = new Set(panel?.pagos || []);
+  const selCaja = $('filtro-caja');
+  const selPago = $('filtro-pago');
+
+  if (selCaja) {
+    const actual = selCaja.value;
+    selCaja.innerHTML = '<option value="">Todas las cajas</option>' +
+      [...cajas].sort().map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    if ([...cajas].includes(actual)) selCaja.value = actual;
+  }
+  if (selPago) {
+    const actual = selPago.value;
+    selPago.innerHTML = '<option value="">Todas las formas de pago</option>' +
+      [...pagos].sort().map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+    if ([...pagos].includes(actual)) selPago.value = actual;
+  }
+}
+
+function aplicarFiltrosPanel() {
+  cargarDashboardOperativo(true);
+}
+
+function limpiarFiltrosPanel() {
+  const selCaja = $('filtro-caja');
+  const selPago = $('filtro-pago');
+  if (selCaja) selCaja.value = '';
+  if (selPago) selPago.value = '';
+  cargarDashboardOperativo(true);
+}
+
+/* Hourly chart (#3) */
+function renderHourlyChart(rows) {
+  const section = $('hourly-section');
+  const canvas = $('chart-hourly');
+  if (!section || !canvas || !window.Chart) return;
+
+  // Try to extract hour from common fields
+  const hourly = {};
+  let hasHora = false;
+
+  rows.forEach(r => {
+    let hora = r.hora;
+    if (!hora && r.fecha_hora) hora = r.fecha_hora;
+    if (!hora && r.timestamp) hora = r.timestamp;
+
+    if (hora) {
+      hasHora = true;
+      const h = String(hora).slice(0,2);
+      const val = Number(r.total) || Number(r.importe) || 0;
+      hourly[h] = (hourly[h] || 0) + val;
+    }
+  });
+
+  if (!hasHora || Object.keys(hourly).length < 3) {
+    section.classList.add('hidden');
+    return;
+  }
+
+  section.classList.remove('hidden');
+
+  const labels = Object.keys(hourly).sort();
+  const data = labels.map(h => hourly[h]);
+
+  if (window._hourlyChart) window._hourlyChart.destroy();
+
+  window._hourlyChart = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: labels.map(h => h + ':00'),
+      datasets: [{
+        label: 'Ventas por hora',
+        data,
+        backgroundColor: 'rgba(249,115,22,0.65)',
+        borderColor: '#f97316',
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(148,163,184,0.1)' } } }
+    }
+  });
+}
+
+/* Enhanced YoY comparison (#4) */
+function calcYoYRange(desde, hasta) {
+  const d = new Date(desde);
+  const h = new Date(hasta);
+  d.setFullYear(d.getFullYear() - 1);
+  h.setFullYear(h.getFullYear() - 1);
+  return {
+    desde: d.toISOString().slice(0,10),
+    hasta: h.toISOString().slice(0,10)
+  };
+}
+
+/* === PDF Export of Operational Panel (#5) === */
+async function exportarPanelPDF() {
+  const { jsPDF } = window.jspdf;
+  if (!jsPDF) {
+    alert('No se pudo cargar el generador de PDF.');
+    return;
+  }
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+
+  const dash = window.SC_DASH || {};
+  const kpis = dash.kpis || {};
+
+  // === HEADER ===
+  doc.setFillColor(30, 58, 138);
+  doc.rect(0, 0, pageW, 24, 'F');
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(18);
+  doc.text('SUPER CHEAP', 15, 13);
+  doc.setFontSize(11);
+  doc.text('Panel Operativo de Ventas • SICAR', 15, 19);
+  doc.setFontSize(9);
+  doc.text(`${dash.desde || ''} → ${dash.hasta || ''}`, pageW - 15, 13, { align: 'right' });
+  doc.text(new Date().toLocaleDateString('es-MX'), pageW - 15, 19, { align: 'right' });
+
+  let y = 32;
+  doc.setTextColor(0,0,0);
+
+  // === KPIs ===
+  doc.setFontSize(11);
+  doc.setFont(undefined, 'bold');
+  doc.text('KPIs DEL PERÍODO', 15, y);
+  y += 6;
+  doc.setFont(undefined, 'normal');
+  doc.setFontSize(10);
+
+  const ventas = kpis.ventas || 0;
+  const utilidad = kpis.utilidad || 0;
+  const margen = kpis.margen || 0;
+
+  const kpiLines = [
+    `Ventas: ${fmtMXN(ventas)}`,
+    `Utilidad Neta: ${fmtMXN(utilidad)}`,
+    `Margen: ${margen.toFixed(1)}%`,
+    `Comparación: ${dash.compareMode === 'yoy' ? 'YoY' : (dash.compareMode === 'prev' ? 'Período anterior' : 'Sin comparar')}`
+  ];
+  kpiLines.forEach((line, i) => {
+    doc.text(line, 15 + (i % 2) * 95, y + Math.floor(i / 2) * 6);
+  });
+  y += 16;
+
+  // === TOP ARTÍCULOS ===
+  doc.setFont(undefined, 'bold');
+  doc.setFontSize(11);
+  doc.text('TOP ARTÍCULOS', 15, y);
+  y += 5;
+
+  const topRows = [];
+  document.querySelectorAll('#top-products table tbody tr').forEach(tr => {
+    const tds = tr.querySelectorAll('td');
+    if (tds.length >= 3) {
+      topRows.push([
+        tds[0].innerText.trim().substring(0, 40),
+        tds[1].innerText.trim(),
+        tds[2].innerText.trim()
+      ]);
+    }
+  });
+
+  if (topRows.length > 0 && doc.autoTable) {
+    doc.autoTable({
+      startY: y,
+      head: [['Artículo', 'Cant', 'Importe']],
+      body: topRows.slice(0, 6),
+      theme: 'grid',
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [30,58,138], textColor: 255 }
+    });
+    y = doc.lastAutoTable.finalY + 6;
+  } else {
+    y += 4;
+    topRows.slice(0, 5).forEach(r => {
+      doc.text(`${r[0]} — ${r[1]} uds — ${r[2]}`, 18, y);
+      y += 5;
+    });
+    y += 4;
+  }
+
+  // === FORMAS DE PAGO ===
+  doc.setFont(undefined, 'bold');
+  doc.setFontSize(11);
+  doc.text('MIX DE FORMAS DE PAGO', 15, y);
+  y += 5;
+  doc.setFont(undefined, 'normal');
+  doc.setFontSize(9);
+
+  document.querySelectorAll('#payment-mix .pay-row').forEach(row => {
+    const label = row.querySelector('.pay-label')?.innerText || '';
+    const pct = row.querySelector('.pay-pct')?.innerText || '';
+    doc.text(`• ${label}: ${pct}`, 18, y);
+    y += 4.5;
+  });
+
+  y += 6;
+
+  // === CHART IMAGE (main trend) ===
+  const chartCanvas = document.getElementById('chart-ventas-operativo');
+  if (chartCanvas) {
+    try {
+      const chartImg = chartCanvas.toDataURL('image/png', 0.85);
+      const imgWidth = pageW - 30;
+      const imgHeight = 55; // nice height in mm
+      if (y + imgHeight > 260) {
+        doc.addPage();
+        y = 20;
+      }
+      doc.addImage(chartImg, 'PNG', 15, y, imgWidth, imgHeight);
+      y += imgHeight + 6;
+    } catch (e) {
+      // fallback: skip image
+    }
+  }
+
+  // === ALERTAS ===
+  const alertEls = document.querySelectorAll('#alertas-operativas .alert-card');
+  if (alertEls.length > 0) {
+    doc.setFont(undefined, 'bold');
+    doc.setFontSize(11);
+    doc.text('ALERTAS ACCIONABLES', 15, y);
+    y += 5;
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(9);
+    alertEls.forEach(el => {
+      const text = el.innerText.trim().substring(0, 85);
+      doc.text(`• ${text}`, 18, y);
+      y += 5;
+    });
+  }
+
+  // Footer
+  y = Math.max(y, 265);
+  doc.setFontSize(8);
+  doc.setTextColor(100);
+  doc.text('SUPER CHEAP • Datos sincronizados automáticamente desde SICAR • Panel Operativo 2026', 15, y);
+
+  const filename = `SUPER_CHEAP_Panel_${dash.desde || 'rango'}_${dash.hasta || ''}.pdf`;
+  doc.save(filename);
 }
 
 document.addEventListener('DOMContentLoaded', init);

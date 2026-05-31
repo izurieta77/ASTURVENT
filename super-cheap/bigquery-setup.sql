@@ -35,6 +35,28 @@ CREATE TABLE IF NOT EXISTS `TU_PROYECTO.super_cheap.ventas` (
   ts         TIMESTAMP
 );
 
+-- Detalle por articulo de SICAR. Alimenta top articulos, cajas, horas y
+-- tendencias por producto sin romper la tabla `ventas` agregada por ticket.
+CREATE TABLE IF NOT EXISTS `TU_PROYECTO.super_cheap.ventas_articulos` (
+  id           STRING,
+  fecha        DATE,
+  ticket_id    STRING,
+  linea_key    STRING,
+  caja         STRING,
+  hora         STRING,
+  producto     STRING,
+  clave        STRING,
+  cantidad     NUMERIC,
+  precio       NUMERIC,
+  importe      NUMERIC,
+  forma_pago   STRING,
+  departamento STRING,
+  categoria    STRING,
+  fuente       STRING,
+  activo       BOOL,
+  ts           TIMESTAMP
+);
+
 -- Tabla de compras (capturadas a mano o via sc-ticket/sc-data).
 CREATE TABLE IF NOT EXISTS `TU_PROYECTO.super_cheap.compras` (
   id                   STRING,

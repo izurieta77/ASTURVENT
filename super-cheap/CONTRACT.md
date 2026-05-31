@@ -65,6 +65,7 @@ Lee un ticket con IA. Requiere Bearer token válido.
 
 ## Esquema BigQuery  (dataset `super_cheap`, proyecto = `GCP_PROJECT_ID`)
 - **ventas**:  `fecha DATE, ticket_id STRING, total NUMERIC, forma_pago STRING, items INT64, fuente STRING, ts TIMESTAMP`
+- **ventas_articulos**: `fecha DATE, ticket_id STRING, linea_key STRING, caja STRING, hora STRING, producto STRING, clave STRING, cantidad NUMERIC, precio NUMERIC, importe NUMERIC, forma_pago STRING, departamento STRING, categoria STRING, fuente STRING, activo BOOL, ts TIMESTAMP`
 - **compras**: `fecha DATE, proveedor STRING, subtotal NUMERIC, iva NUMERIC, ieps NUMERIC, total NUMERIC, impuestos_estimados BOOL, categoria STRING, conceptos STRING, foto_url STRING, raw_ocr STRING, ts TIMESTAMP`
 - **gastos**:  `fecha DATE, concepto STRING, categoria STRING, subtotal NUMERIC, iva NUMERIC, ieps NUMERIC, total NUMERIC, impuestos_estimados BOOL, foto_url STRING, ts TIMESTAMP`
 - **nomina**:  `periodo STRING, fecha DATE, empleado STRING, monto NUMERIC, tipo STRING, ts TIMESTAMP`
@@ -130,7 +131,24 @@ mes; ventas de ayer < 60% del mismo día de la semana pasada; salud SICAR (sin v
   `forma_pago|metodo_pago`, y opcionalmente `producto`, `cantidad`, `importe`, `caja`.
 - Si llegan lineas de producto, se agrupan por `venta_key` para insertar un solo ticket
   en BigQuery y mantener KPIs compatibles.
+- Las mismas lineas tambien se guardan en `ventas_articulos` cuando existe la tabla,
+  para alimentar top articulos, cajas, horas, filtros y respaldo historico por producto.
 - Respuesta `{ ok:true, recibidos, validos, insertados, duplicados, descartados }`.
+
+### GET `?action=ventas_panel&desde&hasta&caja=&pago=`
+Devuelve datos ya agregados para el Panel Operativo:
+```
+{ ok:true,
+  detalle_disponible:Boolean,
+  kpis:{ventas, compras, gastos, nomina, utilidad, margen, tickets, items, ticket_promedio},
+  serie_ventas:[{fecha,total,tickets,items}],
+  top_articulos:[{producto, clave, cantidad, importe, tickets}],
+  formas_pago:[{forma_pago,total,tickets,pct}],
+  por_hora:[{hora,total,tickets}],
+  cajas:[String], pagos:[String],
+  ultima_venta:String|null
+}
+```
 
 ## sc-ingest v2 compatible
 - Sigue aceptando el contrato original `{ ventas:[ { fecha, ticket_id, total, forma_pago, items } ] }`.

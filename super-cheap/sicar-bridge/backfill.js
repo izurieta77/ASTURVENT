@@ -222,12 +222,15 @@ async function runSyncForDate(fecha) {
 }
 
 function readArgs(argv) {
-  const startDate = argv[0] || DEFAULT_START_DATE;
-  const endDate = argv[1] || DEFAULT_END_DATE;
+  const args = (argv || []).map(String);
+  const reset = args.includes('--reset');
+  const positional = args.filter((arg) => !arg.startsWith('--'));
+  const startDate = positional[0] || DEFAULT_START_DATE;
+  const endDate = positional[1] || DEFAULT_END_DATE;
   if (!parseIsoDate(startDate)) throw new Error(`Fecha inicial invalida "${startDate}". Usa YYYY-MM-DD.`);
   if (!parseIsoDate(endDate)) throw new Error(`Fecha final invalida "${endDate}". Usa YYYY-MM-DD.`);
   if (startDate.localeCompare(endDate) > 0) throw new Error('La fecha inicial no puede ser mayor que la final.');
-  return { startDate, endDate };
+  return { startDate, endDate, reset };
 }
 
 async function main() {
@@ -235,12 +238,12 @@ async function main() {
   const guard = await startSingleInstanceGuard();
   if (!guard) return;
 
-  const { startDate, endDate } = readArgs(process.argv.slice(2));
-  let state = loadState(startDate, endDate);
+  const { startDate, endDate, reset } = readArgs(process.argv.slice(2));
+  let state = reset ? freshState(startDate, endDate) : loadState(startDate, endDate);
   state.status = state.status === 'complete' ? 'complete' : 'running';
   state = saveState(state);
 
-  log(`Backfill iniciado. Rango=${startDate}..${endDate}, siguiente=${state.nextDate}, total=${state.totalDays}, reintento=${RETRY_SECONDS}s, timeout=${CHILD_TIMEOUT_MINUTES} min.`);
+  log(`Backfill iniciado. Rango=${startDate}..${endDate}, siguiente=${state.nextDate}, total=${state.totalDays}, reintento=${RETRY_SECONDS}s, timeout=${CHILD_TIMEOUT_MINUTES} min, reset=${reset ? 'si' : 'no'}.`);
 
   while (state.nextDate && state.nextDate.localeCompare(endDate) <= 0) {
     const fecha = state.nextDate;

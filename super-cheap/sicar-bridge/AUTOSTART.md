@@ -45,5 +45,16 @@ Tambien puedes abrir `install-backfill-startup.vbs` para copiar ese launcher al
 Inicio de Windows. Si el historico ya termino, volver a arrancarlo no duplica datos
 porque `sync.js` reemplaza cada fecha completa antes de subirla otra vez.
 
+Para rehacer el historico desde cero despues de cambiar la consulta o activar el
+detalle por articulo, ejecuta:
+
+```bat
+cd C:\super-cheap
+node backfill.js 2024-05-01 2026-05-30 --reset
+```
+
+O abre `start-backfill-reset-2024-05-to-2026-05-30.vbs` para dejarlo corriendo
+oculto. Tambien es seguro: cada fecha se reemplaza completa antes de subirse.
+
 No pongas claves en estos scripts. Las credenciales locales viven en `config.json` o
 en Windows, y ese archivo no debe subirse a Git.
