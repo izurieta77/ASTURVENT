@@ -6,6 +6,7 @@
   "main": "sync.js",
   "scripts": {
     "start": "node sync.js",
+    "daemon": "node daemon.js",
     "descubrir": "node descubrir.js"
   },
   "engines": {

@@ -1,0 +1,10 @@
+config.json
+logs/
+*.xlsx
+db.txt
+aes.txt
+superbin.txt
+sicar.zip
+sicar-unzip/
+javap*.txt
+COMANDOS-A-EJECUTAR.txt
