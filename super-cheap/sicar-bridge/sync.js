@@ -21,6 +21,7 @@ const mysql = require('mysql2/promise');
 
 const DEFAULT_SITE = 'https://supercheapp.netlify.app';
 const LOG_DIR = path.join(__dirname, 'logs');
+const DEFAULT_HTTP_TIMEOUT_SECONDS = 45;
 
 const ALIASES = {
   fecha: ['fecha', 'date', 'dia', 'fecha venta', 'fecha de venta'],
@@ -57,6 +58,13 @@ function log(message, level = 'INFO') {
 function fail(message, code = 1) {
   log(message, 'ERROR');
   process.exit(code);
+}
+
+function numberEnv(name, fallback, min, max) {
+  const raw = process.env[name];
+  const n = raw === undefined ? fallback : Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.floor(n)));
 }
 
 function hoyISO() {
@@ -552,18 +560,32 @@ async function enviar(cfg, ventas, dryRun, opts = {}) {
   if (!cfg.ingestToken) throw new Error('Falta ingestToken en config.json.');
 
   const url = siteUrl + '/.netlify/functions/sc-ingest';
+  const timeoutSeconds = numberEnv('SC_SYNC_HTTP_TIMEOUT_SECONDS', DEFAULT_HTTP_TIMEOUT_SECONDS, 10, 300);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutSeconds * 1000);
   log(`Enviando ventas a ${url}`);
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Ingest-Token': cfg.ingestToken,
-    },
-    body: JSON.stringify({ ventas, replaceFecha: opts.replaceFecha || undefined }),
-  });
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Ingest-Token': cfg.ingestToken,
+      },
+      body: JSON.stringify({ ventas, replaceFecha: opts.replaceFecha || undefined }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err && err.name === 'AbortError') {
+      throw new Error(`Tiempo agotado enviando a Netlify despues de ${timeoutSeconds}s. Se reintentara.`);
+    }
+    throw new Error(`No pude conectar con Netlify: ${err.message || String(err)}. Se reintentara.`);
+  } finally {
+    clearTimeout(timeout);
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data.ok === false) {
-    throw new Error(`Netlify rechazo el envio (HTTP ${res.status}): ${data.error || 'sin detalle'}`);
+    throw new Error(`Netlify rechazo el envio (HTTP ${res.status}): ${data.error || 'sin detalle'}. Se reintentara.`);
   }
   return data;
 }

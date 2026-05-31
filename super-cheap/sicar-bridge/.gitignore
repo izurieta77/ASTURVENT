@@ -1,4 +1,5 @@
 config.json
+sync-state.json
 logs/
 *.xlsx
 db.txt
