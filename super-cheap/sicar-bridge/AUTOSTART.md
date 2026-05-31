@@ -41,5 +41,9 @@ Para dejar ese historico corriendo oculto en la PC de SICAR, abre
 el proceso se queda en la misma fecha y reintenta. Si la PC se apaga, vuelve a
 ejecutar el mismo VBS y continuara desde `backfill-state.json`.
 
+Tambien puedes abrir `install-backfill-startup.vbs` para copiar ese launcher al
+Inicio de Windows. Si el historico ya termino, volver a arrancarlo no duplica datos
+porque `sync.js` reemplaza cada fecha completa antes de subirla otra vez.
+
 No pongas claves en estos scripts. Las credenciales locales viven en `config.json` o
 en Windows, y ese archivo no debe subirse a Git.
