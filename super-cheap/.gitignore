@@ -3,6 +3,8 @@ node_modules/
 .netlify/
 sicar-bridge/config.json
 sicar-bridge/node_modules/
+sicar-bridge/logs/
+sicar-bridge/imports/
 *.log
 # Bitácora con secretos/claves: NO subir a git.
 CONVERSACION-SUPER-CHEAP.txt

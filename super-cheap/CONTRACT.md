@@ -123,6 +123,22 @@ mes; ventas de ayer < 60% del mismo día de la semana pasada; salud SICAR (sin v
   Si GCS no está configurado o falla, se guarda igual SIN fotos (no bloquea).
 ### POST `{action:"actualizar", tabla, id, fila}` → `{ ok:true, actualizados:1 }`
 ### POST `{action:"eliminar", tabla, id}` → `{ ok:true, eliminados:1 }` (soft delete)
+### POST `{action:"importar_ventas", ventas:[...]}` → Plan B Excel SICAR
+- Requiere Bearer token del dashboard; NO expone `SICAR_INGEST_TOKEN` en el navegador.
+- Usa el mismo normalizador que `sc-ingest`.
+- Campos aceptados por fila: `fecha`, `ticket_id`, `venta_key|source_key`, `total`,
+  `forma_pago|metodo_pago`, y opcionalmente `producto`, `cantidad`, `importe`, `caja`.
+- Si llegan lineas de producto, se agrupan por `venta_key` para insertar un solo ticket
+  en BigQuery y mantener KPIs compatibles.
+- Respuesta `{ ok:true, recibidos, validos, insertados, duplicados, descartados }`.
+
+## sc-ingest v2 compatible
+- Sigue aceptando el contrato original `{ ventas:[ { fecha, ticket_id, total, forma_pago, items } ] }`.
+- Para evitar duplicados mas robustos, el bridge nuevo manda `venta_key` estable
+  (`sicar:fecha:caja:ticket` o `excel:fecha:caja:ticket`); esa llave se guarda en
+  `ventas.ticket_id`.
+- Si no viene `venta_key`, se conserva el `ticket_id` recibido para no duplicar datos
+  historicos enviados por versiones anteriores.
 
 ## sc-ticket — multi-foto + fecha/hora + manuscritos (Skill 8)
 - Entrada: `{ imagenes_base64:[...], tipo:"compra|gasto" }` (acepta también `imagen_base64`).

@@ -129,6 +129,7 @@ body{
 @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
 .section-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px}
+.row-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .h1{font-family:var(--font-d);font-weight:800;font-size:clamp(20px,4vw,28px);letter-spacing:-0.5px}
 .h2{font-family:var(--font-d);font-weight:700;font-size:18px;letter-spacing:-0.3px}
 .h3{font-family:var(--font-d);font-weight:700;font-size:14px}
@@ -408,11 +409,15 @@ tr:hover td{background:var(--surface-2)}
     <!-- ====================== VENTAS ====================== -->
     <section id="view-ventas" class="view">
       <div class="section-head"><h1 class="h1">Ventas</h1>
-        <button class="btn btn-sm btn-ghost" onclick="cargarVentas()">Actualizar</button>
+        <div class="row-actions no-print">
+          <button class="btn btn-sm btn-ghost" onclick="cargarVentas()">Actualizar</button>
+          <button class="btn btn-sm btn-orange" onclick="$('ventas-excel').click()">Importar Excel</button>
+          <input id="ventas-excel" type="file" accept=".xlsx,.xls,.csv" class="hidden" onchange="importarVentasExcel(this.files)">
+        </div>
       </div>
       <div class="banner-warn">
         <span>🔄</span>
-        <span><b>Se sincroniza desde SICAR</b>Las ventas entran automáticamente desde tu punto de venta. Esta tabla es solo de lectura.</span>
+        <span><b>Se sincroniza desde SICAR</b>Las ventas entran automáticamente desde tu punto de venta. Si SICAR no está listo, puedes importar un Excel exportado de SICAR.</span>
       </div>
       <div class="card">
         <div id="ventas-list"><div class="loading-state">Cargando…</div></div>
@@ -1083,6 +1088,138 @@ function cargarVentas(){ return cargarLista('ventas', 'ventas-list', false); }
 function cargarCompras(){ return cargarLista('compras', 'compras-list', true); }
 function cargarGastos(){ return cargarLista('gastos', 'gastos-list', true); }
 function cargarNomina(){ return cargarLista('nomina', 'nomina-list', true); }
+
+/* ---------- Importar ventas SICAR desde Excel (Plan B) ---------- */
+const VENTAS_EXCEL_ALIASES = {
+  fecha: ['fecha', 'date', 'dia', 'fecha venta', 'fecha de venta'],
+  ticket_id: ['ticket', 'ticket id', 'ticket_id', 'folio', 'folio venta', 'folio_ticket', 'id venta', 'id_venta', 'venta_id'],
+  caja: ['caja', 'terminal', 'pos', 'sucursal', 'estacion'],
+  producto: ['producto', 'descripcion', 'descripcion producto', 'articulo', 'nombre articulo', 'sku', 'codigo'],
+  cantidad: ['cantidad', 'cant', 'qty', 'unidades', 'piezas'],
+  importe: ['importe', 'total linea', 'total_linea', 'subtotal linea', 'precio total'],
+  total: ['total', 'total ticket', 'total_ticket', 'monto', 'importe total'],
+  forma_pago: ['forma pago', 'forma_pago', 'metodo pago', 'metodo_pago', 'pago', 'payment'],
+};
+function normalizarHeaderExcel(s){
+  return String(s || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+function valorExcel(row, key){
+  const aliases = VENTAS_EXCEL_ALIASES[key] || [];
+  for(const alias of aliases){
+    const v = row[normalizarHeaderExcel(alias)];
+    if(v !== undefined && v !== null && String(v).trim() !== '') return v;
+  }
+  return '';
+}
+function numeroExcel(v){
+  if(v === undefined || v === null || v === '') return null;
+  if(typeof v === 'number') return isFinite(v) ? v : null;
+  let s = String(v).trim();
+  if(!s) return null;
+  const negativo = /^\(.*\)$/.test(s);
+  s = s.replace(/[()$]/g, '').replace(/\s+/g, '');
+  const comma = s.lastIndexOf(',');
+  const dot = s.lastIndexOf('.');
+  if(comma > dot) s = s.replace(/\./g, '').replace(',', '.');
+  else s = s.replace(/,/g, '');
+  const n = Number(s);
+  if(!isFinite(n)) return null;
+  return negativo ? -n : n;
+}
+function fechaExcel(v){
+  if(v instanceof Date && !isNaN(v)) return isoDe(v);
+  if(typeof v === 'number' && typeof XLSX !== 'undefined'){
+    const p = XLSX.SSF.parse_date_code(v);
+    if(p) return p.y + '-' + String(p.m).padStart(2,'0') + '-' + String(p.d).padStart(2,'0');
+  }
+  const s = String(v || '').trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  let m = /^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/.exec(s);
+  if(m) return m[3] + '-' + m[2].padStart(2,'0') + '-' + m[1].padStart(2,'0');
+  m = /^(\d{4})[\/.-](\d{1,2})[\/.-](\d{1,2})$/.exec(s);
+  if(m) return m[1] + '-' + m[2].padStart(2,'0') + '-' + m[3].padStart(2,'0');
+  return '';
+}
+function ventaKeyExcel(fecha, ticket, caja){
+  return ['excel', fecha, String(caja || 'sin-caja'), String(ticket || '')]
+    .join(':')
+    .replace(/\s+/g, '-')
+    .toLowerCase();
+}
+async function importarVentasExcel(fileList){
+  const input = $('ventas-excel');
+  const file = fileList && fileList[0];
+  if(input) input.value = '';
+  if(!file) return;
+  if(typeof XLSX === 'undefined'){ alert('La libreria de Excel aun no carga. Intenta de nuevo.'); return; }
+
+  let rows;
+  try{
+    const wb = XLSX.read(await file.arrayBuffer(), { cellDates:true });
+    const sheetName = wb.SheetNames[0];
+    rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval:'', raw:true });
+  }catch(e){
+    alert('No pude leer el archivo. Exportalo de SICAR como .xlsx, .xls o .csv e intenta de nuevo.');
+    return;
+  }
+
+  let descartadas = 0;
+  const ventas = rows.map(r => {
+    const row = {};
+    Object.keys(r || {}).forEach(k => { row[normalizarHeaderExcel(k)] = r[k]; });
+    const fecha = fechaExcel(valorExcel(row, 'fecha'));
+    const ticket = String(valorExcel(row, 'ticket_id') || '').trim();
+    const caja = String(valorExcel(row, 'caja') || '').trim();
+    const importe = numeroExcel(valorExcel(row, 'importe'));
+    const total = numeroExcel(valorExcel(row, 'total'));
+    if(!fecha || !ticket || (importe === null && total === null)){
+      descartadas += 1;
+      return null;
+    }
+    const venta = {
+      fecha,
+      venta_key: ventaKeyExcel(fecha, ticket, caja),
+      ticket_id: ticket,
+      caja,
+      forma_pago: String(valorExcel(row, 'forma_pago') || 'desconocido').trim(),
+    };
+    const producto = String(valorExcel(row, 'producto') || '').trim();
+    const cantidad = numeroExcel(valorExcel(row, 'cantidad'));
+    if(producto) venta.producto = producto;
+    if(cantidad !== null) venta.cantidad = cantidad;
+    if(importe !== null) venta.importe = importe;
+    if(total !== null) venta.total = total;
+    return venta;
+  }).filter(Boolean);
+
+  if(!ventas.length){
+    alert('No encontre filas validas. El Excel debe tener al menos fecha, ticket/folio y total o importe.');
+    return;
+  }
+  if(!confirm('Se importaran ' + ventas.length + ' fila(s) de venta. El sistema evitara duplicados por ticket.')){
+    return;
+  }
+
+  try{
+    const r = await apiFetch('/sc-data', {
+      method:'POST',
+      body: JSON.stringify({ action:'importar_ventas', ventas }),
+    });
+    alert('Importacion lista. Recibidas: ' + (r.recibidos ?? ventas.length) +
+      ', insertadas: ' + (r.insertados ?? 0) +
+      ', duplicadas: ' + (r.duplicados ?? 0) +
+      ', descartadas: ' + ((r.descartados ?? 0) + descartadas) + '.');
+    await cargarVentas();
+    await cargarResumen();
+  }catch(e){
+    alert('No se pudo importar: ' + e.message);
+  }
+}
 
 /* ---------- Editar (modal) ---------- */
 function abrirEdicion(tabla, id){

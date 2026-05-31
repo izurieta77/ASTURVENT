@@ -25,7 +25,7 @@ function corsHeaders(event) {
   return {
     'Access-Control-Allow-Origin':  ok ? origin : ALLOWED_ORIGINS[0],
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Ingest-Token',
     'Content-Type':                 'application/json',
   };
 }

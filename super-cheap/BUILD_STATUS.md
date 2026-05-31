@@ -40,3 +40,9 @@ Arnés de seguimiento para no perder nada ni repetir pasos. Se actualiza tras ca
 - [x] Skill 5 — Guardar fotos en GCS (bucket privado + enlace firmado) ✅ probado (subida + signed URL 200)
 - Construido con arnés de 3 agentes (2 constructores + 1 revisor) sobre `CONTRACT.md` v2.
 - TODAS las skills v2 desplegadas y verificadas en producción (supercheapp.netlify.app).
+
+## SICAR finalizacion segura
+- [x] `sc-ingest` endurecido con normalizador compartido e idempotencia por `venta_key` estable.
+- [x] Plan B Excel en frontend (`action=importar_ventas`) sin exponer `SICAR_INGEST_TOKEN`.
+- [x] Bridge local con modo MySQL, modo Excel/CSV, `--dry-run`, logs locales y muestra de prueba.
+- [x] Plan TeamViewer documentado: respaldo primero, sin reiniciar MySQL/SICAR sin confirmacion.

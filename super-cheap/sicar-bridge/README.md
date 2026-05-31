@@ -5,9 +5,10 @@ las **ventas** del día a tu panel `https://supercheapp.netlify.app` de forma au
 
 > Solo **lee** las ventas de SICAR. No modifica ni borra nada de tu SICAR.
 
-Se hace en **2 etapas**:
+Se hace en **2 etapas** y tiene **Plan B por Excel**:
 - **Etapa A (una vez):** "descubrir" cómo se llaman las tablas de tu SICAR y armar la consulta.
 - **Etapa B (diario):** sincronizar las ventas (se puede dejar automático).
+- **Plan B:** exportar ventas desde SICAR a Excel/CSV e importarlas con `node sync.js --excel archivo.xlsx`.
 
 ---
 
@@ -63,11 +64,39 @@ y te da el valor final de `sqlVentas` para pegar en `config.json`.
 Cuando el asistente te dé la consulta `sqlVentas` y la pegues en `config.json`:
 
 ```
-node sync.js                 (sincroniza las ventas de HOY)
-node sync.js 2026-05-28      (sincroniza un día específico)
+node sync.js                 (sincroniza las ventas de HOY desde MySQL)
+node sync.js 2026-05-28      (sincroniza un día específico desde MySQL)
 ```
 Si todo va bien verás `[OK] Sincronización terminada correctamente.` y las ventas
 aparecerán en el panel. Es **idempotente**: correrlo dos veces no duplica ventas.
+
+## PLAN B — Importar Excel de SICAR
+
+Si todavía no podemos crear un usuario MySQL de solo lectura, o si la tienda está
+vendiendo y no queremos tocar nada, exporta ventas desde SICAR a Excel/CSV y corre:
+
+```
+node sync.js --excel ventas-sicar.xlsx
+node sync.js --excel ventas-sicar.xlsx --dry-run
+```
+
+Para probar el formato sin usar datos reales:
+
+```
+node sync.js --excel sample-ventas-sicar.csv --dry-run
+```
+
+El archivo debe traer, como mínimo, columnas equivalentes a:
+- `fecha`
+- `ticket` o `folio`
+- `total` o `importe`
+
+También reconoce columnas como `producto`, `cantidad`, `forma_pago`/`metodo_pago` y
+`caja`/`terminal`. Si el Excel trae una línea por producto, el bridge agrupa por ticket
+antes de enviar a BigQuery.
+
+El script escribe logs locales en `sicar-bridge/logs/` y nunca imprime el token ni la
+contraseña de MySQL.
 
 ### Dejarlo automático (Programador de tareas de Windows)
 1. Menú Inicio → busca **"Programador de tareas"** → ábrelo.
@@ -83,9 +112,10 @@ aparecerán en el panel. Es **idempotente**: correrlo dos veces no duplica venta
 
 ## Archivos de esta carpeta
 - `descubrir.js` — explora tu base de SICAR y te da el reporte (Etapa A). Solo lee.
-- `sync.js` — sincroniza las ventas al panel (Etapa B).
+- `sync.js` — sincroniza ventas al panel desde MySQL o Excel/CSV.
 - `config.example.json` — plantilla de configuración (cópiala a `config.json`).
 - `config.json` — **tu** configuración real (no se sube a internet; está protegida por `.gitignore`).
+- `logs/` — bitácora local de ejecuciones (no se sube a git).
 
 ## Problemas comunes
 - **"No encontré config.json"** → copia `config.example.json` a `config.json` y llénalo.

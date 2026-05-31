@@ -14,7 +14,8 @@ de Netlify **independiente** de la app de la gasolinera.
 ```
 
 - **Ventas**: un pequeño programa (`sicar-bridge/`) corre en tu computadora, lee la base
-  de datos de SICAR y manda las ventas a la nube. (Ver `sicar-bridge/README.md`.)
+  de datos de SICAR y manda las ventas a la nube. Si MySQL no esta listo, el dashboard
+  tambien puede importar un Excel exportado de SICAR. (Ver `sicar-bridge/README.md`.)
 - **Compras y gastos**: tomas **foto del ticket**, la IA lee total, fecha, proveedor e
   impuestos (IVA/IEPS) y tú solo confirmas.
 - **Nómina**: la capturas a mano.
@@ -29,9 +30,11 @@ de Netlify **independiente** de la app de la gasolinera.
 | `netlify/functions/sc-data.js` | KPIs, listas y guardado (compras/gastos/nómina). |
 | `netlify/functions/sc-ticket.js` | Lee tickets con IA (OpenAI visión) + IVA/IEPS. |
 | `netlify/functions/sc-ingest.js` | Recibe las ventas que manda el bridge de SICAR. |
+| `netlify/functions/_ventas_ingest.js` | Normaliza/deduplica ventas para bridge y Excel. |
 | `netlify/functions/_bq.js`, `_lib.js` | Cliente de BigQuery y helpers (auth/CORS). |
 | `bigquery-setup.sql` | Crea el dataset y las tablas en BigQuery (una sola vez). |
 | `sicar-bridge/` | Programa local que sincroniza ventas desde SICAR. |
+| `PLAN-TEAMVIEWER-SICAR.md` | Plan operativo para terminar SICAR por TeamViewer. |
 | `CONTRACT.md` | Contrato técnico (formas de datos). No tocar a la ligera. |
 
 ## Puesta en marcha (checklist)

@@ -1,0 +1,4 @@
+fecha,ticket,caja,producto,cantidad,importe,forma_pago
+2026-05-28,1001,1,Producto demo A,2,50.00,Efectivo
+2026-05-28,1001,1,Producto demo B,1,25.50,Efectivo
+2026-05-28,1002,1,Producto demo C,1,80.00,Tarjeta

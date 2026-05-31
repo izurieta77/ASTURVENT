@@ -10,6 +10,7 @@
 //   POST { action:"insertar",   tabla:"compras|gastos|nomina", fila:{...}, imagenes_base64?:[...] }
 //   POST { action:"actualizar", tabla, id, fila }
 //   POST { action:"eliminar",   tabla, id }
+//   POST { action:"importar_ventas", ventas:[...] }  // Plan B Excel SICAR
 //
 // Todas las consultas a BigQuery son PARAMETRIZADAS (nunca se concatena input).
 // Todas las lecturas/agregados filtran COALESCE(activo, TRUE) = TRUE (soft delete v2).
@@ -18,6 +19,7 @@ const crypto = require('crypto');
 const { corsHeaders, json, verifyToken, bearer } = require('./_lib');
 const bq = require('./_bq');
 const gcs = require('./_gcs');
+const ventasIngest = require('./_ventas_ingest');
 
 // Tablas validas para lectura/listado.
 const TABLAS_LISTA    = ['ventas', 'compras', 'gastos', 'nomina'];
@@ -93,7 +95,8 @@ exports.handler = async (event) => {
       if (action === 'insertar')   return await insertar(cors, body);
       if (action === 'actualizar') return await actualizar(cors, body);
       if (action === 'eliminar')   return await eliminar(cors, body);
-      return json(400, cors, { ok: false, error: 'action invalida (insertar|actualizar|eliminar)' });
+      if (action === 'importar_ventas') return await importarVentas(cors, body);
+      return json(400, cors, { ok: false, error: 'action invalida (insertar|actualizar|eliminar|importar_ventas)' });
     }
 
     return json(405, cors, { ok: false, error: 'Method not allowed' });
@@ -102,6 +105,18 @@ exports.handler = async (event) => {
     return json(502, cors, { ok: false, error: 'Error de datos: ' + (e.message || String(e)) });
   }
 };
+
+// =============================================================================
+// POST action=importar_ventas
+// =============================================================================
+async function importarVentas(cors, body) {
+  const ventas = Array.isArray(body.ventas) ? body.ventas : null;
+  if (!ventas) {
+    return json(400, cors, { ok: false, error: 'Falta ventas (arreglo)' });
+  }
+  const resultado = await ventasIngest.insertarVentas(ventas, { fuente: 'excel' });
+  return json(200, cors, resultado);
+}
 
 // =============================================================================
 // Helpers de consulta reutilizables (los reusa tambien sc-chat / sc-resumen).
