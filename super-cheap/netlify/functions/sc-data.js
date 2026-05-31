@@ -114,7 +114,8 @@ async function importarVentas(cors, body) {
   if (!ventas) {
     return json(400, cors, { ok: false, error: 'Falta ventas (arreglo)' });
   }
-  const resultado = await ventasIngest.insertarVentas(ventas, { fuente: 'excel' });
+  const replaceFecha = String(body.replaceFecha || body.replaceDate || '').trim();
+  const resultado = await ventasIngest.insertarVentas(ventas, { fuente: 'excel', replaceFecha });
   return json(200, cors, resultado);
 }
 

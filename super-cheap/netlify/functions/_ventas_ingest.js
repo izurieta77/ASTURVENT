@@ -189,9 +189,19 @@ async function ticketIdsExistentes(ids) {
 async function insertarVentas(ventas, opts = {}) {
   const bq = getBq();
   const fuente = texto(opts.fuente) || 'sicar';
+  const replaceFecha = texto(opts.replaceFecha || opts.replaceDate);
   const normalizadas = normalizarVentas(ventas);
   if (normalizadas.filas.length === 0) {
     return { ok: true, ...normalizadas, insertados: 0, duplicados: 0 };
+  }
+
+  if (replaceFecha && fechaValida(replaceFecha)) {
+    await bq.query(
+      `DELETE FROM \`${bq.DATASET}.ventas\`
+        WHERE fecha=DATE(@fecha)
+          AND fuente IN UNNEST(@fuentes)`,
+      { fecha: replaceFecha, fuentes: ['sicar', 'excel'] }
+    );
   }
 
   const existentes = await ticketIdsExistentes(normalizadas.filas.map((f) => f.ticket_id));

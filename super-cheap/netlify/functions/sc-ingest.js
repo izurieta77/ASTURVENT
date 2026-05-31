@@ -33,9 +33,10 @@ exports.handler = async (event) => {
 
   const ventas = Array.isArray(body.ventas) ? body.ventas : null;
   if (!ventas) return json(400, cors, { ok: false, error: 'Falta ventas (arreglo)' });
+  const replaceFecha = String(body.replaceFecha || body.replaceDate || '').trim();
 
   try {
-    const resultado = await ventasIngest.insertarVentas(ventas, { fuente: 'sicar' });
+    const resultado = await ventasIngest.insertarVentas(ventas, { fuente: 'sicar', replaceFecha });
     return json(200, cors, resultado);
   } catch (e) {
     return json(502, cors, { ok: false, error: 'Error de datos: ' + (e.message || String(e)) });

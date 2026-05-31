@@ -1099,6 +1099,10 @@ const VENTAS_EXCEL_ALIASES = {
   importe: ['importe', 'total linea', 'total_linea', 'subtotal linea', 'precio total'],
   total: ['total', 'total ticket', 'total_ticket', 'monto', 'importe total'],
   forma_pago: ['forma pago', 'forma_pago', 'metodo pago', 'metodo_pago', 'pago', 'payment'],
+  clave: ['clave', 'codigo', 'sku', 'codigo producto', 'codigo_producto'],
+  precio: ['precio', 'precio unitario', 'precio_unitario'],
+  departamento: ['departamento', 'depto'],
+  categoria: ['categoria'],
 };
 function normalizarHeaderExcel(s){
   return String(s || '')
@@ -1139,17 +1143,75 @@ function fechaExcel(v){
   }
   const s = String(v || '').trim();
   if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  let m = /^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/.exec(s);
+  let m = /^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?$/.exec(s);
   if(m) return m[3] + '-' + m[2].padStart(2,'0') + '-' + m[1].padStart(2,'0');
-  m = /^(\d{4})[\/.-](\d{1,2})[\/.-](\d{1,2})$/.exec(s);
+  m = /^(\d{4})[\/.-](\d{1,2})[\/.-](\d{1,2})(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?$/.exec(s);
   if(m) return m[1] + '-' + m[2].padStart(2,'0') + '-' + m[3].padStart(2,'0');
   return '';
 }
-function ventaKeyExcel(fecha, ticket, caja){
-  return ['excel', fecha, String(caja || 'sin-caja'), String(ticket || '')]
+function ventaKeyExcel(fecha, ticket, caja, prefix){
+  return [prefix || 'excel', fecha, String(caja || 'sin-caja'), String(ticket || '')]
     .join(':')
     .replace(/\s+/g, '-')
     .toLowerCase();
+}
+function headerKeyExcel(label){
+  const n = normalizarHeaderExcel(label);
+  if(!n) return '';
+  for(const key of Object.keys(VENTAS_EXCEL_ALIASES)){
+    if((VENTAS_EXCEL_ALIASES[key] || []).some(a => normalizarHeaderExcel(a) === n)) return key;
+  }
+  if(n === 'descripcion') return 'producto';
+  if(n === 'cant') return 'cantidad';
+  return '';
+}
+function detectarHeaderVentasExcel(matrix){
+  let best = null;
+  (matrix || []).slice(0,80).forEach((row, idx) => {
+    const cols = {};
+    (row || []).forEach((cell, col) => {
+      const key = headerKeyExcel(cell);
+      if(key && cols[key] === undefined) cols[key] = col;
+    });
+    const score =
+      (cols.fecha !== undefined ? 2 : 0) +
+      (cols.ticket_id !== undefined ? 2 : 0) +
+      (cols.producto !== undefined ? 3 : 0) +
+      (cols.cantidad !== undefined ? 2 : 0) +
+      (cols.importe !== undefined ? 2 : 0) +
+      (cols.total !== undefined ? 2 : 0) +
+      (cols.clave !== undefined ? 1 : 0) +
+      (cols.precio !== undefined ? 1 : 0);
+    if(score >= 5 && (!best || score > best.score)) best = { idx, cols, score };
+  });
+  return best;
+}
+function fechaReporteVentasExcel(matrix){
+  for(const row of (matrix || []).slice(0,12)){
+    for(const cell of (row || [])){
+      const m = String(cell || '').match(/\b\d{1,2}[\/.-]\d{1,2}[\/.-]\d{4}(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?\b/);
+      if(m) return fechaExcel(m[0]);
+    }
+  }
+  return '';
+}
+function filasVentasDesdeMatrizExcel(matrix){
+  const header = detectarHeaderVentasExcel(matrix);
+  if(!header) return [];
+  const fechaDefault = fechaReporteVentasExcel(matrix);
+  return (matrix || []).slice(header.idx + 1).map(r => {
+    const obj = {};
+    Object.keys(header.cols).forEach(key => {
+      const v = (r || [])[header.cols[key]];
+      if(v !== undefined && v !== null && String(v).trim() !== '') obj[key] = v;
+    });
+    if(fechaDefault && obj.fecha === undefined) obj.fecha = fechaDefault;
+    return obj;
+  }).filter(obj => Object.keys(obj).length);
+}
+function fechaUnicaVentasExcel(ventas){
+  const fechas = Array.from(new Set((ventas || []).map(v => v.fecha).filter(Boolean)));
+  return fechas.length === 1 ? fechas[0] : '';
 }
 async function importarVentasExcel(fileList){
   const input = $('ventas-excel');
@@ -1162,7 +1224,8 @@ async function importarVentasExcel(fileList){
   try{
     const wb = XLSX.read(await file.arrayBuffer(), { cellDates:true });
     const sheetName = wb.SheetNames[0];
-    rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval:'', raw:true });
+    const matrix = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header:1, defval:'', raw:true, blankrows:false });
+    rows = filasVentasDesdeMatrizExcel(matrix);
   }catch(e){
     alert('No pude leer el archivo. Exportalo de SICAR como .xlsx, .xls o .csv e intenta de nuevo.');
     return;
@@ -1173,22 +1236,31 @@ async function importarVentasExcel(fileList){
     const row = {};
     Object.keys(r || {}).forEach(k => { row[normalizarHeaderExcel(k)] = r[k]; });
     const fecha = fechaExcel(valorExcel(row, 'fecha'));
-    const ticket = String(valorExcel(row, 'ticket_id') || '').trim();
+    let ticket = String(valorExcel(row, 'ticket_id') || '').trim();
     const caja = String(valorExcel(row, 'caja') || '').trim();
+    const producto = String(valorExcel(row, 'producto') || '').trim();
+    const clave = String(valorExcel(row, 'clave') || '').trim();
+    const precio = numeroExcel(valorExcel(row, 'precio'));
     const importe = numeroExcel(valorExcel(row, 'importe'));
     const total = numeroExcel(valorExcel(row, 'total'));
+    const departamento = String(valorExcel(row, 'departamento') || '').trim();
+    const categoria = String(valorExcel(row, 'categoria') || '').trim();
+    if(!ticket && producto && (importe !== null || total !== null)){
+      const articulo = clave || producto;
+      const precioKey = precio !== null ? 'p' + precio.toFixed(2) : '';
+      ticket = ventaKeyExcel(fecha, [articulo, precioKey].filter(Boolean).join(':'), caja || departamento || categoria, 'excel:articulo');
+    }
     if(!fecha || !ticket || (importe === null && total === null)){
       descartadas += 1;
       return null;
     }
     const venta = {
       fecha,
-      venta_key: ventaKeyExcel(fecha, ticket, caja),
+      venta_key: ticket.includes(':') ? ticket : ventaKeyExcel(fecha, ticket, caja),
       ticket_id: ticket,
       caja,
       forma_pago: String(valorExcel(row, 'forma_pago') || 'desconocido').trim(),
     };
-    const producto = String(valorExcel(row, 'producto') || '').trim();
     const cantidad = numeroExcel(valorExcel(row, 'cantidad'));
     if(producto) venta.producto = producto;
     if(cantidad !== null) venta.cantidad = cantidad;
@@ -1198,17 +1270,18 @@ async function importarVentasExcel(fileList){
   }).filter(Boolean);
 
   if(!ventas.length){
-    alert('No encontre filas validas. El Excel debe tener al menos fecha, ticket/folio y total o importe.');
+    alert('No encontre filas validas. El Excel debe tener fecha y total/importe; si no trae ticket, debe traer articulos vendidos.');
     return;
   }
-  if(!confirm('Se importaran ' + ventas.length + ' fila(s) de venta. El sistema evitara duplicados por ticket.')){
+  const replaceFecha = fechaUnicaVentasExcel(ventas);
+  if(!confirm('Se importaran ' + ventas.length + ' fila(s) de venta. Si el archivo es de un solo dia, se reemplazara ese dia para evitar datos viejos.')){
     return;
   }
 
   try{
     const r = await apiFetch('/sc-data', {
       method:'POST',
-      body: JSON.stringify({ action:'importar_ventas', ventas }),
+      body: JSON.stringify({ action:'importar_ventas', ventas, replaceFecha }),
     });
     alert('Importacion lista. Recibidas: ' + (r.recibidos ?? ventas.length) +
       ', insertadas: ' + (r.insertados ?? 0) +
