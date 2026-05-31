@@ -25,6 +25,18 @@ const mysql = require('mysql2/promise');
 
 // Palabras que delatan tablas/bases relacionadas con ventas en SICAR.
 const PISTAS_VENTA = ['venta', 'ticket', 'corte', 'caja', 'nota', 'ingreso'];
+const TABLAS_CLAVE = [
+  'articulo',
+  'codigo',
+  'detallev',
+  'detallevimpuesto',
+  'detallevlote',
+  'detallevpromo',
+  'metodopago',
+  'tipopago',
+  'venta',
+  'ventatipopago',
+];
 // Bases del sistema que ignoramos al buscar la de SICAR.
 const BASES_SISTEMA = ['information_schema', 'mysql', 'performance_schema', 'sys', 'phpmyadmin'];
 
@@ -107,7 +119,10 @@ async function main() {
     [dbSicar]
   );
   const nombresTablas = tablas.map((r) => r.t);
-  const candidatas = nombresTablas.filter((t) => PISTAS_VENTA.some((p) => t.toLowerCase().includes(p)));
+  const candidatas = Array.from(new Set([
+    ...nombresTablas.filter((t) => PISTAS_VENTA.some((p) => t.toLowerCase().includes(p))),
+    ...TABLAS_CLAVE.filter((t) => nombresTablas.includes(t)),
+  ])).sort((a, b) => a.localeCompare(b));
 
   console.log(`--- TABLAS EN "${dbSicar}" (${nombresTablas.length}) ---`);
   console.log('   ' + nombresTablas.join(', '));

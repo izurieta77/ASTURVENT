@@ -622,7 +622,7 @@ async function main() {
     const ventas = args.modo === 'excel'
       ? await leerDesdeExcel(args.excelPath, args.fecha)
       : await leerDesdeMysql(cfg, args.fecha);
-    const replaceFecha = args.modo === 'excel' && args.replaceDate ? fechaUnica(ventas) : null;
+    const replaceFecha = args.replaceDate ? (fechaUnica(ventas) || args.fecha) : null;
     const resultado = await enviar(cfg, ventas, args.dryRun, { replaceFecha });
     log(`OK. Recibidos: ${resultado.recibidos ?? '?'}, validos: ${resultado.validos ?? '?'}, insertados: ${resultado.insertados ?? '?'}, duplicados: ${resultado.duplicados ?? 0}, descartados: ${resultado.descartados ?? 0}.`);
     log('Sincronizacion terminada correctamente.');

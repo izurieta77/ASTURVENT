@@ -20,6 +20,40 @@ const CONFIG_PATH = path.join(ROOT, 'config.json');
 const DB_PATH = path.join(ROOT, 'db.txt');
 const JASYPT_SCRIPT = path.join(ROOT, 'descifrar-jasypt.js');
 const EMBEDDED_BTE_KEY = 'OcSO8fv1CqVvXkKPPXwCk4A/ABYXjTUu';
+const SICAR_SQL_VENTAS = `
+SELECT
+  DATE_FORMAT(v.fecha, '%Y-%m-%d') AS fecha,
+  TIME_FORMAT(v.fecha, '%H:%i:%s') AS hora,
+  v.ven_id AS ticket_id,
+  COALESCE(c.nombre, CONCAT('Caja ', v.caj_id)) AS caja,
+  COALESCE(NULLIF(d.descripcion, ''), a.descripcion) AS producto,
+  COALESCE(NULLIF(d.clave, ''), a.clave) AS clave,
+  d.cantidad AS cantidad,
+  d.precioCon AS precio,
+  d.importeCon AS importe,
+  COALESCE(fp.forma_pago, 'desconocido') AS forma_pago
+FROM venta v
+JOIN detallev d ON d.ven_id = v.ven_id
+LEFT JOIN articulo a ON a.art_id = d.art_id
+LEFT JOIN caja c ON c.caj_id = v.caj_id
+LEFT JOIN (
+  SELECT
+    vtp.ven_id,
+    GROUP_CONCAT(
+      CONCAT(COALESCE(tp.nombre, CONCAT('Pago ', vtp.tpa_id)), ': ', CAST(vtp.total AS CHAR))
+      ORDER BY vtp.tpa_id SEPARATOR ', '
+    ) AS forma_pago
+  FROM ventatipopago vtp
+  LEFT JOIN tipopago tp ON tp.tpa_id = vtp.tpa_id
+  GROUP BY vtp.ven_id
+) fp ON fp.ven_id = v.ven_id
+WHERE v.fecha >= :fecha
+  AND v.fecha < DATE_ADD(:fecha, INTERVAL 1 DAY)
+  AND COALESCE(v.status, 1) = 1
+  AND COALESCE(d.cantidad, 0) <> 0
+  AND COALESCE(d.importeCon, 0) > 0
+ORDER BY v.fecha, v.ven_id, d.orden, d.art_id
+`.trim();
 
 function ensureLogDir() {
   fs.mkdirSync(LOG_DIR, { recursive: true });
@@ -153,9 +187,11 @@ async function main() {
     password,
     database: jdbc.database || 'sicar',
   };
+  cfg.sqlVentas = SICAR_SQL_VENTAS;
 
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2) + '\n', 'utf8');
   log(`config.json actualizado: host=${cfg.mysql.host}, port=${cfg.mysql.port}, database=${cfg.mysql.database}, user=${cfg.mysql.user}, password=${password ? 'presente' : 'vacia'}.`);
+  log('sqlVentas actualizado para venta/detallev/ventatipopago.');
 
   await runDiscovery();
   log('Autoconfiguracion terminada.');
