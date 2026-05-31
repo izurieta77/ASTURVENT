@@ -97,12 +97,11 @@ function pipeName() {
   return path.join(os.tmpdir(), 'super-cheap-sicar-backfill.sock');
 }
 
-function startSingleInstanceGuard() {
+function trySingleInstanceGuard() {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
     server.once('error', (err) => {
       if (err && err.code === 'EADDRINUSE') {
-        log('Ya hay un backfill de SUPER CHEAP ejecutandose. Saliendo.');
         resolve(null);
         return;
       }
@@ -111,6 +110,19 @@ function startSingleInstanceGuard() {
     server.once('listening', () => resolve(server));
     server.listen(pipeName());
   });
+}
+
+async function startSingleInstanceGuard(waitForFree) {
+  while (true) {
+    const guard = await trySingleInstanceGuard();
+    if (guard) return guard;
+    if (!waitForFree) {
+      log('Ya hay un backfill de SUPER CHEAP ejecutandose. Saliendo.');
+      return null;
+    }
+    log(`Ya hay un backfill activo. Esperando ${RETRY_SECONDS}s para lanzar el reset cuando termine.`);
+    await sleep(RETRY_SECONDS * 1000);
+  }
 }
 
 function appendChildOutput(fecha, chunk, streamName) {
@@ -224,26 +236,27 @@ async function runSyncForDate(fecha) {
 function readArgs(argv) {
   const args = (argv || []).map(String);
   const reset = args.includes('--reset');
+  const waitForFree = args.includes('--wait') || args.includes('--wait-for-free');
   const positional = args.filter((arg) => !arg.startsWith('--'));
   const startDate = positional[0] || DEFAULT_START_DATE;
   const endDate = positional[1] || DEFAULT_END_DATE;
   if (!parseIsoDate(startDate)) throw new Error(`Fecha inicial invalida "${startDate}". Usa YYYY-MM-DD.`);
   if (!parseIsoDate(endDate)) throw new Error(`Fecha final invalida "${endDate}". Usa YYYY-MM-DD.`);
   if (startDate.localeCompare(endDate) > 0) throw new Error('La fecha inicial no puede ser mayor que la final.');
-  return { startDate, endDate, reset };
+  return { startDate, endDate, reset, waitForFree };
 }
 
 async function main() {
   ensureLogDir();
-  const guard = await startSingleInstanceGuard();
+  const { startDate, endDate, reset, waitForFree } = readArgs(process.argv.slice(2));
+  const guard = await startSingleInstanceGuard(waitForFree);
   if (!guard) return;
 
-  const { startDate, endDate, reset } = readArgs(process.argv.slice(2));
   let state = reset ? freshState(startDate, endDate) : loadState(startDate, endDate);
   state.status = state.status === 'complete' ? 'complete' : 'running';
   state = saveState(state);
 
-  log(`Backfill iniciado. Rango=${startDate}..${endDate}, siguiente=${state.nextDate}, total=${state.totalDays}, reintento=${RETRY_SECONDS}s, timeout=${CHILD_TIMEOUT_MINUTES} min, reset=${reset ? 'si' : 'no'}.`);
+  log(`Backfill iniciado. Rango=${startDate}..${endDate}, siguiente=${state.nextDate}, total=${state.totalDays}, reintento=${RETRY_SECONDS}s, timeout=${CHILD_TIMEOUT_MINUTES} min, reset=${reset ? 'si' : 'no'}, wait=${waitForFree ? 'si' : 'no'}.`);
 
   while (state.nextDate && state.nextDate.localeCompare(endDate) <= 0) {
     const fecha = state.nextDate;
