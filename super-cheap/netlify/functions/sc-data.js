@@ -127,13 +127,29 @@ async function importarVentas(cors, body) {
 // Filtro de soft delete: solo filas activas (o viejas con activo IS NULL).
 const ACTIVO = 'COALESCE(activo, TRUE) = TRUE';
 
+const GASTOS_FIJOS_MENSUALES = [
+  { key: 'luz', concepto: 'Luz mensual', categoria: 'servicios', total: 15000 },
+  { key: 'mantenimiento_equipo', concepto: 'Mantenimiento de equipo mensual', categoria: 'mantenimiento', total: 2000 },
+  { key: 'limpieza', concepto: 'Productos de limpieza mensual', categoria: 'limpieza', total: 1200 },
+];
+
+const NOMINA_AUTOMATICA = [
+  { key: 'encargada_tienda_extra', empleado: 'Encargada de tienda extra', tipo: 'sueldo_extra_encargada', meses: 28, mensual: 13000 },
+  { key: 'ayudante_adicional', empleado: 'Ayudante adicional', tipo: 'ayudante_adicional', meses: 27, semanal: 2300 },
+];
+
+function r2(n) {
+  const v = Number(n);
+  return Number.isFinite(v) ? Math.round(v * 100) / 100 : 0;
+}
+
 // Calcula los KPIs agregados de un rango [desde, hasta] (ambos YYYY-MM-DD).
 // Devuelve { ventas, compras, gastos, nomina, utilidad, margen, iva_compras, ieps_compras }.
 async function kpisRango(desde, hasta) {
   const ds = bq.DATASET;
   const params = { desde, hasta };
 
-  const [ventasRows, comprasRows, gastosRows, nominaRows] = await Promise.all([
+  const [ventasRows, comprasRows, gastosRows, nominaRows, gastosFijos, nominaAuto] = await Promise.all([
     bq.query(
       `SELECT IFNULL(SUM(CAST(total AS FLOAT64)), 0) AS total
          FROM \`${ds}.ventas\`
@@ -151,13 +167,15 @@ async function kpisRango(desde, hasta) {
     bq.query(
       `SELECT IFNULL(SUM(CAST(monto AS FLOAT64)), 0) AS total
          FROM \`${ds}.nomina\`
-        WHERE fecha BETWEEN @desde AND @hasta AND ${ACTIVO}`, params),
+         WHERE fecha BETWEEN @desde AND @hasta AND ${ACTIVO}`, params),
+    gastosFijosRango(desde, hasta),
+    nominaAutomaticaRango(desde, hasta),
   ]);
 
   const ventas      = Number(ventasRows[0]?.total || 0);
   const compras     = Number(comprasRows[0]?.total || 0);
-  const gastos      = Number(gastosRows[0]?.total || 0);
-  const nomina      = Number(nominaRows[0]?.total || 0);
+  const gastos      = Number(gastosRows[0]?.total || 0) + gastosFijos.total;
+  const nomina      = Number(nominaRows[0]?.total || 0) + nominaAuto.total;
   const iva_compras = Number(comprasRows[0]?.iva || 0);
   const ieps_compras = Number(comprasRows[0]?.ieps || 0);
   const utilidad = ventas - compras - gastos - nomina;
@@ -229,15 +247,28 @@ async function topProveedores(desde, hasta, limite = 10) {
 // Top categorias de gasto por monto en un rango.
 async function topCategoriasGasto(desde, hasta, limite = 10) {
   const ds = bq.DATASET;
-  const rows = await bq.query(
+  const [rows, gastosFijos] = await Promise.all([
+    bq.query(
     `SELECT IFNULL(categoria, 'Sin categoria') AS categoria,
             IFNULL(SUM(CAST(total AS FLOAT64)), 0) AS total
        FROM \`${ds}.gastos\`
       WHERE fecha BETWEEN @desde AND @hasta AND ${ACTIVO}
       GROUP BY categoria
       ORDER BY total DESC
-      LIMIT @lim`, { desde, hasta, lim: limite });
-  return rows.map(r => ({ categoria: r.categoria, total: Number(r.total || 0) }));
+      LIMIT @lim`, { desde, hasta, lim: Math.max(limite, 20) }),
+    gastosFijosRango(desde, hasta),
+  ]);
+  const porCategoria = new Map();
+  rows.forEach(r => {
+    const categoria = r.categoria || 'Sin categoria';
+    porCategoria.set(categoria, r2((porCategoria.get(categoria) || 0) + Number(r.total || 0)));
+  });
+  gastosFijos.categorias.forEach(r => {
+    porCategoria.set(r.categoria, r2((porCategoria.get(r.categoria) || 0) + Number(r.total || 0)));
+  });
+  return Array.from(porCategoria, ([categoria, total]) => ({ categoria, total }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, limite);
 }
 
 // --- Utilidades de fecha (hora de Mexico, sin libs externas) ---
@@ -270,6 +301,156 @@ function diasEntre(desdeISO, hastaISO) {
   const b = new Date(hastaISO + 'T00:00:00Z');
   return Math.round((b - a) / 86400000) + 1; // inclusivo
 }
+function inicioMesISO(iso) {
+  return String(iso || '').slice(0, 7) + '-01';
+}
+function sumarMesISO(inicioMes, n = 1) {
+  const d = new Date(inicioMes + 'T00:00:00Z');
+  d.setUTCMonth(d.getUTCMonth() + n);
+  return d.toISOString().slice(0, 10);
+}
+function finMesISO(inicioMes) {
+  const siguiente = new Date(sumarMesISO(inicioMes, 1) + 'T00:00:00Z');
+  siguiente.setUTCDate(siguiente.getUTCDate() - 1);
+  return siguiente.toISOString().slice(0, 10);
+}
+function diasDelMesISO(inicioMes) {
+  return Number(finMesISO(inicioMes).slice(8, 10));
+}
+function maxISO(a, b) {
+  return String(a) > String(b) ? String(a) : String(b);
+}
+function minISO(a, b) {
+  return String(a) < String(b) ? String(a) : String(b);
+}
+
+async function primerMesConVentas() {
+  const ds = bq.DATASET;
+  const rows = await bq.query(
+    `SELECT FORMAT_DATE('%Y-%m-01', MIN(fecha)) AS mes
+       FROM \`${ds}.ventas\`
+      WHERE ${ACTIVO}`,
+  );
+  const mes = rows[0]?.mes;
+  return typeof mes === 'string' && fechaValida(mes) ? mes : null;
+}
+
+async function gastosFijosRango(desde, hasta) {
+  const primerMes = await primerMesConVentas();
+  if (!primerMes || !fechaValida(desde) || !fechaValida(hasta)) {
+    return { total: 0, categorias: [], filas: [] };
+  }
+
+  const inicio = maxISO(desde, primerMes);
+  if (inicio > hasta) return { total: 0, categorias: [], filas: [] };
+
+  const categorias = new Map();
+  const filas = [];
+  let total = 0;
+
+  for (let mes = inicioMesISO(inicio); mes <= hasta; mes = sumarMesISO(mes, 1)) {
+    const mesFin = finMesISO(mes);
+    const overlapDesde = maxISO(inicio, mes);
+    const overlapHasta = minISO(hasta, mesFin);
+    if (overlapDesde > overlapHasta) continue;
+
+    const factor = diasEntre(overlapDesde, overlapHasta) / diasDelMesISO(mes);
+    for (const gasto of GASTOS_FIJOS_MENSUALES) {
+      const monto = r2(gasto.total * factor);
+      if (!monto) continue;
+      total = r2(total + monto);
+      categorias.set(gasto.categoria, r2((categorias.get(gasto.categoria) || 0) + monto));
+      filas.push({
+        id: `auto:${gasto.key}:${mes}`,
+        fecha: overlapDesde,
+        hora: null,
+        concepto: gasto.concepto,
+        categoria: gasto.categoria,
+        clasificacion: 'gasto_fijo',
+        subtotal: monto,
+        iva: 0,
+        ieps: 0,
+        total: monto,
+        impuestos_estimados: false,
+        foto_url: '',
+        fotos: '[]',
+        activo: true,
+        virtual: true,
+      });
+    }
+  }
+
+  return {
+    total: r2(total),
+    categorias: Array.from(categorias, ([categoria, total]) => ({ categoria, total })),
+    filas,
+  };
+}
+
+function finRangoMeses(primerMes, meses) {
+  return finMesISO(sumarMesISO(primerMes, Math.max(1, Number(meses) || 1) - 1));
+}
+
+async function nominaAutomaticaRango(desde, hasta) {
+  const primerMes = await primerMesConVentas();
+  if (!primerMes || !fechaValida(desde) || !fechaValida(hasta)) {
+    return { total: 0, filas: [] };
+  }
+
+  const filas = [];
+  let total = 0;
+
+  for (const regla of NOMINA_AUTOMATICA) {
+    const inicio = maxISO(desde, primerMes);
+    const fin = minISO(hasta, finRangoMeses(primerMes, regla.meses));
+    if (inicio > fin) continue;
+
+    if (regla.mensual) {
+      for (let mes = inicioMesISO(inicio); mes <= fin; mes = sumarMesISO(mes, 1)) {
+        const mesFin = finMesISO(mes);
+        const overlapDesde = maxISO(inicio, mes);
+        const overlapHasta = minISO(fin, mesFin);
+        if (overlapDesde > overlapHasta) continue;
+        const factor = diasEntre(overlapDesde, overlapHasta) / diasDelMesISO(mes);
+        const monto = r2(regla.mensual * factor);
+        if (!monto) continue;
+        total = r2(total + monto);
+        filas.push({
+          id: `auto:${regla.key}:${mes}`,
+          periodo: mes.slice(0, 7),
+          fecha: overlapDesde,
+          empleado: regla.empleado,
+          monto,
+          tipo: regla.tipo,
+          activo: true,
+          virtual: true,
+        });
+      }
+    } else if (regla.semanal) {
+      for (let mes = inicioMesISO(inicio); mes <= fin; mes = sumarMesISO(mes, 1)) {
+        const mesFin = finMesISO(mes);
+        const overlapDesde = maxISO(inicio, mes);
+        const overlapHasta = minISO(fin, mesFin);
+        if (overlapDesde > overlapHasta) continue;
+        const monto = r2((regla.semanal / 7) * diasEntre(overlapDesde, overlapHasta));
+        if (!monto) continue;
+        total = r2(total + monto);
+        filas.push({
+          id: `auto:${regla.key}:${mes}`,
+          periodo: mes.slice(0, 7),
+          fecha: overlapDesde,
+          empleado: regla.empleado,
+          monto,
+          tipo: regla.tipo,
+          activo: true,
+          virtual: true,
+        });
+      }
+    }
+  }
+
+  return { total: r2(total), filas };
+}
 
 // =============================================================================
 // GET action=resumen
@@ -281,18 +462,11 @@ async function resumen(cors, q) {
     return json(400, cors, { ok: false, error: 'desde/hasta deben ser fechas YYYY-MM-DD' });
   }
 
-  const ds = bq.DATASET;
-  const k = await kpisRango(desde, hasta);
-  const serie = await serieVentas(desde, hasta);
-
-  // Gastos agrupados por categoria (descendente por monto).
-  const gastosCatRows = await bq.query(
-    `SELECT IFNULL(categoria, 'Sin categoria') AS categoria,
-            IFNULL(SUM(CAST(total AS FLOAT64)), 0) AS total
-       FROM \`${ds}.gastos\`
-      WHERE fecha BETWEEN @desde AND @hasta AND ${ACTIVO}
-      GROUP BY categoria
-      ORDER BY total DESC`, { desde, hasta });
+  const [k, serie, gastosCatRows] = await Promise.all([
+    kpisRango(desde, hasta),
+    serieVentas(desde, hasta),
+    topCategoriasGasto(desde, hasta, 100),
+  ]);
 
   return json(200, cors, {
     ok: true,
@@ -511,7 +685,29 @@ async function lista(cors, q) {
       LIMIT 1000`,
     params);
 
-  return json(200, cors, { ok: true, filas: filas.map(normalizarFila) });
+  let normalizadas = filas.map(normalizarFila);
+  if (tabla === 'gastos') {
+    const primerMes = await primerMesConVentas();
+    const rangoDesde = tieneDesde ? desde : primerMes;
+    const rangoHasta = tieneHasta ? hasta : hoyISO();
+    if (rangoDesde && rangoHasta) {
+      const fijos = await gastosFijosRango(rangoDesde, rangoHasta);
+      normalizadas = normalizadas.concat(fijos.filas)
+        .sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
+    }
+  }
+  if (tabla === 'nomina') {
+    const primerMes = await primerMesConVentas();
+    const rangoDesde = tieneDesde ? desde : primerMes;
+    const rangoHasta = tieneHasta ? hasta : hoyISO();
+    if (rangoDesde && rangoHasta) {
+      const auto = await nominaAutomaticaRango(rangoDesde, rangoHasta);
+      normalizadas = normalizadas.concat(auto.filas)
+        .sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
+    }
+  }
+
+  return json(200, cors, { ok: true, filas: normalizadas });
 }
 
 // Aplana tipos especiales del cliente de BigQuery (DATE/TIMESTAMP -> string,
@@ -640,7 +836,8 @@ async function calcularAlertas() {
        (SELECT IFNULL(SUM(CAST(total AS FLOAT64)),0) FROM \`${ds}.compras\` WHERE fecha=@hoy AND ${ACTIVO}) AS compras,
        (SELECT IFNULL(SUM(CAST(total AS FLOAT64)),0) FROM \`${ds}.gastos\`  WHERE fecha=@hoy AND ${ACTIVO}) AS gastos`,
     { hoy });
-  const egresoHoy = Number(egresoHoyRows[0]?.compras || 0) + Number(egresoHoyRows[0]?.gastos || 0);
+  const gastosFijosHoy = await gastosFijosRango(hoy, hoy);
+  const egresoHoy = Number(egresoHoyRows[0]?.compras || 0) + Number(egresoHoyRows[0]?.gastos || 0) + gastosFijosHoy.total;
   const egresoMes = kMes.compras + kMes.gastos;
   const promDiario = dias_transcurridos > 0 ? egresoMes / dias_transcurridos : 0;
   if (promDiario > 0 && egresoHoy > 2 * promDiario) {
@@ -688,6 +885,20 @@ async function calcularAlertas() {
 // =============================================================================
 // POST action=insertar
 // =============================================================================
+async function compraExistentePorHuella(rawOcr) {
+  const huella = String(rawOcr || '').trim();
+  if (!huella || !huella.startsWith('foto_hash:')) return null;
+  const rows = await bq.query(
+    `SELECT id
+       FROM \`${bq.DATASET}.compras\`
+      WHERE raw_ocr = @raw_ocr
+        AND ${ACTIVO}
+      LIMIT 1`,
+    { raw_ocr: huella },
+  );
+  return rows[0] || null;
+}
+
 async function insertar(cors, body) {
   const tabla = String(body.tabla || '');
   const fila  = body.fila;
@@ -715,6 +926,13 @@ async function insertar(cors, body) {
   const registro = filtrarColumnas(tabla, fila);
   registro.id = crypto.randomUUID();
   registro.activo = true;
+
+  if (tabla === 'compras') {
+    const existente = await compraExistentePorHuella(registro.raw_ocr);
+    if (existente) {
+      return json(200, cors, { ok: true, insertados: 0, duplicado: true, id: existente.id });
+    }
+  }
 
   // Subida opcional de imagenes a GCS. Graceful: si no hay GCS o falla, guarda
   // sin fotos y no bloquea (subirImagenes devuelve []).

@@ -1395,6 +1395,11 @@ function renderLista(tabla, contenedorId, editable){
     });
     if(editable){
       const id = esc(f.id ?? '');
+      if(f.virtual || String(f.id || '').indexOf('auto:') === 0){
+        html += '<td class="td-acc no-print"><span class="muted">Automático</span></td>';
+        html += '</tr>';
+        return;
+      }
       // ¿Tiene foto(s) guardada(s)? `fotos` es JSON array o, si no, foto_url.
       let refFoto = '';
       if(tabla === 'compras' || tabla === 'gastos'){
@@ -1727,34 +1732,139 @@ function recargarTabla(tabla){
    TICKETS (multi-foto → IA → formulario editable)
    ============================================================ */
 
-/* Convierte un File de imagen a base64 SIN el prefijo "data:...;base64," */
-function fileABase64(file){
+const MAX_TICKET_IMAGES = 8;
+const MAX_TICKET_B64_TOTAL = 4.8 * 1024 * 1024;
+const MAX_TICKET_IMAGE_BYTES = 620 * 1024;
+
+function hashTextoLigero(txt){
+  const s = String(txt || '');
+  let h = 2166136261;
+  for(let i = 0; i < s.length; i++){
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36);
+}
+
+function huellaBase64(base64){
+  const s = String(base64 || '');
+  const mid = Math.max(0, Math.floor(s.length / 2) - 1024);
+  return hashTextoLigero([
+    s.length,
+    s.slice(0, 2048),
+    s.slice(mid, mid + 2048),
+    s.slice(-2048),
+  ].join('|'));
+}
+
+function leerArchivoDataUrl(file){
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => {
-      const r = String(reader.result || '');
-      const coma = r.indexOf(',');
-      resolve(coma >= 0 ? r.slice(coma + 1) : r);
-    };
+    reader.onload = () => resolve(String(reader.result || ''));
     reader.onerror = () => reject(new Error('No se pudo leer la imagen.'));
     reader.readAsDataURL(file);
   });
 }
 
-/* Estado del set de fotos por tipo. Cada item: { id, base64, dataUrl } */
+function cargarImagen(dataUrl){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('No se pudo preparar la imagen.'));
+    img.src = dataUrl;
+  });
+}
+
+function canvasABlob(canvas, quality){
+  return new Promise((resolve) => {
+    canvas.toBlob(resolve, 'image/jpeg', quality);
+  });
+}
+
+function blobADataUrl(blob){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('No se pudo comprimir la imagen.'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function comprimirImagenDataUrl(dataUrl){
+  const img = await cargarImagen(dataUrl);
+  let w = img.naturalWidth || img.width;
+  let h = img.naturalHeight || img.height;
+  const maxLong = 2400;
+  const maxShort = 1500;
+  let scale = Math.min(1, maxLong / Math.max(w, h), maxShort / Math.min(w, h));
+  let quality = 0.82;
+
+  for(let intento = 0; intento < 8; intento++){
+    const cw = Math.max(1, Math.round(w * scale));
+    const ch = Math.max(1, Math.round(h * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = cw;
+    canvas.height = ch;
+    const ctx = canvas.getContext('2d', { alpha:false });
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, cw, ch);
+    ctx.drawImage(img, 0, 0, cw, ch);
+
+    const blob = await canvasABlob(canvas, quality);
+    if(!blob) break;
+    if(blob.size <= MAX_TICKET_IMAGE_BYTES || (quality <= 0.58 && scale <= 0.72)){
+      return blobADataUrl(blob);
+    }
+    if(quality > 0.58) quality = Math.max(0.58, quality - 0.08);
+    else scale *= 0.88;
+  }
+
+  return dataUrl;
+}
+
+/* Convierte un File de imagen a base64 comprimido, listo para OCR. */
+async function fileABase64(file){
+  const original = await leerArchivoDataUrl(file);
+  const dataUrl = await comprimirImagenDataUrl(original);
+  const coma = dataUrl.indexOf(',');
+  const base64 = coma >= 0 ? dataUrl.slice(coma + 1) : dataUrl;
+  return {
+    base64,
+    dataUrl: 'data:image/jpeg;base64,' + base64,
+    hash: huellaBase64(base64),
+  };
+}
+
+/* Estado del set de fotos por tipo. Cada item: { id, base64, dataUrl, hash } */
 const fotosTicket = { compra: [], gasto: [] };
 let fotoUid = 0;
 
 /* Agrega archivos (FileList) al set del tipo y refresca miniaturas */
 async function agregarFotosTicket(tipo, fileList){
   const arr = Array.from(fileList || []).filter(f => f && f.type && f.type.indexOf('image/') === 0);
+  const msgId = tipo === 'compra' ? 'compra-foto-msg' : 'gasto-foto-msg';
+  if(!arr.length) return;
+
+  showMsg(msgId, 'Preparando fotos para lectura...', 'info');
+  let duplicadas = 0;
+  let omitidas = 0;
+
   for(const f of arr){
+    if(fotosTicket[tipo].length >= MAX_TICKET_IMAGES){ omitidas++; continue; }
     try{
-      const base64 = await fileABase64(f);
-      fotosTicket[tipo].push({ id: ++fotoUid, base64, dataUrl: 'data:' + (f.type || 'image/jpeg') + ';base64,' + base64 });
+      const foto = await fileABase64(f);
+      if(fotosTicket[tipo].some(it => it.hash === foto.hash)){ duplicadas++; continue; }
+      const totalActual = fotosTicket[tipo].reduce((s, it) => s + String(it.base64 || '').length, 0);
+      if(totalActual + foto.base64.length > MAX_TICKET_B64_TOTAL){ omitidas++; continue; }
+      fotosTicket[tipo].push({ id: ++fotoUid, base64: foto.base64, dataUrl: foto.dataUrl, hash: foto.hash });
     }catch(_){ /* ignora imagen ilegible */ }
   }
   renderThumbs(tipo);
+
+  const avisos = [];
+  if(duplicadas) avisos.push(duplicadas + ' foto(s) duplicada(s) omitida(s).');
+  if(omitidas) avisos.push(omitidas + ' foto(s) omitida(s) por limite de tamano/cantidad.');
+  showMsg(msgId, avisos.join(' ') || '', avisos.length ? 'warn' : 'info');
 }
 
 function renderThumbs(tipo){
@@ -1780,6 +1890,13 @@ function limpiarFotosTicket(tipo){
   renderThumbs(tipo);
 }
 
+function hashSetFotos(tipo){
+  const hashes = fotosTicket[tipo].map(it => it.hash).filter(Boolean).sort();
+  return hashes.length ? 'foto_hash:' + hashTextoLigero(hashes.join('|')) : '';
+}
+
+const lecturaTicketActiva = { compra:false, gasto:false };
+
 /* Lee TODAS las fotos del set en una sola llamada a sc-ticket */
 async function leerTicketIA(tipo){
   const esCompra = tipo === 'compra';
@@ -1787,7 +1904,13 @@ async function leerTicketIA(tipo){
   const wrapId = esCompra ? 'compra-form-wrap' : 'gasto-form-wrap';
   const set = fotosTicket[tipo];
 
+  if(lecturaTicketActiva[tipo]) return;
   if(!set.length){ showMsg(msgId, 'Agrega al menos una foto del ticket.', 'warn'); return; }
+  const totalB64 = set.reduce((s, it) => s + String(it.base64 || '').length, 0);
+  if(totalB64 > MAX_TICKET_B64_TOTAL){
+    showMsg(msgId, 'Las fotos siguen pesadas. Quita fotos repetidas o toma secciones mas cercanas del ticket.', 'warn');
+    return;
+  }
 
   $(wrapId).classList.add('hidden');
   $(wrapId).innerHTML = '';
@@ -1795,6 +1918,10 @@ async function leerTicketIA(tipo){
     (set.length === 1 ? 'el ticket' : ('las ' + set.length + ' fotos')) + '… esto puede tardar unos segundos.</div>';
 
   const imagenes_base64 = set.map(it => it.base64);
+  const readBtn = document.querySelector('button[onclick="leerTicketIA(\'' + tipo + '\')"]');
+  const readBtnText = readBtn ? readBtn.textContent : '';
+  lecturaTicketActiva[tipo] = true;
+  if(readBtn){ readBtn.disabled = true; readBtn.innerHTML = '<span class="loader"></span>'; }
 
   let data;
   try{
@@ -1803,9 +1930,16 @@ async function leerTicketIA(tipo){
       body: JSON.stringify({ imagenes_base64, tipo }),
     });
   }catch(e){
-    showMsg(msgId, 'No se pudo leer el ticket: ' + e.message, 'err');
+    const msg = /servidor \(5\d\d\)|timed|timeout|demasiado/i.test(e.message)
+      ? 'No se pudo leer el ticket: el servidor no alcanzo a procesar todas las fotos. Intenta con fotos mas cercanas, sin repetir secciones.'
+      : 'No se pudo leer el ticket: ' + e.message;
+    showMsg(msgId, msg, 'err');
+    lecturaTicketActiva[tipo] = false;
+    if(readBtn){ readBtn.disabled = false; readBtn.textContent = readBtnText; }
     return;
   }
+  lecturaTicketActiva[tipo] = false;
+  if(readBtn){ readBtn.disabled = false; readBtn.textContent = readBtnText; }
 
   $(msgId).innerHTML = '';
   mostrarFormularioTicket(tipo, data.datos || {});
@@ -1943,6 +2077,7 @@ async function guardarTicket(tipo){
       impuestos_estimados: estimados,
       clasificacion: ($('tk-clasificacion') ? $('tk-clasificacion').value : 'otro'),
       conceptos: JSON.stringify(conceptos),
+      raw_ocr: hashSetFotos(tipo),
     };
   }else{
     fila = {
@@ -1970,8 +2105,9 @@ async function guardarTicket(tipo){
   const payload = { action:'insertar', tabla, fila };
   if(imagenes_base64.length) payload.imagenes_base64 = imagenes_base64;
 
+  let saved;
   try{
-    await apiFetch('/sc-data', {
+    saved = await apiFetch('/sc-data', {
       method:'POST',
       body: JSON.stringify(payload),
     });
@@ -1987,7 +2123,12 @@ async function guardarTicket(tipo){
   $(wrapId).classList.add('hidden');
   $(wrapId).innerHTML = '';
   limpiarFotosTicket(tipo);
-  showMsg(fotoMsgId, (esCompra ? 'Compra' : 'Gasto') + ' guardado correctamente.', 'ok');
+  showMsg(fotoMsgId,
+    saved && saved.duplicado
+      ? 'Este ticket ya estaba guardado; no se duplico la compra.'
+      : (esCompra ? 'Compra' : 'Gasto') + ' guardado correctamente.',
+    saved && saved.duplicado ? 'warn' : 'ok'
+  );
   if(esCompra) cargarCompras(); else cargarGastos();
 }
 

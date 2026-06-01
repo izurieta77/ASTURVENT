@@ -29,8 +29,9 @@ const { corsHeaders, json, verifyToken, bearer } = require('./_lib');
 
 const MODEL      = 'gpt-4o';          // modelo de vision
 const MAX_TOKENS = 1200;              // techo de salida (mas alto por multi-foto)
-// Limite de tamano TOTAL combinado de las imagenes base64 (~20 MB).
-const MAX_B64_TOTAL = 20 * 1024 * 1024;
+const OPENAI_TIMEOUT_MS = 8500;
+// Mantener el payload por debajo de los limites practicos de funciones serverless.
+const MAX_B64_TOTAL = 5.5 * 1024 * 1024;
 const MAX_IMAGENES  = 8;              // techo de imagenes por llamada
 const IVA_TASA    = 0.16;            // IVA general en Mexico (16%)
 const TOLERANCIA  = 0.50;            // tolerancia para validar subtotal+iva+ieps≈total
@@ -48,6 +49,35 @@ function limpiarB64(s) {
   return b64.trim();
 }
 
+function normalizarTexto(s) {
+  return String(s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function dedupeConceptos(conceptos) {
+  const vistos = new Set();
+  const salida = [];
+  for (const c of conceptos || []) {
+    const desc = normalizarTexto(c.descripcion);
+    const importe = r2(c.importe).toFixed(2);
+    const key = [desc, importe, c.uso || 'otro', c.ingrediente || ''].join('|');
+    if (!desc && importe === '0.00') continue;
+    if (vistos.has(key)) continue;
+    vistos.add(key);
+    salida.push(c);
+  }
+  return salida;
+}
+
+function sumaConceptos(conceptos) {
+  return r2((conceptos || []).reduce((s, c) => s + (Number(c.importe) || 0), 0));
+}
+
 // Prompt del sistema: salida JSON estricta, multi-foto, manuscritos, fecha+hora,
 // y CLASIFICACION INTELIGENTE de insumos (maquila vs reventa) + ingrediente.
 const SYSTEM_PROMPT =
@@ -56,7 +86,9 @@ const SYSTEM_PROMPT =
   'Recibes UNA O VARIAS imagenes que son PARTES DEL MISMO ticket, factura o nota ' +
   '(por ejemplo varias hojas o secciones). FUSIONA la informacion de todas las ' +
   'imagenes en un solo documento: NO dupliques conceptos ni sumes dos veces el ' +
-  'mismo total. El documento puede estar IMPRESO o escrito A MANO (manuscrito); ' +
+  'mismo total. Algunas fotos pueden traslaparse: si una linea, subtotal o total ' +
+  'aparece repetido en dos fotos, usalo una sola vez. No trates cada foto como ' +
+  'un ticket distinto. El documento puede estar IMPRESO o escrito A MANO (manuscrito); ' +
   'lee la letra manuscrita lo mejor posible. NO agregues datos "a lo tonto": LEE y ' +
   'ENTIENDE para que sirve cada producto comprado.\n' +
   'Devuelves SOLO un objeto JSON valido (sin texto extra, sin markdown, sin ```). ' +
@@ -101,6 +133,8 @@ const SYSTEM_PROMPT =
 exports.handler = async (event) => {
   const cors = corsHeaders(event);
 
+  try {
+
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: cors, body: '' };
   if (event.httpMethod !== 'POST')    return json(405, cors, { ok: false, error: 'Method not allowed' });
 
@@ -140,13 +174,17 @@ exports.handler = async (event) => {
   // --- Llamada a OpenAI (vision) con TODAS las imagenes en un solo mensaje ---
   const contenidoUsuario = [
     { type: 'text', text: `Estas ${imagenes.length} imagen(es) son partes del MISMO ticket/nota de ${tipo}. Fusiona la informacion y devuelve el JSON.` },
-    ...imagenes.map(b64 => ({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${b64}` } })),
+    ...imagenes.map(b64 => ({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${b64}`, detail: 'high' } })),
   ];
 
   let data;
+  let timeout;
   try {
+    const controller = new AbortController();
+    timeout = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
+      signal: controller.signal,
       headers: {
         'Authorization': `Bearer ${key}`,
         'Content-Type':  'application/json',
@@ -162,12 +200,17 @@ exports.handler = async (event) => {
         ],
       }),
     });
+    clearTimeout(timeout);
 
     data = await res.json().catch(() => ({}));
     if (!res.ok) {
       return json(502, cors, { ok: false, error: data.error?.message || `OpenAI HTTP ${res.status}` });
     }
   } catch (e) {
+    if (timeout) clearTimeout(timeout);
+    if (e && e.name === 'AbortError') {
+      return json(504, cors, { ok: false, error: 'La lectura del ticket tardo demasiado. Intenta con menos fotos o fotos mas cercanas.' });
+    }
     return json(502, cors, { ok: false, error: 'No se pudo contactar el servicio de IA.' });
   }
 
@@ -198,7 +241,7 @@ exports.handler = async (event) => {
 
   // Conceptos saneados (incluye uso/ingrediente entendidos por la IA).
   const USOS = ['maquila', 'reventa', 'otro'];
-  const conceptos = Array.isArray(raw.conceptos)
+  const conceptosLeidos = Array.isArray(raw.conceptos)
     ? raw.conceptos
         .map(c => {
           const uso = c && USOS.includes(String(c.uso)) ? String(c.uso) : 'otro';
@@ -214,6 +257,8 @@ exports.handler = async (event) => {
         })
         .filter(c => c.descripcion || c.importe)
     : [];
+  const conceptos = dedupeConceptos(conceptosLeidos);
+  const conceptosDuplicados = conceptosLeidos.length - conceptos.length;
 
   // Clasificacion del ticket completo (maquila|reventa|mixto|otro).
   const CLASIF = ['maquila', 'reventa', 'mixto', 'otro'];
@@ -236,6 +281,7 @@ exports.handler = async (event) => {
 
   let impuestos_estimados = false;
   let nota = '';
+  let revisar = false;
 
   if (desglosado) {
     impuestos_estimados = false;
@@ -251,8 +297,26 @@ exports.handler = async (event) => {
   }
 
   // Regla 3: validar que subtotal + iva + ieps ≈ total.
+  const sumaLineas = sumaConceptos(conceptos);
+  if (!desglosado && total > 0 && sumaLineas > 0) {
+    const ratio = total / sumaLineas;
+    const entero = Math.round(ratio);
+    if (entero >= 2 && entero <= 4 && Math.abs(ratio - entero) <= 0.08) {
+      total = sumaLineas;
+      subtotal = r2(total / (1 + IVA_TASA));
+      iva = r2(total - subtotal);
+      revisar = true;
+      nota = (nota ? nota + ' ' : '') +
+        'El total parecia duplicado por fotos traslapadas; se uso la suma unica de conceptos. Verifica antes de guardar.';
+    }
+  }
+  if (conceptosDuplicados > 0) {
+    nota = (nota ? nota + ' ' : '') +
+      `Se omitieron ${conceptosDuplicados} concepto(s) repetido(s) detectado(s) en las fotos.`;
+  }
+
   const cuadra = Math.abs((subtotal + iva + ieps) - total) <= TOLERANCIA;
-  let revisar = !cuadra;
+  revisar = revisar || !cuadra;
   if (revisar) {
     nota = (nota ? nota + ' ' : '') + 'Los montos no cuadran exactamente; verifica antes de guardar.';
   }
@@ -280,4 +344,10 @@ exports.handler = async (event) => {
       nota,
     },
   });
+  } catch (e) {
+    return json(500, cors, {
+      ok: false,
+      error: 'Error interno leyendo ticket: ' + (e.message || String(e)),
+    });
+  }
 };
