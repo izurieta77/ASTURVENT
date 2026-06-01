@@ -323,15 +323,46 @@ tr:hover td{background:var(--surface-2)}
 .loading-state{text-align:center;padding:30px;color:var(--text-3);font-size:13px}
 .empty-state{text-align:center;padding:30px;color:var(--text-3);font-size:13px}
 
-/* ====================== FOTO ====================== */
-.photo-zone{
-  border:2px dashed var(--border-2);border-radius:var(--r);
-  padding:26px 16px;text-align:center;background:var(--surface-2);cursor:pointer;transition:border-color .15s;
+/* ====================== FOTO / TICKETS ====================== */
+.ticket-card{overflow:hidden}
+.ticket-card .card-title{align-items:flex-start;margin-bottom:12px}
+.ticket-card .card-title .muted{font-size:12px;line-height:1.35;margin-top:3px}
+.ticket-badge{
+  flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;
+  padding:5px 9px;border-radius:999px;background:var(--orange-soft);
+  border:1px solid rgba(249,115,22,0.22);color:var(--orange-d);
+  font-size:10px;font-weight:900;letter-spacing:.8px;text-transform:uppercase;
 }
-.photo-zone:hover{border-color:var(--orange)}
-.photo-zone .ico{font-size:34px;display:block;margin-bottom:8px}
-.photo-zone .t{font-weight:700;color:var(--text);font-size:14px}
-.photo-zone .s{font-size:12px;color:var(--text-3);margin-top:3px}
+.ticket-capture{display:grid;gap:12px}
+.ticket-help{
+  display:flex;gap:9px;align-items:flex-start;
+  padding:10px 12px;border:1px solid var(--info-bd);border-radius:var(--r-xs);
+  background:var(--info-bg);color:var(--info);font-size:12px;line-height:1.35;font-weight:600;
+}
+.ticket-help b{display:block;color:var(--text);font-size:12px;margin-bottom:1px}
+.photo-zone{
+  display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;
+  border:1.5px dashed var(--border-2);border-radius:var(--r);
+  padding:15px;text-align:left;background:linear-gradient(180deg,var(--surface),var(--surface-2));
+  cursor:pointer;transition:border-color .15s,box-shadow .15s,background .15s;
+}
+.photo-zone:hover{border-color:var(--orange);box-shadow:0 0 0 4px rgba(249,115,22,0.08)}
+.photo-zone .ico{
+  width:44px;height:44px;border-radius:12px;display:grid;place-items:center;
+  background:var(--navy);color:#fff;font-size:12px;font-family:var(--font-d);font-weight:900;letter-spacing:.5px;
+}
+.photo-zone .t{display:block;font-weight:800;color:var(--text);font-size:14px;line-height:1.25}
+.photo-zone .s{display:block;font-size:12px;color:var(--text-3);margin-top:3px;line-height:1.35}
+.photo-zone .capture-cta{
+  display:inline-flex;align-items:center;justify-content:center;min-height:38px;
+  padding:0 13px;border-radius:var(--r-xs);background:var(--orange);color:#fff;
+  font-size:12px;font-weight:900;white-space:nowrap;
+}
+.ticket-status{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  min-height:26px;color:var(--text-3);font-size:12px;font-weight:700;
+}
+.ticket-status strong{color:var(--text);font-weight:900}
 .photo-preview{max-width:160px;max-height:160px;border-radius:var(--r-sm);margin:0 auto 10px;display:block;border:1px solid var(--border)}
 
 .divider{height:1px;background:var(--border);margin:18px 0}
@@ -339,11 +370,56 @@ tr:hover td{background:var(--surface-2)}
 .chip-est{background:var(--warn-bg);color:#b45309;border:1px solid var(--warn-bd)}
 
 /* ====================== MULTI-FOTO ====================== */
-.thumbs{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}
-.thumb{position:relative;width:84px;height:84px;border-radius:var(--r-sm);overflow:hidden;border:1px solid var(--border);box-shadow:var(--shadow)}
+.thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:10px;margin:2px 0 0}
+.thumbs.empty{display:none}
+.thumb{position:relative;aspect-ratio:1/1;border-radius:var(--r-sm);overflow:hidden;border:1px solid var(--border);box-shadow:var(--shadow);background:var(--surface-2)}
 .thumb img{width:100%;height:100%;object-fit:cover;display:block}
-.thumb .x{position:absolute;top:3px;right:3px;width:22px;height:22px;border:none;border-radius:50%;background:rgba(220,38,38,0.92);color:#fff;font-size:13px;font-weight:800;cursor:pointer;display:grid;place-items:center;line-height:1}
-.foto-acciones{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.thumb .thumb-index{
+  position:absolute;left:5px;bottom:5px;max-width:calc(100% - 10px);
+  padding:3px 6px;border-radius:999px;background:rgba(15,23,42,0.78);color:#fff;
+  font-size:10px;font-weight:900;line-height:1;white-space:nowrap;
+}
+.thumb .x{position:absolute;top:5px;right:5px;width:26px;height:26px;border:none;border-radius:50%;background:rgba(185,28,28,0.94);color:#fff;font-size:16px;font-weight:900;cursor:pointer;display:grid;place-items:center;line-height:1}
+.foto-acciones{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-top:2px}
+.foto-acciones .btn{min-height:42px}
+.ticket-read-state{display:flex;gap:10px;align-items:center;margin-bottom:0}
+.ticket-review{
+  border-top:1px solid var(--border);margin-top:14px;padding-top:14px;
+}
+.ticket-review-head{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px;
+}
+.ticket-kicker{font-size:10px;font-weight:900;letter-spacing:1.2px;text-transform:uppercase;color:var(--orange);margin-bottom:2px}
+.ticket-review-count{
+  flex:0 0 auto;padding:5px 9px;border-radius:999px;background:var(--surface-2);
+  border:1px solid var(--border);font-size:11px;font-weight:800;color:var(--text-2);
+}
+.ticket-save-bar{margin-top:4px}
+@media(max-width:640px){
+  #app{padding-left:10px;padding-right:10px;padding-bottom:calc(90px + env(safe-area-inset-bottom))}
+  .card{padding:14px;border-radius:10px}
+  .card-title{align-items:flex-start}
+  .btn{min-height:44px}
+  .btn-sm{padding:10px 12px;font-size:13px}
+  .ticket-card{padding:14px}
+  .ticket-card .card-title{gap:8px;margin-bottom:12px}
+  .ticket-badge{padding:4px 8px;font-size:9px}
+  .photo-zone{grid-template-columns:44px 1fr;gap:10px;padding:13px}
+  .photo-zone .capture-cta{grid-column:1 / -1;width:100%;min-height:42px}
+  .ticket-help{font-size:12px}
+  .ticket-status{align-items:flex-start;font-size:11px}
+  .thumbs{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .foto-acciones{grid-template-columns:1fr}
+  .foto-acciones .btn,.foto-acciones label.btn{width:100%}
+  .ticket-review-head{align-items:center}
+  .ticket-save-bar{position:sticky;bottom:calc(8px + env(safe-area-inset-bottom));z-index:20}
+  .ticket-save-bar .btn{box-shadow:0 12px 28px rgba(249,115,22,0.34)}
+}
+@media(max-width:380px){
+  .thumbs{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ticket-card .card-title{display:block}
+  .ticket-badge{margin-top:8px}
+}
 
 /* ====================== ALERTAS ====================== */
 .alerta{display:flex;gap:10px;align-items:flex-start;padding:11px 14px;border-radius:var(--r-xs);font-size:13px;font-weight:500;margin-bottom:8px;border:1px solid}
@@ -766,18 +842,32 @@ html.dark #header .range-pill.active { background:#f1f5f9; color:#1e3a8a; }
     <section id="view-compras" class="view">
       <div class="section-head"><h1 class="h1">Compras</h1></div>
 
-      <div class="card">
-        <div class="card-title"><h2 class="h2">Nueva compra desde foto</h2></div>
-        <label class="photo-zone" for="foto-compra">
-          <span class="ico">📷</span>
-          <span class="t">Toma o sube las fotos del ticket</span>
-          <span class="s">Puedes agregar varias fotos del mismo ticket. Las leemos con IA.</span>
-        </label>
-        <input id="foto-compra" type="file" accept="image/*" capture="environment" multiple class="hidden">
-        <div id="compra-thumbs" class="thumbs"></div>
-        <div id="compra-foto-acciones" class="foto-acciones hidden">
-          <label class="btn btn-sm btn-ghost" for="foto-compra">＋ Agregar otra foto</label>
-          <button class="btn btn-sm btn-navy" onclick="leerTicketIA('compra')">Leer con IA</button>
+      <div class="card ticket-card">
+        <div class="card-title">
+          <div>
+            <h2 class="h2">Registrar compra</h2>
+            <div class="muted">Lee el ticket con IA o captura los datos antes de guardar.</div>
+          </div>
+          <span class="ticket-badge">OCR</span>
+        </div>
+        <div class="ticket-capture">
+          <label class="photo-zone" for="foto-compra" data-ticket-zone="compra">
+            <span class="ico">CAM</span>
+            <span>
+              <span class="t">Fotos del ticket</span>
+              <span class="s">Toma una foto clara o agrega varias si el ticket es largo.</span>
+            </span>
+            <span class="capture-cta">Tomar foto</span>
+          </label>
+          <input id="foto-compra" type="file" accept="image/*" capture="environment" multiple class="hidden">
+          <div class="ticket-help"><span>1</span><span><b>Ticket largo</b>Toma las fotos en orden, de arriba hacia abajo, dejando un poco de traslape.</span></div>
+          <div id="compra-foto-status" class="ticket-status"><span><strong>0 fotos</strong> listas para leer</span><span>Máx. 8</span></div>
+          <div id="compra-thumbs" class="thumbs empty"></div>
+          <div id="compra-foto-acciones" class="foto-acciones hidden">
+            <label class="btn btn-sm btn-ghost" for="foto-compra">Agregar foto</label>
+            <button class="btn btn-sm btn-navy" onclick="leerTicketIA('compra')">Leer ticket</button>
+            <button class="btn btn-sm btn-ghost" type="button" onclick="reiniciarFotosTicket('compra')">Limpiar</button>
+          </div>
         </div>
         <div id="compra-foto-msg" style="margin-top:12px"></div>
         <div id="compra-form-wrap" class="hidden"></div>
@@ -798,18 +888,32 @@ html.dark #header .range-pill.active { background:#f1f5f9; color:#1e3a8a; }
     <section id="view-gastos" class="view">
       <div class="section-head"><h1 class="h1">Gastos</h1></div>
 
-      <div class="card">
-        <div class="card-title"><h2 class="h2">Nuevo gasto desde foto</h2></div>
-        <label class="photo-zone" for="foto-gasto">
-          <span class="ico">📷</span>
-          <span class="t">Toma o sube las fotos del ticket</span>
-          <span class="s">Puedes agregar varias fotos del mismo ticket. Las leemos con IA.</span>
-        </label>
-        <input id="foto-gasto" type="file" accept="image/*" capture="environment" multiple class="hidden">
-        <div id="gasto-thumbs" class="thumbs"></div>
-        <div id="gasto-foto-acciones" class="foto-acciones hidden">
-          <label class="btn btn-sm btn-ghost" for="foto-gasto">＋ Agregar otra foto</label>
-          <button class="btn btn-sm btn-navy" onclick="leerTicketIA('gasto')">Leer con IA</button>
+      <div class="card ticket-card">
+        <div class="card-title">
+          <div>
+            <h2 class="h2">Registrar gasto</h2>
+            <div class="muted">Lee el comprobante con IA y revisa los importes antes de guardar.</div>
+          </div>
+          <span class="ticket-badge">OCR</span>
+        </div>
+        <div class="ticket-capture">
+          <label class="photo-zone" for="foto-gasto" data-ticket-zone="gasto">
+            <span class="ico">CAM</span>
+            <span>
+              <span class="t">Fotos del ticket</span>
+              <span class="s">Toma una foto clara o agrega varias si el ticket es largo.</span>
+            </span>
+            <span class="capture-cta">Tomar foto</span>
+          </label>
+          <input id="foto-gasto" type="file" accept="image/*" capture="environment" multiple class="hidden">
+          <div class="ticket-help"><span>1</span><span><b>Ticket largo</b>Toma las fotos en orden, de arriba hacia abajo, dejando un poco de traslape.</span></div>
+          <div id="gasto-foto-status" class="ticket-status"><span><strong>0 fotos</strong> listas para leer</span><span>Máx. 8</span></div>
+          <div id="gasto-thumbs" class="thumbs empty"></div>
+          <div id="gasto-foto-acciones" class="foto-acciones hidden">
+            <label class="btn btn-sm btn-ghost" for="foto-gasto">Agregar foto</label>
+            <button class="btn btn-sm btn-navy" onclick="leerTicketIA('gasto')">Leer ticket</button>
+            <button class="btn btn-sm btn-ghost" type="button" onclick="reiniciarFotosTicket('gasto')">Limpiar</button>
+          </div>
         </div>
         <div id="gasto-foto-msg" style="margin-top:12px"></div>
         <div id="gasto-form-wrap" class="hidden"></div>
@@ -1864,20 +1968,36 @@ async function agregarFotosTicket(tipo, fileList){
   const avisos = [];
   if(duplicadas) avisos.push(duplicadas + ' foto(s) duplicada(s) omitida(s).');
   if(omitidas) avisos.push(omitidas + ' foto(s) omitida(s) por limite de tamano/cantidad.');
-  showMsg(msgId, avisos.join(' ') || '', avisos.length ? 'warn' : 'info');
+  if(avisos.length){
+    showMsg(msgId, avisos.join(' '), 'warn');
+  }else{
+    const total = fotosTicket[tipo].length;
+    showMsg(msgId, total + ' foto(s) lista(s). Si el ticket es largo, agrega todas las secciones antes de leer.', 'info');
+  }
 }
 
 function renderThumbs(tipo){
   const set = fotosTicket[tipo];
   const cont  = $(tipo + '-thumbs');
   const accs  = $(tipo + '-foto-acciones');
+  const status = $(tipo + '-foto-status');
+  const zone = document.querySelector('[data-ticket-zone="' + tipo + '"]');
   let html = '';
-  set.forEach(it => {
-    html += '<div class="thumb"><img src="' + it.dataUrl + '" alt="foto">' +
-            '<button class="x" type="button" title="Quitar" onclick="quitarFotoTicket(\'' + tipo + '\',' + it.id + ')">×</button></div>';
+  set.forEach((it, idx) => {
+    const n = idx + 1;
+    html += '<div class="thumb"><img src="' + it.dataUrl + '" alt="Foto ' + n + ' del ticket">' +
+            '<span class="thumb-index">Foto ' + n + '</span>' +
+            '<button class="x" type="button" title="Quitar" aria-label="Quitar foto ' + n + '" onclick="quitarFotoTicket(\'' + tipo + '\',' + it.id + ')">×</button></div>';
   });
   cont.innerHTML = html;
+  cont.classList.toggle('empty', set.length === 0);
   accs.classList.toggle('hidden', set.length === 0);
+  if(status){
+    status.innerHTML = set.length
+      ? '<span><strong>' + set.length + ' foto(s)</strong> listas para leer</span><span>Máx. ' + MAX_TICKET_IMAGES + '</span>'
+      : '<span><strong>0 fotos</strong> listas para leer</span><span>Máx. ' + MAX_TICKET_IMAGES + '</span>';
+  }
+  if(zone) zone.classList.toggle('has-photos', set.length > 0);
 }
 
 function quitarFotoTicket(tipo, id){
@@ -1888,6 +2008,16 @@ function quitarFotoTicket(tipo, id){
 function limpiarFotosTicket(tipo){
   fotosTicket[tipo] = [];
   renderThumbs(tipo);
+}
+
+function reiniciarFotosTicket(tipo){
+  const esCompra = tipo === 'compra';
+  const msgId = esCompra ? 'compra-foto-msg' : 'gasto-foto-msg';
+  const wrapId = esCompra ? 'compra-form-wrap' : 'gasto-form-wrap';
+  limpiarFotosTicket(tipo);
+  $(wrapId).classList.add('hidden');
+  $(wrapId).innerHTML = '';
+  showMsg(msgId, '');
 }
 
 function hashSetFotos(tipo){
@@ -1914,8 +2044,8 @@ async function leerTicketIA(tipo){
 
   $(wrapId).classList.add('hidden');
   $(wrapId).innerHTML = '';
-  $(msgId).innerHTML = '<div class="msg msg-info"><span class="loader loader-navy"></span> Leyendo ' +
-    (set.length === 1 ? 'el ticket' : ('las ' + set.length + ' fotos')) + '… esto puede tardar unos segundos.</div>';
+  $(msgId).innerHTML = '<div class="msg msg-info ticket-read-state"><span class="loader loader-navy"></span><span><b>Leyendo ' +
+    (set.length === 1 ? 'el ticket' : ('las ' + set.length + ' fotos')) + '</b><br>Esto puede tardar unos segundos.</span></div>';
 
   const imagenes_base64 = set.map(it => it.base64);
   const readBtn = document.querySelector('button[onclick="leerTicketIA(\'' + tipo + '\')"]');
@@ -2005,9 +2135,15 @@ function mostrarFormularioTicket(tipo, d){
     ? '<div class="field"><label>Proveedor</label><input id="tk-proveedor" class="inp" value="' + esc(d.proveedor || '') + '"></div>'
     : '<div class="field"><label>Concepto</label><input id="tk-concepto" class="inp" value="' + esc(d.proveedor || d.categoria || '') + '"></div>';
 
+  const fotosTxt = fotosTicket[tipo].length
+    ? fotosTicket[tipo].length + ' foto(s)'
+    : 'Sin foto';
   wrap.innerHTML =
-    '<div class="divider"></div>' +
-    '<h3 class="h3" style="margin-bottom:12px">Revisa y guarda</h3>' +
+    '<div class="ticket-review">' +
+    '<div class="ticket-review-head">' +
+      '<div><div class="ticket-kicker">Paso 2</div><h3 class="h3">Revisa y guarda</h3></div>' +
+      '<span class="ticket-review-count">' + esc(fotosTxt) + '</span>' +
+    '</div>' +
     banner + nota + bloqueEntendido +
     '<div id="tk-guardar-msg"></div>' +
     '<div class="form-grid">' +
@@ -2024,7 +2160,8 @@ function mostrarFormularioTicket(tipo, d){
     '<div class="field"><label>Conceptos (uno por línea: descripción | importe)</label>' +
       '<textarea id="tk-conceptos" class="inp" rows="3">' + esc(conceptosTxt) + '</textarea></div>' +
     '<input type="hidden" id="tk-estimados" value="' + (d.impuestos_estimados === true ? '1' : '0') + '">' +
-    '<button id="tk-guardar" class="btn btn-orange btn-full">Guardar ' + (esCompra ? 'compra' : 'gasto') + '</button>';
+    '<div class="ticket-save-bar"><button id="tk-guardar" class="btn btn-orange btn-full">Guardar ' + (esCompra ? 'compra' : 'gasto') + '</button></div>' +
+    '</div>';
 
   wrap.classList.remove('hidden');
   $('tk-guardar').addEventListener('click', () => guardarTicket(tipo));
