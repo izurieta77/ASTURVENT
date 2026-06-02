@@ -1,10 +1,81 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
 import { format, subDays, startOfMonth } from 'date-fns'
 
 interface Props {
   token: string
   onLogout: () => void
+}
+
+type ChartGranularity = 'day' | 'week' | 'month' | 'quarter' | 'year'
+
+const MAX_TREND_POINTS = 84
+
+function chartDate(fecha: string) {
+  const value = String(fecha || '').slice(0, 10)
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00`) : new Date(fecha)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function bucketKey(date: Date, granularity: ChartGranularity) {
+  if (granularity === 'week') {
+    const weekStart = new Date(date)
+    const day = (weekStart.getDay() + 6) % 7
+    weekStart.setDate(weekStart.getDate() - day)
+    return weekStart.toISOString().slice(0, 10)
+  }
+  if (granularity === 'month') return date.toISOString().slice(0, 7)
+  if (granularity === 'quarter') return `${date.getFullYear()}-T${Math.floor(date.getMonth() / 3) + 1}`
+  if (granularity === 'year') return String(date.getFullYear())
+  return date.toISOString().slice(0, 10)
+}
+
+function chartGranularityForRange(desde: string, hasta: string, seriesLen: number): ChartGranularity {
+  const start = chartDate(desde)
+  const end = chartDate(hasta)
+  if (!start || !end) return seriesLen > MAX_TREND_POINTS ? 'week' : 'day'
+  const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1
+  if (days > 1500 || seriesLen > 900) return 'year'
+  if (days > 730 || seriesLen > 360) return 'quarter'
+  if (days > 200 || seriesLen > 180) return 'month'
+  if (days > 50 || seriesLen > 60) return 'week'
+  return 'day'
+}
+
+function capSeries<T extends { fecha: string; total: number }>(items: T[]) {
+  if (items.length <= MAX_TREND_POINTS) return items
+  const bucketSize = Math.ceil(items.length / MAX_TREND_POINTS)
+  const compacted: Array<{ fecha: string; total: number }> = []
+  for (let i = 0; i < items.length; i += bucketSize) {
+    const chunk = items.slice(i, i + bucketSize)
+    const first = chunk[0]
+    const last = chunk[chunk.length - 1] || first
+    compacted.push({
+      fecha: first.fecha === last.fecha ? first.fecha : `${first.fecha}...${last.fecha}`,
+      total: chunk.reduce((sum, item) => sum + Number(item.total || 0), 0)
+    })
+  }
+  return compacted
+}
+
+function aggregateForChart(series: any[], granularity: ChartGranularity) {
+  if (!series || series.length === 0) return []
+  if (granularity === 'day' && series.length <= MAX_TREND_POINTS) return series
+
+  const buckets: Record<string, { fecha: string; total: number }> = {}
+  series.forEach((item: any) => {
+    const date = chartDate(item.fecha)
+    if (!date) return
+    const key = bucketKey(date, granularity)
+    if (!buckets[key]) buckets[key] = { fecha: key, total: 0 }
+    buckets[key].total += Number(item.total || item.importe || 0)
+  })
+
+  return capSeries(Object.values(buckets).sort((a, b) => a.fecha.localeCompare(b.fecha)))
+}
+
+function granularityLabel(granularity: ChartGranularity) {
+  return ({ day: 'por día', week: '(semanal)', month: '(mensual)', quarter: '(trimestral)', year: '(anual)' })[granularity]
 }
 
 export function Dashboard({ token, onLogout }: Props) {
@@ -22,6 +93,14 @@ export function Dashboard({ token, onLogout }: Props) {
   const [filtroPago, setFiltroPago] = useState('')
   const [loading, setLoading] = useState(true)
   const [soloVentas, setSoloVentas] = useState(false)
+
+  const chartGranularity = useMemo(() => {
+    return chartGranularityForRange(desde, hasta, series.length)
+  }, [desde, hasta, series])
+
+  const aggregatedSeries = useMemo(() => {
+    return aggregateForChart(series, chartGranularity)
+  }, [series, chartGranularity])
 
   const apiFetch = async (url: string) => {
     const res = await fetch(url, {
@@ -205,17 +284,17 @@ export function Dashboard({ token, onLogout }: Props) {
           ))}
         </div>
 
-        {/* Main Trend Chart - Recharts (gorgeous) */}
+        {/* Main Trend Chart - Recharts (gorgeous) - smart aggregation for long periods */}
         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6">
           <div className="font-semibold mb-4 flex items-center justify-between">
-            <span>Ventas por día</span>
+            <span>Ventas {granularityLabel(chartGranularity)} {chartGranularity !== 'day' && <span className="text-emerald-400 text-xs ml-2">({aggregatedSeries.length} puntos)</span>}</span>
             <span className="text-xs text-slate-400">con comparación</span>
           </div>
           <div className="h-[320px]">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={series}>
+              <LineChart data={aggregatedSeries}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis dataKey="fecha" tick={{ fill: '#64748b', fontSize: 11 }} />
+                <XAxis dataKey="fecha" minTickGap={24} tick={{ fill: '#64748b', fontSize: 11 }} />
                 <YAxis tick={{ fill: '#64748b', fontSize: 11 }} />
                 <Tooltip contentStyle={{ backgroundColor: '#1e2937', border: 'none', borderRadius: 8 }} />
                 <Line type="monotone" dataKey="total" stroke="#f97316" strokeWidth={3} dot={false} />
@@ -225,8 +304,8 @@ export function Dashboard({ token, onLogout }: Props) {
           </div>
         </div>
 
-        {/* Hourly Chart */}
-        {hourly.length > 3 && (
+        {/* Hourly Chart - hide for long ranges where it doesn't make sense as daily pattern */}
+        {hourly.length > 3 && chartGranularity === 'day' && (
           <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6">
             <div className="font-semibold mb-3">Ventas por hora</div>
             <div className="h-[180px]">

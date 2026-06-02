@@ -1293,13 +1293,16 @@ async function cargarAlertas(){
 
 function pintarGraficaVentas(serie){
   const ctx = $('chart-ventas');
-  const labels = serie.map(p => p.fecha);
-  const valores = serie.map(p => Number(p.total) || 0);
+  const rango = rangoFechas(rangoActual) || {};
+  const gran = getGranularity(rango.desde, rango.hasta, (serie || []).length);
+  const compacta = aggregateSeries(serie || [], gran);
+  const labels = compacta.map(p => p.fecha);
+  const valores = compacta.map(p => Number(p.total) || 0);
   if(chartVentas) chartVentas.destroy();
   chartVentas = new Chart(ctx, {
     type:'bar',
     data:{ labels, datasets:[{
-      label:'Ventas',
+      label: gran === 'day' ? 'Ventas' : 'Ventas (' + etiquetaGranularidad(gran) + ')',
       data:valores,
       backgroundColor:'rgba(30,58,138,0.85)',
       borderRadius:6,
@@ -1308,7 +1311,10 @@ function pintarGraficaVentas(serie){
       responsive:true, maintainAspectRatio:false,
       plugins:{ legend:{ display:false },
         tooltip:{ callbacks:{ label:(c)=> mxn(c.parsed.y) } } },
-      scales:{ y:{ beginAtZero:true, ticks:{ callback:(v)=> '$' + v } } },
+      scales:{
+        x:{ ticks:{ maxTicksLimit:22 } },
+        y:{ beginAtZero:true, ticks:{ callback:(v)=> '$' + v } }
+      },
     },
   });
 }
@@ -2892,8 +2898,14 @@ async function cargarDashboardOperativo(forceRefresh = false) {
     // Payment mix
     renderPaymentMix(rows);
 
-    // Hourly chart if data supports it (#3)
-    renderHourlyChart(rows);
+    // Hourly chart if data supports it (#3) - only for short ranges, otherwise not meaningful
+    const gran = getGranularity(dash.desde, dash.hasta, (panel.serie_ventas||[]).length);
+    if (gran === 'day') {
+      renderHourlyChart(rows);
+    } else {
+      const hsec = $('hourly-section');
+      if (hsec) hsec.classList.add('hidden');
+    }
 
     // Actionable alerts derived from data
     renderOperativeAlerts(k, rows, prevK);
@@ -3022,32 +3034,143 @@ function renderOperativeKPIs(k, prevK, rows, panel = {}) {
   }, 60);
 }
 
+const MAX_TREND_POINTS = 84;
+const MAX_SPARK_POINTS = 48;
+
+function fechaGrafica(fecha){
+  const s = String(fecha || '').slice(0, 10);
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(s + 'T00:00:00') : new Date(fecha);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function bucketGrafica(d, granularity){
+  if(granularity === 'week'){
+    const weekStart = new Date(d);
+    const day = (weekStart.getDay() + 6) % 7;
+    weekStart.setDate(weekStart.getDate() - day);
+    const label = weekStart.toISOString().slice(0,10);
+    return { key: label, label };
+  }
+  if(granularity === 'month'){
+    const label = d.toISOString().slice(0,7);
+    return { key: label, label };
+  }
+  if(granularity === 'quarter'){
+    const quarter = Math.floor(d.getMonth() / 3) + 1;
+    const label = d.getFullYear() + '-T' + quarter;
+    return { key: label, label };
+  }
+  if(granularity === 'year'){
+    const label = String(d.getFullYear());
+    return { key: label, label };
+  }
+  const label = d.toISOString().slice(0,10);
+  return { key: label, label };
+}
+
+function compactSeriesLimit(series, maxPoints){
+  const arr = Array.isArray(series) ? series : [];
+  if(arr.length <= maxPoints) return arr;
+
+  const bucketSize = Math.ceil(arr.length / maxPoints);
+  const out = [];
+  for(let i = 0; i < arr.length; i += bucketSize){
+    const chunk = arr.slice(i, i + bucketSize);
+    const first = chunk[0] || {};
+    const last = chunk[chunk.length - 1] || first;
+    out.push({
+      fecha: first.fecha === last.fecha ? first.fecha : (first.fecha + '...' + last.fecha),
+      total: chunk.reduce((s, it) => s + Number(it.total || it.importe || 0), 0),
+      tickets: chunk.reduce((s, it) => s + Number(it.tickets || 0), 0),
+      items: chunk.reduce((s, it) => s + Number(it.items || 0), 0),
+    });
+  }
+  return out;
+}
+
+function aggregateSeries(series, granularity) {
+  if (!series || series.length === 0) return [];
+  if (granularity === 'day' && series.length <= MAX_TREND_POINTS) return series;
+
+  const buckets = {};
+  series.forEach(item => {
+    const d = fechaGrafica(item.fecha);
+    if(!d) return;
+    const bucket = bucketGrafica(d, granularity);
+    const key = bucket.key;
+    const label = bucket.label;
+    if (!buckets[key]) {
+      buckets[key] = { fecha: label, total: 0, tickets: 0, items: 0, _count: 0 };
+    }
+    buckets[key].total += Number(item.total || item.importe || 0);
+    buckets[key].tickets += Number(item.tickets || 0);
+    buckets[key].items += Number(item.items || 0);
+    buckets[key]._count++;
+  });
+
+  const aggregated = Object.keys(buckets).sort().map(k => ({
+    fecha: buckets[k].fecha,
+    total: Math.round(buckets[k].total),
+    tickets: buckets[k].tickets,
+    items: buckets[k].items,
+  }));
+  return compactSeriesLimit(aggregated, MAX_TREND_POINTS);
+}
+
+function getGranularity(desde, hasta, seriesLen) {
+  if (!desde || !hasta) return 'day';
+  const start = fechaGrafica(desde);
+  const end = fechaGrafica(hasta);
+  if(!start || !end) return seriesLen > MAX_TREND_POINTS ? 'week' : 'day';
+  const days = Math.ceil((end.getTime() - start.getTime()) / (1000*3600*24)) + 1;
+  if (days > 1500 || seriesLen > 900) return 'year';
+  if (days > 730 || seriesLen > 360) return 'quarter';
+  if (days > 200 || seriesLen > 180) return 'month';
+  if (days > 50 || seriesLen > 60) return 'week';
+  return 'day';
+}
+
+function etiquetaGranularidad(gran){
+  return ({ day:'diaria', week:'semanal', month:'mensual', quarter:'trimestral', year:'anual' })[gran] || 'diaria';
+}
+
 function renderSalesTrendChart(series, withCompare, prevSeries = null, prevLabel = 'Período anterior') {
   const canvas = $('chart-ventas-operativo');
   if (!canvas || !window.Chart) return;
 
   if (window._opChart) { window._opChart.destroy(); window._opChart = null; }
 
-  const labels = series.map(s => s.fecha);
-  const data = series.map(s => s.total);
+  const dash = window.SC_DASH || {};
+  const gran = getGranularity(dash.desde, dash.hasta, (series||[]).length);
+  const aggregated = aggregateSeries(series || [], gran);
+
+  // Also aggregate prev if present
+  let aggPrev = null;
+  if (withCompare && prevSeries && prevSeries.length) {
+    aggPrev = aggregateSeries(prevSeries, gran);
+  }
+
+  const labels = aggregated.map(s => s.fecha);
+  const data = aggregated.map(s => s.total);
+
+  const mainLabel = gran === 'day' ? 'Ventas' : 'Ventas (' + etiquetaGranularidad(gran) + ')';
 
   const datasets = [{
-    label: 'Ventas',
+    label: mainLabel,
     data,
     borderColor: '#1e3a8a',
     backgroundColor: 'rgba(30,58,138,0.08)',
     borderWidth: 2.5,
     tension: 0.25,
     fill: true,
-    pointRadius: 2,
+    pointRadius: (gran === 'day' ? 2 : 1),
     pointHoverRadius: 4
   }];
 
-  if (withCompare && prevSeries && prevSeries.length) {
-    // Real previous data overlay (YoY or período anterior)
-    const prevData = prevSeries.map(s => s.total);
+  if (withCompare && aggPrev && aggPrev.length) {
+    const prevData = aggPrev.map(s => s.total);
     datasets.push({
-      label: prevLabel,
+      label: prevLabel + (gran !== 'day' ? ' (' + etiquetaGranularidad(gran) + ')' : ''),
       data: prevData,
       borderColor: '#64748b',
       borderDash: [4, 2],
@@ -3058,6 +3181,12 @@ function renderSalesTrendChart(series, withCompare, prevSeries = null, prevLabel
     });
   }
 
+  // Update a small indicator if exists
+  const trendSummary = $('trend-summary');
+  if (trendSummary) {
+    trendSummary.textContent = gran !== 'day' ? ('Agregado ' + etiquetaGranularidad(gran) + ' · ' + aggregated.length + ' puntos') : '';
+  }
+
   window._opChart = new Chart(canvas, {
     type: 'line',
     data: { labels, datasets },
@@ -3065,7 +3194,7 @@ function renderSalesTrendChart(series, withCompare, prevSeries = null, prevLabel
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: true, position: 'bottom', labels:{boxWidth:12, font:{size:10}} } },
       scales: {
-        x: { grid: { color: 'rgba(148,163,184,0.1)' }, ticks:{font:{size:10}} },
+        x: { grid: { color: 'rgba(148,163,184,0.1)' }, ticks:{font:{size:10}, maxTicksLimit: (gran==='year'?10 : gran==='quarter'?16 : gran==='month'?18 : 22)} },
         y: { grid: { color: 'rgba(148,163,184,0.1)' }, ticks: { font:{size:10}, callback: v => '$'+(v/1000)+'k' } }
       }
     }
@@ -3198,9 +3327,22 @@ function renderOperativeAlerts(k, rows, prevK) {
 /* === Real sparklines for KPIs (#1) === */
 const sparklineInstances = {};
 
+function compactNumberSeries(data, maxPoints){
+  const arr = (data || []).map(n => Number(n) || 0);
+  if(arr.length <= maxPoints) return arr;
+  const bucketSize = Math.ceil(arr.length / maxPoints);
+  const out = [];
+  for(let i = 0; i < arr.length; i += bucketSize){
+    const chunk = arr.slice(i, i + bucketSize);
+    out.push(chunk.reduce((s, n) => s + n, 0) / chunk.length);
+  }
+  return out;
+}
+
 function renderMiniSparkline(canvasId, data, color = '#1e3a8a') {
   const canvas = $(canvasId);
   if (!canvas || !window.Chart || !data || data.length < 2) return;
+  const compactData = compactNumberSeries(data, MAX_SPARK_POINTS);
 
   if (sparklineInstances[canvasId]) {
     sparklineInstances[canvasId].destroy();
@@ -3209,9 +3351,9 @@ function renderMiniSparkline(canvasId, data, color = '#1e3a8a') {
   sparklineInstances[canvasId] = new Chart(canvas, {
     type: 'line',
     data: {
-      labels: data.map((_, i) => i),
+      labels: compactData.map((_, i) => i),
       datasets: [{
-        data: data,
+        data: compactData,
         borderColor: color,
         borderWidth: 1.5,
         tension: 0.35,
