@@ -27,12 +27,12 @@
 
 const { corsHeaders, json, verifyToken, bearer } = require('./_lib');
 
-const MODEL      = 'gpt-4o';          // modelo de vision
-const MAX_TOKENS = 1200;              // techo de salida (mas alto por multi-foto)
-const OPENAI_TIMEOUT_MS = 8500;
+const MODEL      = process.env.OPENAI_TICKET_MODEL || 'gpt-4o'; // modelo de vision
+const MAX_TOKENS = 2200;              // salida mas amplia para tickets largos agrupados
+const OPENAI_TIMEOUT_MS = 9500;
 // Mantener el payload por debajo de los limites practicos de funciones serverless.
-const MAX_B64_TOTAL = 5.5 * 1024 * 1024;
-const MAX_IMAGENES  = 8;              // techo de imagenes por llamada
+const MAX_B64_TOTAL = 6.2 * 1024 * 1024;
+const MAX_IMAGENES  = 12;             // techo de imagenes/paginas por llamada
 const IVA_TASA    = 0.16;            // IVA general en Mexico (16%)
 const TOLERANCIA  = 0.50;            // tolerancia para validar subtotal+iva+ieps≈total
 
@@ -89,7 +89,15 @@ const SYSTEM_PROMPT =
   'mismo total. Algunas fotos pueden traslaparse: si una linea, subtotal o total ' +
   'aparece repetido en dos fotos, usalo una sola vez. No trates cada foto como ' +
   'un ticket distinto. El documento puede estar IMPRESO o escrito A MANO (manuscrito); ' +
-  'lee la letra manuscrita lo mejor posible. NO agregues datos "a lo tonto": LEE y ' +
+  'lee la letra manuscrita lo mejor posible. Tambien puede ser un escaneo PDF/JPG ' +
+  'de un ticket muy largo de proveedor como PepsiCo, Sabritas, Gamesa, Marinela, ' +
+  'Barcel, Bimbo u otro proveedor de botanas, galletas o pan. En documentos largos, ' +
+  'NO es obligatorio devolver cada SKU individual: prioriza proveedor, fecha, subtotal, ' +
+  'IVA, IEPS y total exactos. Si hay demasiadas lineas, agrupa conceptos repetidos o ' +
+  'muy similares por marca/familia/categoria (por ejemplo "Sabritas surtido", ' +
+  '"galletas Gamesa/Marinela", "pan Bimbo") y limita conceptos a maximo 60 renglones. ' +
+  'NO inventes importes por linea; si agrupas, usa importes que se vean o una suma ' +
+  'legible. NO agregues datos "a lo tonto": LEE y ' +
   'ENTIENDE para que sirve cada producto comprado.\n' +
   'Devuelves SOLO un objeto JSON valido (sin texto extra, sin markdown, sin ```). ' +
   'Estructura exacta requerida:\n' +
@@ -121,7 +129,8 @@ const SYSTEM_PROMPT =
   'mayonesa, mostaza, chiles, jitomate, lechua, aguacate, mantequilla. Si el producto ' +
   'tipicamente se usa como ingrediente de una torta/sandwich/cuernito, es "maquila".\n' +
   '- "uso"="reventa": productos que se VENDEN TAL CUAL sin preparar. Ejemplos: refrescos, ' +
-  'agua embotellada, sabritas/frituras, dulces, cigarros, cerveza, galletas empaquetadas.\n' +
+  'agua embotellada, sabritas/frituras, papas, botanas, dulces, cigarros, cerveza, ' +
+  'galletas empaquetadas y pan/galletas de Bimbo, Marinela, Gamesa o proveedor similar.\n' +
   '- "uso"="otro": lo que no es ni ingrediente ni mercancia de reventa (limpieza, ' +
   'papeleria, servicios, equipo, bolsas).\n' +
   '- "ingrediente": cuando uso="maquila", normaliza el nombre del insumo a una palabra ' +
@@ -164,16 +173,16 @@ exports.handler = async (event) => {
     return json(400, cors, { ok: false, error: 'Falta imagenes_base64 (o imagen_base64)' });
   }
   if (imagenes.length > MAX_IMAGENES) {
-    return json(413, cors, { ok: false, error: `Demasiadas imagenes (max ${MAX_IMAGENES}).` });
+    return json(413, cors, { ok: false, error: `Demasiadas imagenes/paginas (max ${MAX_IMAGENES}). Sube un escaneo mas corto o sin paginas repetidas.` });
   }
   const totalLen = imagenes.reduce((s, b) => s + b.length, 0);
   if (totalLen > MAX_B64_TOTAL) {
-    return json(413, cors, { ok: false, error: 'Las imagenes son demasiado grandes. Tomalas a menor resolucion.' });
+    return json(413, cors, { ok: false, error: 'Las imagenes son demasiado grandes. Sube un escaneo mas ligero o quita paginas/fotos repetidas.' });
   }
 
   // --- Llamada a OpenAI (vision) con TODAS las imagenes en un solo mensaje ---
   const contenidoUsuario = [
-    { type: 'text', text: `Estas ${imagenes.length} imagen(es) son partes del MISMO ticket/nota de ${tipo}. Fusiona la informacion y devuelve el JSON.` },
+    { type: 'text', text: `Estas ${imagenes.length} imagen(es) o pagina(s) son partes del MISMO ticket/nota de ${tipo}. Fusiona la informacion y devuelve el JSON. Si es un documento largo de proveedor, agrupa conceptos y conserva totales exactos.` },
     ...imagenes.map(b64 => ({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${b64}`, detail: 'high' } })),
   ];
 
@@ -209,7 +218,7 @@ exports.handler = async (event) => {
   } catch (e) {
     if (timeout) clearTimeout(timeout);
     if (e && e.name === 'AbortError') {
-      return json(504, cors, { ok: false, error: 'La lectura del ticket tardo demasiado. Intenta con menos fotos o fotos mas cercanas.' });
+      return json(504, cors, { ok: false, error: 'La lectura del ticket tardo demasiado. Para tickets largos, sube un escaneo PDF/JPG claro y sin paginas repetidas.' });
     }
     return json(502, cors, { ok: false, error: 'No se pudo contactar el servicio de IA.' });
   }

@@ -21,6 +21,9 @@
 
 <!-- jsPDF for professional PDF export of the operational panel -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<!-- PDF.js para subir tickets escaneados como documento -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
   // Tailwind runtime config — modern operational retail dashboard aesthetic 2026
   function initTailwind() {
@@ -380,7 +383,9 @@ tr:hover td{background:var(--surface-2)}
   font-size:10px;font-weight:900;line-height:1;white-space:nowrap;
 }
 .thumb .x{position:absolute;top:5px;right:5px;width:26px;height:26px;border:none;border-radius:50%;background:rgba(185,28,28,0.94);color:#fff;font-size:16px;font-weight:900;cursor:pointer;display:grid;place-items:center;line-height:1}
-.foto-acciones{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-top:2px}
+.scan-actions{display:grid;grid-template-columns:minmax(180px,260px);gap:8px;margin-top:-2px}
+.scan-actions .btn{width:100%;min-height:42px}
+.foto-acciones{display:grid;grid-template-columns:repeat(2,minmax(0,1fr)) auto auto;gap:8px;margin-top:2px}
 .foto-acciones .btn{min-height:42px}
 .ticket-read-state{display:flex;gap:10px;align-items:center;margin-bottom:0}
 .ticket-review{
@@ -407,9 +412,10 @@ tr:hover td{background:var(--surface-2)}
   .photo-zone{grid-template-columns:44px 1fr;gap:10px;padding:13px}
   .photo-zone .capture-cta{grid-column:1 / -1;width:100%;min-height:42px}
   .ticket-help{font-size:12px}
+  .scan-actions{grid-template-columns:1fr}
   .ticket-status{align-items:flex-start;font-size:11px}
   .thumbs{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-  .foto-acciones{grid-template-columns:1fr}
+  .foto-acciones{grid-template-columns:1fr 1fr}
   .foto-acciones .btn,.foto-acciones label.btn{width:100%}
   .ticket-review-head{align-items:center}
   .ticket-save-bar{position:sticky;bottom:calc(8px + env(safe-area-inset-bottom));z-index:20}
@@ -419,6 +425,9 @@ tr:hover td{background:var(--surface-2)}
   .thumbs{grid-template-columns:repeat(2,minmax(0,1fr))}
   .ticket-card .card-title{display:block}
   .ticket-badge{margin-top:8px}
+}
+@media(max-width:430px){
+  .foto-acciones{grid-template-columns:1fr}
 }
 
 /* ====================== ALERTAS ====================== */
@@ -855,16 +864,21 @@ html.dark #header .range-pill.active { background:#f1f5f9; color:#1e3a8a; }
             <span class="ico">CAM</span>
             <span>
               <span class="t">Fotos del ticket</span>
-              <span class="s">Toma una foto clara o agrega varias si el ticket es largo.</span>
+              <span class="s">Usa camara para tickets cortos o sube un escaneo PDF/JPG si es largo.</span>
             </span>
             <span class="capture-cta">Tomar foto</span>
           </label>
           <input id="foto-compra" type="file" accept="image/*" capture="environment" multiple class="hidden">
-          <div class="ticket-help"><span>1</span><span><b>Ticket largo</b>Toma las fotos en orden, de arriba hacia abajo, dejando un poco de traslape.</span></div>
-          <div id="compra-foto-status" class="ticket-status"><span><strong>0 fotos</strong> listas para leer</span><span>Máx. 8</span></div>
+          <input id="scan-compra" type="file" accept="image/*,application/pdf,.pdf" multiple class="hidden">
+          <div class="scan-actions">
+            <label class="btn btn-sm btn-ghost" for="scan-compra">Subir escaneo PDF/JPG</label>
+          </div>
+          <div class="ticket-help"><span>1</span><span><b>Ticket largo</b>Para PepsiCo, Sabritas, Bimbo o notas con muchas lineas, escanealo como PDF/JPG y subelo aqui.</span></div>
+          <div id="compra-foto-status" class="ticket-status"><span><strong>0 fotos</strong> listas para leer</span><span>Max. 12</span></div>
           <div id="compra-thumbs" class="thumbs empty"></div>
           <div id="compra-foto-acciones" class="foto-acciones hidden">
             <label class="btn btn-sm btn-ghost" for="foto-compra">Agregar foto</label>
+            <label class="btn btn-sm btn-ghost" for="scan-compra">Subir escaneo</label>
             <button class="btn btn-sm btn-navy" onclick="leerTicketIA('compra')">Leer ticket</button>
             <button class="btn btn-sm btn-ghost" type="button" onclick="reiniciarFotosTicket('compra')">Limpiar</button>
           </div>
@@ -901,16 +915,21 @@ html.dark #header .range-pill.active { background:#f1f5f9; color:#1e3a8a; }
             <span class="ico">CAM</span>
             <span>
               <span class="t">Fotos del ticket</span>
-              <span class="s">Toma una foto clara o agrega varias si el ticket es largo.</span>
+              <span class="s">Usa camara para tickets cortos o sube un escaneo PDF/JPG si es largo.</span>
             </span>
             <span class="capture-cta">Tomar foto</span>
           </label>
           <input id="foto-gasto" type="file" accept="image/*" capture="environment" multiple class="hidden">
-          <div class="ticket-help"><span>1</span><span><b>Ticket largo</b>Toma las fotos en orden, de arriba hacia abajo, dejando un poco de traslape.</span></div>
-          <div id="gasto-foto-status" class="ticket-status"><span><strong>0 fotos</strong> listas para leer</span><span>Máx. 8</span></div>
+          <input id="scan-gasto" type="file" accept="image/*,application/pdf,.pdf" multiple class="hidden">
+          <div class="scan-actions">
+            <label class="btn btn-sm btn-ghost" for="scan-gasto">Subir escaneo PDF/JPG</label>
+          </div>
+          <div class="ticket-help"><span>1</span><span><b>Comprobante largo</b>Si es factura, nota o ticket con muchas lineas, sube un PDF/JPG escaneado.</span></div>
+          <div id="gasto-foto-status" class="ticket-status"><span><strong>0 fotos</strong> listas para leer</span><span>Max. 12</span></div>
           <div id="gasto-thumbs" class="thumbs empty"></div>
           <div id="gasto-foto-acciones" class="foto-acciones hidden">
             <label class="btn btn-sm btn-ghost" for="foto-gasto">Agregar foto</label>
+            <label class="btn btn-sm btn-ghost" for="scan-gasto">Subir escaneo</label>
             <button class="btn btn-sm btn-navy" onclick="leerTicketIA('gasto')">Leer ticket</button>
             <button class="btn btn-sm btn-ghost" type="button" onclick="reiniciarFotosTicket('gasto')">Limpiar</button>
           </div>
@@ -1842,9 +1861,50 @@ function recargarTabla(tabla){
    TICKETS (multi-foto → IA → formulario editable)
    ============================================================ */
 
-const MAX_TICKET_IMAGES = 8;
-const MAX_TICKET_B64_TOTAL = 4.8 * 1024 * 1024;
-const MAX_TICKET_IMAGE_BYTES = 620 * 1024;
+const MAX_TICKET_IMAGES = 12;
+const MAX_TICKET_B64_TOTAL = 5.2 * 1024 * 1024;
+const MAX_TICKET_IMAGE_BYTES = 500 * 1024;
+const PDFJS_SCRIPT_URLS = [
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+  'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js',
+  'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js',
+];
+const PDFJS_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+let pdfJsCargaPromise = null;
+
+function configurarPdfJs(lib){
+  if(lib && lib.GlobalWorkerOptions && !lib.GlobalWorkerOptions.workerSrc){
+    lib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
+  }
+  return lib;
+}
+
+function cargarScriptExterno(src){
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('No cargo ' + src));
+    document.head.appendChild(script);
+  });
+}
+
+async function obtenerPdfJs(){
+  if(window.pdfjsLib) return configurarPdfJs(window.pdfjsLib);
+  if(!pdfJsCargaPromise){
+    pdfJsCargaPromise = (async () => {
+      for(const src of PDFJS_SCRIPT_URLS){
+        try{
+          await cargarScriptExterno(src);
+          if(window.pdfjsLib) return configurarPdfJs(window.pdfjsLib);
+        }catch(_){ /* prueba el siguiente CDN */ }
+      }
+      throw new Error('El lector de PDF no cargo. Intenta subir el escaneo como JPG/PNG.');
+    })();
+  }
+  return pdfJsCargaPromise;
+}
 
 function hashTextoLigero(txt){
   const s = String(txt || '');
@@ -1871,7 +1931,7 @@ function leerArchivoDataUrl(file){
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => reject(new Error('No se pudo leer la imagen.'));
+    reader.onerror = () => reject(new Error('No se pudo leer el archivo.'));
     reader.readAsDataURL(file);
   });
 }
@@ -1898,6 +1958,23 @@ function blobADataUrl(blob){
     reader.onerror = () => reject(new Error('No se pudo comprimir la imagen.'));
     reader.readAsDataURL(blob);
   });
+}
+
+function extraerBase64(dataUrl){
+  const s = String(dataUrl || '');
+  const coma = s.indexOf(',');
+  return coma >= 0 ? s.slice(coma + 1) : s;
+}
+
+function esArchivoPdf(file){
+  const tipo = String(file && file.type || '').toLowerCase();
+  const nombre = String(file && file.name || '').toLowerCase();
+  return tipo === 'application/pdf' || nombre.endsWith('.pdf');
+}
+
+function archivoAceptadoTicket(file){
+  const tipo = String(file && file.type || '').toLowerCase();
+  return tipo.indexOf('image/') === 0 || esArchivoPdf(file);
 }
 
 async function comprimirImagenDataUrl(dataUrl){
@@ -1936,49 +2013,125 @@ async function comprimirImagenDataUrl(dataUrl){
 async function fileABase64(file){
   const original = await leerArchivoDataUrl(file);
   const dataUrl = await comprimirImagenDataUrl(original);
-  const coma = dataUrl.indexOf(',');
-  const base64 = coma >= 0 ? dataUrl.slice(coma + 1) : dataUrl;
+  const base64 = extraerBase64(dataUrl);
   return {
     base64,
     dataUrl: 'data:image/jpeg;base64,' + base64,
     hash: huellaBase64(base64),
+    label: 'Foto',
   };
 }
 
-/* Estado del set de fotos por tipo. Cada item: { id, base64, dataUrl, hash } */
+async function pdfABase64(file, maxPaginas){
+  const pdfjs = await obtenerPdfJs();
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const pdf = await pdfjs.getDocument({ data: bytes }).promise;
+  const totalPaginas = Number(pdf.numPages || 0);
+  const limite = Math.max(0, Math.min(totalPaginas, maxPaginas || MAX_TICKET_IMAGES));
+  const paginas = [];
+
+  for(let p = 1; p <= limite; p++){
+    const page = await pdf.getPage(p);
+    const viewportBase = page.getViewport({ scale: 1 });
+    const escala = Math.min(2.35, Math.max(1.15, 2600 / Math.max(viewportBase.width, viewportBase.height)));
+    const viewport = page.getViewport({ scale: escala });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.ceil(viewport.width));
+    canvas.height = Math.max(1, Math.ceil(viewport.height));
+    const ctx = canvas.getContext('2d', { alpha:false });
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    const dataUrl = await comprimirImagenDataUrl(canvas.toDataURL('image/jpeg', 0.86));
+    const base64 = extraerBase64(dataUrl);
+    paginas.push({
+      base64,
+      dataUrl: 'data:image/jpeg;base64,' + base64,
+      hash: huellaBase64(base64),
+      label: 'PDF p.' + p,
+    });
+    if(page.cleanup) page.cleanup();
+  }
+  if(pdf.destroy) pdf.destroy();
+  return { paginas, totalPaginas };
+}
+
+/* Estado del set de fotos por tipo. Cada item: { id, base64, dataUrl, hash, label } */
 const fotosTicket = { compra: [], gasto: [] };
 let fotoUid = 0;
 
-/* Agrega archivos (FileList) al set del tipo y refresca miniaturas */
-async function agregarFotosTicket(tipo, fileList){
-  const arr = Array.from(fileList || []).filter(f => f && f.type && f.type.indexOf('image/') === 0);
-  const msgId = tipo === 'compra' ? 'compra-foto-msg' : 'gasto-foto-msg';
-  if(!arr.length) return;
+function agregarFotoPreparada(tipo, foto){
+  if(fotosTicket[tipo].length >= MAX_TICKET_IMAGES) return 'limite';
+  if(!foto || !foto.base64) return 'invalida';
+  if(fotosTicket[tipo].some(it => it.hash === foto.hash)) return 'duplicada';
+  const totalActual = fotosTicket[tipo].reduce((s, it) => s + String(it.base64 || '').length, 0);
+  if(totalActual + foto.base64.length > MAX_TICKET_B64_TOTAL) return 'pesada';
+  fotosTicket[tipo].push({
+    id: ++fotoUid,
+    base64: foto.base64,
+    dataUrl: foto.dataUrl,
+    hash: foto.hash,
+    label: foto.label || 'Foto',
+  });
+  return 'ok';
+}
 
-  showMsg(msgId, 'Preparando fotos para lectura...', 'info');
+/* Agrega imagenes o PDF escaneados al set del tipo y refresca miniaturas */
+async function agregarFotosTicket(tipo, fileList){
+  const arr = Array.from(fileList || []).filter(archivoAceptadoTicket);
+  const msgId = tipo === 'compra' ? 'compra-foto-msg' : 'gasto-foto-msg';
+  if(!arr.length){
+    showMsg(msgId, 'Sube una imagen o un PDF del ticket.', 'warn');
+    return;
+  }
+
+  const incluyePdf = arr.some(esArchivoPdf);
+  showMsg(msgId, incluyePdf ? 'Preparando escaneo para lectura...' : 'Preparando fotos para lectura...', 'info');
+  let agregadas = 0;
   let duplicadas = 0;
   let omitidas = 0;
+  let errores = 0;
+  let paginasPdfOmitidas = 0;
 
   for(const f of arr){
     if(fotosTicket[tipo].length >= MAX_TICKET_IMAGES){ omitidas++; continue; }
     try{
-      const foto = await fileABase64(f);
-      if(fotosTicket[tipo].some(it => it.hash === foto.hash)){ duplicadas++; continue; }
-      const totalActual = fotosTicket[tipo].reduce((s, it) => s + String(it.base64 || '').length, 0);
-      if(totalActual + foto.base64.length > MAX_TICKET_B64_TOTAL){ omitidas++; continue; }
-      fotosTicket[tipo].push({ id: ++fotoUid, base64: foto.base64, dataUrl: foto.dataUrl, hash: foto.hash });
-    }catch(_){ /* ignora imagen ilegible */ }
+      if(esArchivoPdf(f)){
+        const disponibles = MAX_TICKET_IMAGES - fotosTicket[tipo].length;
+        const doc = await pdfABase64(f, disponibles);
+        if(doc.totalPaginas > doc.paginas.length) paginasPdfOmitidas += doc.totalPaginas - doc.paginas.length;
+        for(const foto of doc.paginas){
+          const estado = agregarFotoPreparada(tipo, foto);
+          if(estado === 'ok') agregadas++;
+          else if(estado === 'duplicada') duplicadas++;
+          else omitidas++;
+        }
+      }else{
+        const foto = await fileABase64(f);
+        const estado = agregarFotoPreparada(tipo, foto);
+        if(estado === 'ok') agregadas++;
+        else if(estado === 'duplicada') duplicadas++;
+        else omitidas++;
+      }
+    }catch(e){
+      errores++;
+    }
   }
   renderThumbs(tipo);
 
   const avisos = [];
+  if(agregadas) avisos.push(agregadas + ' pagina(s)/foto(s) lista(s).');
   if(duplicadas) avisos.push(duplicadas + ' foto(s) duplicada(s) omitida(s).');
-  if(omitidas) avisos.push(omitidas + ' foto(s) omitida(s) por limite de tamano/cantidad.');
-  if(avisos.length){
+  if(paginasPdfOmitidas) avisos.push(paginasPdfOmitidas + ' pagina(s) del PDF omitida(s) por limite de ' + MAX_TICKET_IMAGES + '.');
+  if(omitidas) avisos.push(omitidas + ' archivo(s)/pagina(s) omitido(s) por limite de tamano/cantidad.');
+  if(errores) avisos.push(errores + ' archivo(s) no se pudieron preparar.');
+  if(avisos.length && (duplicadas || omitidas || errores || paginasPdfOmitidas)){
     showMsg(msgId, avisos.join(' '), 'warn');
-  }else{
+  }else if(agregadas){
     const total = fotosTicket[tipo].length;
-    showMsg(msgId, total + ' foto(s) lista(s). Si el ticket es largo, agrega todas las secciones antes de leer.', 'info');
+    showMsg(msgId, total + ' pagina(s)/foto(s) lista(s). Para tickets largos, el escaneo PDF/JPG suele leer mejor que fotos sueltas.', 'info');
+  }else{
+    showMsg(msgId, 'No se agrego ningun archivo. Usa una imagen o PDF claro y no repetido.', 'warn');
   }
 }
 
@@ -1991,17 +2144,18 @@ function renderThumbs(tipo){
   let html = '';
   set.forEach((it, idx) => {
     const n = idx + 1;
-    html += '<div class="thumb"><img src="' + it.dataUrl + '" alt="Foto ' + n + ' del ticket">' +
-            '<span class="thumb-index">Foto ' + n + '</span>' +
-            '<button class="x" type="button" title="Quitar" aria-label="Quitar foto ' + n + '" onclick="quitarFotoTicket(\'' + tipo + '\',' + it.id + ')">×</button></div>';
+    const label = it.label && it.label !== 'Foto' ? it.label : 'Foto ' + n;
+    html += '<div class="thumb"><img src="' + it.dataUrl + '" alt="' + esc(label) + ' del ticket">' +
+            '<span class="thumb-index">' + esc(label) + '</span>' +
+            '<button class="x" type="button" title="Quitar" aria-label="Quitar ' + esc(label) + '" onclick="quitarFotoTicket(\'' + tipo + '\',' + it.id + ')">×</button></div>';
   });
   cont.innerHTML = html;
   cont.classList.toggle('empty', set.length === 0);
   accs.classList.toggle('hidden', set.length === 0);
   if(status){
     status.innerHTML = set.length
-      ? '<span><strong>' + set.length + ' foto(s)</strong> listas para leer</span><span>Máx. ' + MAX_TICKET_IMAGES + '</span>'
-      : '<span><strong>0 fotos</strong> listas para leer</span><span>Máx. ' + MAX_TICKET_IMAGES + '</span>';
+      ? '<span><strong>' + set.length + ' pagina(s)/foto(s)</strong> listas para leer</span><span>Max. ' + MAX_TICKET_IMAGES + '</span>'
+      : '<span><strong>0 fotos</strong> listas para leer</span><span>Max. ' + MAX_TICKET_IMAGES + '</span>';
   }
   if(zone) zone.classList.toggle('has-photos', set.length > 0);
 }
@@ -2041,17 +2195,18 @@ async function leerTicketIA(tipo){
   const set = fotosTicket[tipo];
 
   if(lecturaTicketActiva[tipo]) return;
-  if(!set.length){ showMsg(msgId, 'Agrega al menos una foto del ticket.', 'warn'); return; }
+  if(!set.length){ showMsg(msgId, 'Agrega al menos una foto o escaneo del ticket.', 'warn'); return; }
   const totalB64 = set.reduce((s, it) => s + String(it.base64 || '').length, 0);
   if(totalB64 > MAX_TICKET_B64_TOTAL){
-    showMsg(msgId, 'Las fotos siguen pesadas. Quita fotos repetidas o toma secciones mas cercanas del ticket.', 'warn');
+    showMsg(msgId, 'El ticket sigue pesado. Quita paginas/fotos repetidas o sube un escaneo mas ligero.', 'warn');
     return;
   }
+  const tieneEscaneo = set.some(it => String(it.label || '').indexOf('PDF') === 0);
 
   $(wrapId).classList.add('hidden');
   $(wrapId).innerHTML = '';
   $(msgId).innerHTML = '<div class="msg msg-info ticket-read-state"><span class="loader loader-navy"></span><span><b>Leyendo ' +
-    (set.length === 1 ? 'el ticket' : ('las ' + set.length + ' fotos')) + '</b><br>Esto puede tardar unos segundos.</span></div>';
+    (set.length === 1 ? 'el ticket' : (tieneEscaneo ? ('las ' + set.length + ' paginas/fotos') : ('las ' + set.length + ' fotos'))) + '</b><br>Esto puede tardar unos segundos.</span></div>';
 
   const imagenes_base64 = set.map(it => it.base64);
   const readBtn = document.querySelector('button[onclick="leerTicketIA(\'' + tipo + '\')"]');
@@ -2067,7 +2222,7 @@ async function leerTicketIA(tipo){
     });
   }catch(e){
     const msg = /servidor \(5\d\d\)|timed|timeout|demasiado/i.test(e.message)
-      ? 'No se pudo leer el ticket: el servidor no alcanzo a procesar todas las fotos. Intenta con fotos mas cercanas, sin repetir secciones.'
+      ? 'No se pudo leer el ticket: el servidor no alcanzo a procesarlo. Para tickets largos de PepsiCo, Sabritas o Bimbo, usa Subir escaneo PDF/JPG, sin paginas repetidas y con maximo ' + MAX_TICKET_IMAGES + ' paginas.'
       : 'No se pudo leer el ticket: ' + e.message;
     showMsg(msgId, msg, 'err');
     lecturaTicketActiva[tipo] = false;
@@ -2574,7 +2729,15 @@ function init(){
     if(e.target.files && e.target.files.length) agregarFotosTicket('compra', e.target.files);
     e.target.value = ''; // permitir re-subir las mismas fotos
   });
+  $('scan-compra').addEventListener('change', (e) => {
+    if(e.target.files && e.target.files.length) agregarFotosTicket('compra', e.target.files);
+    e.target.value = '';
+  });
   $('foto-gasto').addEventListener('change', (e) => {
+    if(e.target.files && e.target.files.length) agregarFotosTicket('gasto', e.target.files);
+    e.target.value = '';
+  });
+  $('scan-gasto').addEventListener('change', (e) => {
     if(e.target.files && e.target.files.length) agregarFotosTicket('gasto', e.target.files);
     e.target.value = '';
   });
