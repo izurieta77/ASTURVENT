@@ -5,15 +5,18 @@
    Modos:
      node sync.js                         Sincroniza MySQL para hoy.
      node sync.js 2026-05-28              Sincroniza MySQL para una fecha.
+     node sync.js --inventario-only       Sincroniza solo aumentos de inventario.
      node sync.js --excel ventas.xlsx     Importa Excel/CSV exportado de SICAR.
      node sync.js --excel ventas.xlsx --dry-run
 
    Este programa no modifica SICAR. Solo lee MySQL o un archivo Excel/CSV y envia
-   ventas normalizadas a sc-ingest.
+   ventas normalizadas a sc-ingest. Si config.json trae sqlInventarioMovimientos,
+   tambien envia aumentos positivos de inventario como compras automaticas.
 */
 
 'use strict';
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
@@ -89,7 +92,15 @@ function normalizarHeader(s) {
 
 function leerArgs(argv) {
   const args = [...argv];
-  const out = { modo: 'mysql', fecha: null, excelPath: null, dryRun: false, replaceDate: true };
+  const out = {
+    modo: 'mysql',
+    fecha: null,
+    excelPath: null,
+    dryRun: false,
+    replaceDate: true,
+    inventario: true,
+    inventarioOnly: false,
+  };
   while (args.length) {
     const a = args.shift();
     if (a === '--excel') {
@@ -99,6 +110,11 @@ function leerArgs(argv) {
       out.dryRun = true;
     } else if (a === '--no-replace-date') {
       out.replaceDate = false;
+    } else if (a === '--sin-inventario' || a === '--no-inventory') {
+      out.inventario = false;
+    } else if (a === '--inventario-only' || a === '--inventory-only') {
+      out.inventarioOnly = true;
+      out.inventario = true;
     } else if (!out.fecha) {
       out.fecha = a;
     }
@@ -214,6 +230,88 @@ function mapearFila(raw, fechaDefault, prefix) {
   return venta;
 }
 
+function valorPrimero(raw, keys) {
+  for (const key of keys) {
+    const v = raw && raw[key];
+    if (v !== undefined && v !== null && String(v).trim() !== '') return v;
+  }
+  return null;
+}
+
+function huellaInventario(raw, fecha, producto, clave, cantidad, costo, total) {
+  const explicita = texto(valorPrimero(raw, ['movimiento_key', 'movimiento_id', 'id_movimiento', 'id', 'folio', 'documento']));
+  if (explicita) return explicita;
+  const base = [
+    fecha,
+    texto(raw.hora),
+    clave || producto,
+    cantidad,
+    costo,
+    total,
+    texto(valorPrimero(raw, ['existencia_anterior', 'stock_anterior'])),
+    texto(valorPrimero(raw, ['existencia_nueva', 'stock_nuevo'])),
+  ].join('|');
+  return crypto.createHash('sha1').update(base).digest('hex');
+}
+
+function cantidadInventario(raw) {
+  const anterior = numero(valorPrimero(raw, ['existencia_anterior', 'stock_anterior', 'inventario_anterior']));
+  const nueva = numero(valorPrimero(raw, ['existencia_nueva', 'stock_nuevo', 'inventario_nuevo']));
+  if (anterior !== null && nueva !== null) return nueva - anterior;
+  const delta = numero(valorPrimero(raw, [
+    'cantidad_delta', 'delta', 'cambio', 'diferencia', 'entrada', 'entradas',
+    'cantidad', 'unidades', 'piezas',
+  ]));
+  return delta === null ? 0 : delta;
+}
+
+function costoInventario(raw, cantidad, totalExplicito) {
+  const costo = numero(valorPrimero(raw, [
+    'costo_unitario', 'costo', 'precio_compra', 'ultimo_costo', 'costo_promedio',
+    'precio_unitario', 'precio',
+  ]));
+  if (costo !== null) return costo;
+  if (totalExplicito !== null && cantidad > 0) return totalExplicito / cantidad;
+  return 0;
+}
+
+function mapearMovimientoInventario(raw, fechaDefault) {
+  const fecha = fechaExcel(raw.fecha, fechaDefault);
+  if (!esFechaValida(fecha)) return null;
+
+  const cantidad = cantidadInventario(raw);
+  if (!(cantidad > 0)) return null;
+
+  const tipo = texto(valorPrimero(raw, ['tipo', 'movimiento', 'motivo', 'concepto'])).toLowerCase();
+  if (/(salida|venta|devolucion proveedor|merma|baja|resta|decremento)/.test(tipo)) return null;
+
+  const producto = texto(valorPrimero(raw, ['producto', 'descripcion', 'articulo', 'nombre']));
+  const clave = texto(valorPrimero(raw, ['clave', 'codigo', 'sku', 'codigo_producto']));
+  if (!producto && !clave) return null;
+
+  const totalExplicito = numero(valorPrimero(raw, ['total', 'importe', 'monto', 'costo_total']));
+  const costo = costoInventario(raw, cantidad, totalExplicito);
+  const total = totalExplicito !== null ? totalExplicito : cantidad * costo;
+
+  return {
+    fecha,
+    hora: texto(raw.hora),
+    movimiento_key: 'sicar:' + huellaInventario(raw, fecha, producto, clave, cantidad, costo, total),
+    movimiento_id: texto(valorPrimero(raw, ['movimiento_id', 'id_movimiento', 'id', 'folio', 'documento'])),
+    producto,
+    clave,
+    cantidad_delta: cantidad,
+    costo_unitario: costo,
+    total,
+    proveedor: texto(valorPrimero(raw, ['proveedor', 'supplier'])) || 'Inventario SICAR',
+    departamento: texto(valorPrimero(raw, ['departamento', 'depto'])),
+    categoria: texto(raw.categoria),
+    tipo: tipo || 'entrada_inventario',
+    existencia_anterior: valorPrimero(raw, ['existencia_anterior', 'stock_anterior', 'inventario_anterior']),
+    existencia_nueva: valorPrimero(raw, ['existencia_nueva', 'stock_nuevo', 'inventario_nuevo']),
+  };
+}
+
 async function leerDesdeMysql(cfg, fecha) {
   if (!cfg.mysql || !cfg.mysql.host || !cfg.mysql.database || !cfg.mysql.user) {
     throw new Error('Falta mysql.host/user/database en config.json.');
@@ -254,6 +352,65 @@ async function leerDesdeMysql(cfg, fecha) {
       departamento: r.departamento,
       categoria: r.categoria,
     }, fecha, 'sicar')).filter(Boolean);
+  } finally {
+    await conn.end().catch(() => {});
+  }
+}
+
+async function leerInventarioDesdeMysql(cfg, fecha) {
+  if (!cfg.sqlInventarioMovimientos) return [];
+  if (!cfg.mysql || !cfg.mysql.host || !cfg.mysql.database || !cfg.mysql.user) {
+    throw new Error('Falta mysql.host/user/database en config.json.');
+  }
+  if (String(cfg.mysql.database).toLowerCase() === 'auto') {
+    throw new Error('mysql.database sigue en "auto". Corre node descubrir.js y configura la base real antes de sincronizar inventario.');
+  }
+
+  log(`Conectando a MySQL para inventario ${cfg.mysql.host}:${cfg.mysql.port || 3306} / base "${cfg.mysql.database}"`);
+  const conn = await mysql.createConnection({
+    host: cfg.mysql.host,
+    port: cfg.mysql.port || 3306,
+    user: cfg.mysql.user,
+    password: cfg.mysql.password,
+    database: cfg.mysql.database,
+  });
+
+  try {
+    const sql = cfg.sqlInventarioMovimientos.replace(/:fecha/g, '?');
+    const params = new Array((cfg.sqlInventarioMovimientos.match(/:fecha/g) || []).length).fill(fecha);
+    log('Ejecutando consulta de aumentos de inventario.');
+    const [rows] = await conn.query(sql, params);
+    log(`MySQL devolvio ${rows.length} movimiento(s) de inventario candidato(s).`);
+    return rows.map((r) => mapearMovimientoInventario({
+      fecha: r.fecha,
+      hora: r.hora,
+      movimiento_id: r.movimiento_id || r.id_movimiento || r.id,
+      movimiento_key: r.movimiento_key,
+      producto: r.producto || r.descripcion || r.articulo || r.nombre,
+      clave: r.clave || r.codigo || r.sku || r.codigo_producto,
+      cantidad_delta: r.cantidad_delta || r.delta || r.cambio,
+      cantidad: r.cantidad,
+      entrada: r.entrada || r.entradas,
+      unidades: r.unidades,
+      costo_unitario: r.costo_unitario,
+      costo: r.costo,
+      precio_compra: r.precio_compra,
+      ultimo_costo: r.ultimo_costo,
+      costo_promedio: r.costo_promedio,
+      precio_unitario: r.precio_unitario,
+      precio: r.precio,
+      total: r.total,
+      importe: r.importe,
+      monto: r.monto,
+      costo_total: r.costo_total,
+      proveedor: r.proveedor,
+      supplier: r.supplier,
+      departamento: r.departamento || r.depto,
+      categoria: r.categoria,
+      tipo: r.tipo || r.movimiento || r.motivo || r.concepto,
+      existencia_anterior: r.existencia_anterior || r.stock_anterior || r.inventario_anterior,
+      existencia_nueva: r.existencia_nueva || r.stock_nuevo || r.inventario_nuevo,
+    }, fecha)).filter(Boolean);
   } finally {
     await conn.end().catch(() => {});
   }
@@ -600,6 +757,52 @@ async function enviar(cfg, ventas, dryRun, opts = {}) {
   return data;
 }
 
+async function enviarInventario(cfg, movimientos, dryRun) {
+  const siteUrl = (cfg.siteUrl || DEFAULT_SITE).replace(/\/+$/, '');
+  log(`Aumentos de inventario normalizados listos: ${movimientos.length}.`);
+  if (movimientos.length) {
+    const totalCompras = movimientos.reduce((sum, m) => sum + (numero(m.total) || 0), 0);
+    log(`Total de compras automaticas por inventario: $${totalCompras.toFixed(2)}.`);
+  }
+  if (movimientos.length === 0) return { ok: true, recibidos: 0, validos: 0, insertados: 0 };
+  if (dryRun) {
+    log('Dry-run activo: no se envio inventario a Netlify.');
+    log('Muestra inventario: ' + JSON.stringify(movimientos.slice(0, 3)));
+    return { ok: true, dryRun: true, recibidos: movimientos.length, validos: movimientos.length, insertados: 0 };
+  }
+  if (!cfg.ingestToken) throw new Error('Falta ingestToken en config.json.');
+
+  const url = siteUrl + '/.netlify/functions/sc-inventory-ingest';
+  const timeoutSeconds = numberEnv('SC_SYNC_HTTP_TIMEOUT_SECONDS', DEFAULT_HTTP_TIMEOUT_SECONDS, 10, 300);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutSeconds * 1000);
+  log(`Enviando aumentos de inventario a ${url}`);
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Ingest-Token': cfg.ingestToken,
+      },
+      body: JSON.stringify({ movimientos }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err && err.name === 'AbortError') {
+      throw new Error(`Tiempo agotado enviando inventario a Netlify despues de ${timeoutSeconds}s. Se reintentara.`);
+    }
+    throw new Error(`No pude conectar con Netlify para inventario: ${err.message || String(err)}. Se reintentara.`);
+  } finally {
+    clearTimeout(timeout);
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.ok === false) {
+    throw new Error(`Netlify rechazo inventario (HTTP ${res.status}): ${data.error || 'sin detalle'}. Se reintentara.`);
+  }
+  return data;
+}
+
 function fechaUnica(ventas) {
   const fechas = Array.from(new Set((ventas || []).map((v) => v.fecha).filter(esFechaValida)));
   return fechas.length === 1 ? fechas[0] : null;
@@ -615,6 +818,8 @@ async function main() {
     fail(`Fecha invalida "${args.fecha}". Usa YYYY-MM-DD.`);
   }
   log(`Modo: ${args.modo}. Fecha objetivo: ${args.fecha}.`);
+  if (args.inventarioOnly) log('Modo inventario-only activo: no se enviaran ventas.');
+  if (!args.inventario) log('Sincronizacion de inventario desactivada por argumento.');
 
   let cfg;
   try {
@@ -629,12 +834,27 @@ async function main() {
   }
 
   try {
-    const ventas = args.modo === 'excel'
-      ? await leerDesdeExcel(args.excelPath, args.fecha)
-      : await leerDesdeMysql(cfg, args.fecha);
-    const replaceFecha = args.replaceDate ? (fechaUnica(ventas) || args.fecha) : null;
-    const resultado = await enviar(cfg, ventas, args.dryRun, { replaceFecha });
-    log(`OK. Recibidos: ${resultado.recibidos ?? '?'}, validos: ${resultado.validos ?? '?'}, insertados: ${resultado.insertados ?? '?'}, duplicados: ${resultado.duplicados ?? 0}, descartados: ${resultado.descartados ?? 0}.`);
+    if (!args.inventarioOnly) {
+      const ventas = args.modo === 'excel'
+        ? await leerDesdeExcel(args.excelPath, args.fecha)
+        : await leerDesdeMysql(cfg, args.fecha);
+      const replaceFecha = args.replaceDate ? (fechaUnica(ventas) || args.fecha) : null;
+      const resultado = await enviar(cfg, ventas, args.dryRun, { replaceFecha });
+      log(`OK ventas. Recibidos: ${resultado.recibidos ?? '?'}, validos: ${resultado.validos ?? '?'}, insertados: ${resultado.insertados ?? '?'}, duplicados: ${resultado.duplicados ?? 0}, descartados: ${resultado.descartados ?? 0}.`);
+    }
+
+    if (args.inventario && args.modo !== 'excel') {
+      if (cfg.sqlInventarioMovimientos) {
+        const movimientos = await leerInventarioDesdeMysql(cfg, args.fecha);
+        const resultadoInv = await enviarInventario(cfg, movimientos, args.dryRun);
+        log(`OK inventario. Recibidos: ${resultadoInv.recibidos ?? '?'}, validos: ${resultadoInv.validos ?? '?'}, insertados: ${resultadoInv.insertados ?? '?'}, duplicados: ${resultadoInv.duplicados ?? 0}, descartados: ${resultadoInv.descartados ?? 0}.`);
+      } else {
+        log('Inventario no configurado: agrega sqlInventarioMovimientos en config.json para crear compras automaticas.', 'WARN');
+      }
+    } else if (args.modo === 'excel') {
+      log('Inventario omitido en modo Excel; solo se importa ventas del archivo.', 'WARN');
+    }
+
     log('Sincronizacion terminada correctamente.');
   } catch (e) {
     fail(e.message || String(e));
@@ -647,7 +867,9 @@ if (require.main === module) {
 
 module.exports = {
   leerDesdeExcel,
+  leerInventarioDesdeMysql,
   mapearFila,
+  mapearMovimientoInventario,
   normalizarRowExcel,
   numero,
   fechaExcel,

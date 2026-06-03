@@ -158,6 +158,14 @@ Devuelve datos ya agregados para el Panel Operativo:
 - Si no viene `venta_key`, se conserva el `ticket_id` recibido para no duplicar datos
   historicos enviados por versiones anteriores.
 
+## sc-inventory-ingest
+- Endpoint: `/.netlify/functions/sc-inventory-ingest`.
+- Lo llama `sicar-bridge` con `X-Ingest-Token`, igual que `sc-ingest`.
+- Entrada: `{ movimientos:[ { fecha, hora?, movimiento_id?, movimiento_key?, producto, clave?, cantidad_delta|cantidad|entrada|existencia_anterior+existencia_nueva, costo_unitario|costo|precio_compra|precio|total|importe, proveedor?, departamento?, categoria? } ] }`.
+- Solo procesa aumentos positivos de inventario. Salidas, mermas, ventas, bajas o deltas negativos se descartan.
+- Inserta cada aumento como fila en `compras` con `raw_ocr='sicar_inventory:*'`, para que reenviar el mismo movimiento no lo duplique.
+- Si no hay proveedor, usa `Inventario SICAR`; si no hay categoria/departamento, usa `inventario`.
+
 ## sc-ticket — multi-foto + fecha/hora + manuscritos (Skill 8)
 - Entrada: `{ imagenes_base64:[...], tipo:"compra|gasto" }` (acepta también `imagen_base64`).
 - Manda TODAS las imágenes en una sola llamada de visión; son **partes del MISMO** ticket/nota

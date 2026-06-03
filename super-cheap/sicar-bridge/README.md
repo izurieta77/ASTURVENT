@@ -2,6 +2,8 @@
 
 Este pequeño programa corre en la **computadora donde está instalado SICAR** y manda
 las **ventas** del día a tu panel `https://supercheapp.netlify.app` de forma automática.
+Si se configura `sqlInventarioMovimientos`, también manda los **aumentos de inventario**
+como compras automáticas para que esos costos entren a la utilidad.
 
 > Solo **lee** las ventas de SICAR. No modifica ni borra nada de tu SICAR.
 
@@ -69,6 +71,30 @@ node sync.js 2026-05-28      (sincroniza un día específico desde MySQL)
 ```
 Si todo va bien verás `[OK] Sincronización terminada correctamente.` y las ventas
 aparecerán en el panel. Es **idempotente**: correrlo dos veces no duplica ventas.
+
+### Inventario como compras automáticas
+
+Si en SICAR el personal aumenta unidades desde inventario en vez de registrar la
+compra en SUPER CHEAP, agrega en `config.json` una consulta `sqlInventarioMovimientos`.
+Debe devolver candidatos del día con estos aliases:
+
+- `fecha`
+- `hora` opcional
+- `movimiento_id` o `movimiento_key` opcional pero recomendado
+- `producto` o `descripcion`
+- `clave` o `codigo`
+- `cantidad_delta`, `entrada`, `cantidad` o `existencia_anterior` + `existencia_nueva`
+- `costo_unitario`, `costo`, `precio_compra`, `precio`, `total` o `importe`
+- `proveedor`, `departamento`, `categoria` opcionales
+
+El bridge solo envía aumentos positivos. La nube los guarda en `compras` con una
+huella `sicar_inventory:*`, así que reenviar el mismo movimiento no lo duplica.
+Para probar solo inventario:
+
+```
+node sync.js --inventario-only --dry-run
+node sync.js --inventario-only
+```
 
 ## PLAN B — Importar Excel de SICAR
 
