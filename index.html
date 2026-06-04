@@ -5193,9 +5193,11 @@ function scanFrame() {
     if(primera.includes('-')) {
       // Vale físico
       $('folio-input').value = primera;
+      $('folio-input').dataset.qrRaw = raw;
     } else {
       // Autorización digital — poner el código directamente
       $('folio-input').value = primera;
+      delete $('folio-input').dataset.qrRaw;
     }
     stopScanner();
     validateFolio();
@@ -5255,6 +5257,10 @@ function validateFolio() {
   const folio  = input;
   const prefix = folio.split('-')[0];
   const cliente = C.CLIENTES[prefix];
+  const folioEl = $('folio-input');
+  const rawFromScan = folioEl?.dataset?.qrRaw || '';
+  const parsedFromScan = rawFromScan ? parseQrVale(rawFromScan) : null;
+  const qrRaw = parsedFromScan?.folio === folio ? rawFromScan : folio;
 
   // 1. Prefijo válido
   if(!cliente) {
@@ -5265,12 +5271,22 @@ function validateFolio() {
 
   // 2. Anti-duplicado — verificar si ya fue despachado
   const yaUsado = STATE.registros.find(r =>
-    (r.folio === folio || r.ticket === folio) && r.litros > 0
+    (String(r.folio || '').toUpperCase() === folio ||
+     String(r.folio_vale || '').toUpperCase() === folio ||
+     String(r.ticket || '').toUpperCase() === folio) && r.litros > 0
   );
   if(yaUsado) {
     showMsg('folio-status',
       `⛔ VALE YA UTILIZADO\nFecha: ${yaUsado.fecha} | Chofer: ${yaUsado.chofer} | ${fmtL(yaUsado.litros)} L`,
       'err');
+    $('step2-card').classList.add('hidden');
+    return;
+  }
+
+  const valeResult = validarValeFisico_(folio, qrRaw);
+  if(!valeResult.ok) {
+    setTimeout(() => showMsg('folio-status', `VALE INVALIDO: ${valeResult.msg}`, 'err'), 0);
+    showMsg('folio-status', `âŒ ${valeResult.msg}`, 'err');
     $('step2-card').classList.add('hidden');
     return;
   }
@@ -5289,17 +5305,33 @@ function validateFolio() {
     showMsg('folio-status', `✅ VALE VÁLIDO — ${cliente}${saldoDisponible !== null ? ' | Saldo: $'+fmt(saldoDisponible) : ''}`, 'ok');
   }
 
-  abrirFormDespacho(folio, prefix, cliente);
+  if(saldoDisponible === null || saldoDisponible >= 500) {
+    const v = valeResult.vale;
+    if(v) {
+      const prodTxt = v?.productoLabel || v?.producto || '';
+      const vigTxt = v?.vigenciaFin ? ` | Vigente hasta ${v.vigenciaFin}` : '';
+      showMsg('folio-status', `VALE VALIDO - ${cliente} | ${prodTxt} | Sin limite${vigTxt}${saldoDisponible !== null ? ' | Saldo: $'+fmt(saldoDisponible) : ''}`, 'ok');
+    }
+  }
+
+  abrirFormDespacho(folio, prefix, cliente, valeResult.vale, qrRaw);
 }
 
-function abrirFormDespacho(folio, prefix, cliente) {
-  STATE.currFolio = { folio, prefix, cliente };
+function abrirFormDespacho(folio, prefix, cliente, valeRef = null, qrRaw = '') {
+  STATE.currFolio = { folio, prefix, cliente, valeRef, qrRaw };
   STATE.photos = {};
   $('auth-panel')?.classList.add('hidden');
   $('step2-card').classList.remove('hidden');
   $('form-cliente-name').textContent = cliente;
   $('form-folio-badge').textContent  = folio;
   $('form-err').classList.add('hidden');
+  if($('f-folio-vale')) $('f-folio-vale').value = folio;
+  if(valeRef?.producto && $('f-producto')) {
+    const prod = normalizeValeProducto_(valeRef.producto);
+    $('f-producto').value = prod;
+    const step2 = $('step2-card');
+    if(step2) step2.querySelectorAll('.btn-producto').forEach(b => b.classList.toggle('active', b.dataset.prod === prod));
+  }
   showDehuiSection(prefix === 'DEH');
   $('step2-card').scrollIntoView({ behavior: 'smooth' });
 }
@@ -5939,6 +5971,28 @@ async function saveDespacho() {
     return;
   }
 
+  if(STATE.currFolio?.valeRef) {
+    const valeCheck = validarValeFisico_(STATE.currFolio.folio, STATE.currFolio.qrRaw || '');
+    if(!valeCheck.ok) {
+      showMsg('save-err', `Vale invalido: ${valeCheck.msg}`, 'err');
+      return;
+    }
+    const prodVale = normalizeValeProducto_(STATE.currFolio.valeRef.producto);
+    const prodCarga = normalizeValeProducto_(producto);
+    if(prodVale && prodVale !== prodCarga) {
+      showMsg('save-err', `Este vale es de ${STATE.currFolio.valeRef.productoLabel || prodVale}. No puede guardarse como ${producto}.`, 'err');
+      return;
+    }
+    if(STATE.currFolio.valeRef.litrosMax && litros > Number(STATE.currFolio.valeRef.litrosMax)) {
+      showMsg('save-err', `Litros exceden el limite del vale (${STATE.currFolio.valeRef.litrosMax} L).`, 'err');
+      return;
+    }
+    if(STATE.currFolio.valeRef.montoMax && monto > Number(STATE.currFolio.valeRef.montoMax)) {
+      showMsg('save-err', `Monto excede el limite del vale ($${fmt(STATE.currFolio.valeRef.montoMax)}).`, 'err');
+      return;
+    }
+  }
+
   const sigCanvas = $('sig-canvas');
   const blank     = document.createElement('canvas');
   blank.width = sigCanvas.width; blank.height = sigCanvas.height;
@@ -6110,6 +6164,9 @@ async function saveDespacho() {
     }
     STATE.registros.unshift(pendingRecord);
     descontarSaldo(record.prefix, record.monto);
+    if(STATE.currFolio?.valeRef) {
+      marcarValeUsado_(record.folio_vale || record.folio, record.agente, record.id);
+    }
     applyFilters();
     updateProgress(100, 'Evidencias pendientes — guardado local ⚠️');
     showMsg('save-err', `⚠️ No se pudieron preparar todas las evidencias (${missingEvidence.join(', ')}).
@@ -6140,6 +6197,9 @@ El despacho quedó guardado localmente y se sincronizará automáticamente cuand
     descontarSaldo(record.prefix, record.monto);
     if(STATE.currFolio?.esAutz) {
       marcarAutorizacionUsada(record.codigo_autz || record.folio, record.agente);
+    }
+    if(STATE.currFolio?.valeRef) {
+      marcarValeUsado_(record.folio_vale || record.folio, record.agente, record.id);
     }
     applyFilters();
 
@@ -6175,6 +6235,9 @@ El despacho quedó guardado localmente y seguirá intentando sincronizarse autom
     record._pending = true;
     STATE.registros.unshift(record);
     descontarSaldo(record.prefix, record.monto);
+    if(STATE.currFolio?.valeRef) {
+      marcarValeUsado_(record.folio_vale || record.folio, record.agente, record.id);
+    }
     applyFilters();
     updateProgress(100, 'Error — quedó pendiente local ⚠️');
     showMsg('save-err',
@@ -6195,6 +6258,7 @@ function cancelForm() {
   $('step1-card').classList.remove('hidden');
   setStepDots(1);
   $('folio-input').value = '';
+  delete $('folio-input').dataset.qrRaw;
   $('folio-status').classList.add('hidden');
   $('f-litros').value = '';
   $('f-monto').value = '';
@@ -7031,9 +7095,63 @@ function hashVale(folio, ts) {
   return Math.abs(h).toString(36).toUpperCase().padStart(6,'0');
 }
 
+const SGM_VALES_PRECARGADOS = (() => {
+  const out = [];
+  const prefix = 'DHAR';
+  const cliente = 'DON HARINA / WAWITA';
+  const lote = 'DHAR-JUNIO-2026';
+  const vigenciaInicio = '2026-06-03';
+  const vigenciaFin = '2026-06-30';
+  const baseTs = 1780466400000; // 2026-06-03 00:00 America/Mexico_City
+  const defs = [
+    { producto: 'DIESEL', serie: 'D', total: 30, etiqueta: 'DIESEL UBA' },
+    { producto: 'EXTRA', serie: 'E', total: 46, etiqueta: 'EXTRA' },
+    { producto: 'SUPREME+', serie: 'S', total: 1, etiqueta: 'SUPREME+' }
+  ];
+  let idx = 0;
+  defs.forEach(def => {
+    for(let n = 1; n <= def.total; n++) {
+      const folio = `${prefix}-JUN26-${def.serie}${String(n).padStart(3, '0')}`;
+      const ts = baseTs + idx;
+      const hash = hashVale(folio, ts);
+      out.push({
+        folio, prefix, cliente,
+        producto: def.producto,
+        productoLabel: def.etiqueta,
+        hash, ts,
+        qrData: `${folio}|${cliente}|${def.producto}|${hash}`,
+        litrosMax: null,
+        montoMax: null,
+        sinLimite: true,
+        vigenciaInicio,
+        vigenciaFin,
+        notas: 'VIGENCIA 03/JUN/2026 AL 30/JUN/2026 - SIN LIMITE DE CARGA',
+        lote,
+        estado: 'DISPONIBLE',
+        fechaCreacion: '03/06/2026',
+        fechaUso: null,
+        precargado: true
+      });
+      idx++;
+    }
+  });
+  return out;
+})();
+
+function mergeValesPrecargados_(localVales) {
+  const byFolio = new Map();
+  (SGM_VALES_PRECARGADOS || []).forEach(v => byFolio.set(String(v.folio).toUpperCase(), { ...v }));
+  (localVales || []).forEach(v => {
+    if(!v || !v.folio) return;
+    const key = String(v.folio).toUpperCase();
+    byFolio.set(key, { ...(byFolio.get(key) || {}), ...v, folio: key });
+  });
+  return Array.from(byFolio.values());
+}
+
 function getVales() {
-  try { return JSON.parse(localStorage.getItem('sgm_vales_v1') || '[]'); }
-  catch { return []; }
+  try { return mergeValesPrecargados_(JSON.parse(localStorage.getItem('sgm_vales_v1') || '[]')); }
+  catch { return mergeValesPrecargados_([]); }
 }
 function saveVales(vales) {
   localStorage.setItem('sgm_vales_v1', JSON.stringify(vales));
@@ -7346,25 +7464,101 @@ function parseQrVale(qrRaw) {
   if(s.includes('|')) {
     const parts = s.split('|');
     if(parts.length >= 4) {
-      return { folio: parts[0], cliente: parts[1], producto: parts[2], hash: parts[3] };
+      return {
+        folio: String(parts[0] || '').trim().toUpperCase(),
+        cliente: String(parts[1] || '').trim(),
+        producto: String(parts[2] || '').trim().toUpperCase(),
+        hash: String(parts[3] || '').trim().toUpperCase()
+      };
     }
     // Solo folio|hash
-    if(parts.length === 2) return { folio: parts[0], hash: parts[1] };
+    if(parts.length === 2) return {
+      folio: String(parts[0] || '').trim().toUpperCase(),
+      hash: String(parts[1] || '').trim().toUpperCase()
+    };
   }
   // Legacy JSON
   try { return JSON.parse(s); } catch {}
   // Solo folio en texto plano
-  return { folio: s };
+  return { folio: s.toUpperCase() };
+}
+
+function normalizeValeProducto_(p) {
+  const key = String(p || '').trim().toUpperCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if(key.includes('DIESEL') || key.includes('DISEL')) return 'DIESEL';
+  if(key.includes('SUPREME') || key.includes('SUP')) return 'SUPREME+';
+  if(key.includes('EXTRA') || key.includes('MAGNA') || key.includes('REGULAR')) return 'EXTRA';
+  return key;
+}
+
+function parseValeDateStart_(yyyyMmDd) {
+  const [y,m,d] = String(yyyyMmDd || '').split('-').map(Number);
+  if(!y || !m || !d) return null;
+  return new Date(y, m - 1, d, 0, 0, 0, 0).getTime();
+}
+
+function parseValeDateEnd_(yyyyMmDd) {
+  const [y,m,d] = String(yyyyMmDd || '').split('-').map(Number);
+  if(!y || !m || !d) return null;
+  return new Date(y, m - 1, d, 23, 59, 59, 999).getTime();
+}
+
+function validarValeFisico_(folioInput, qrRaw) {
+  const folio = String(folioInput || '').trim().toUpperCase();
+  const parsed = parseQrVale(qrRaw || folio);
+  if(!folio || !parsed.folio) return { ok:false, msg:'Vale vacio.' };
+  if(parsed.folio !== folio) return { ok:false, msg:'QR no coincide con el folio capturado.' };
+
+  const vale = getVales().find(v => String(v.folio || '').toUpperCase() === folio);
+  if(!vale) {
+    const pref = folio.split('-')[0];
+    if(pref !== 'DHAR') return { ok:true, vale:null, parsed, legacy:true };
+    return { ok:false, msg:`Vale ${folio} no existe en la memoria autorizada de APP SGM.` };
+  }
+
+  if(vale.hash) {
+    if(!parsed.hash) {
+      return { ok:false, msg:'Escanea el QR completo del vale. No se acepta captura manual para este lote.' };
+    }
+    if(String(vale.hash).toUpperCase() !== String(parsed.hash).toUpperCase()) {
+      return { ok:false, msg:'QR invalido o alterado. Hash del vale no coincide.' };
+    }
+  }
+
+  if(vale.estado === 'USADO') {
+    return { ok:false, msg:`Vale ya utilizado${vale.agente ? ' por '+vale.agente : ''}${vale.fechaUso ? ' el '+vale.fechaUso : ''}.` };
+  }
+
+  const now = Date.now();
+  const ini = parseValeDateStart_(vale.vigenciaInicio);
+  const fin = parseValeDateEnd_(vale.vigenciaFin);
+  if(ini && now < ini) return { ok:false, msg:`Vale aun no vigente. Inicia ${vale.vigenciaInicio}.` };
+  if(fin && now > fin) return { ok:false, msg:`Vale vencido. Vigencia hasta ${vale.vigenciaFin}.` };
+
+  return { ok:true, vale, parsed };
 }
 
 function validateValeHash(qrRaw) {
   const parsed = parseQrVale(qrRaw);
   if(!parsed.folio) return false;
-  // Si tiene hash, buscar el vale en localStorage para verificar
+  return validarValeFisico_(parsed.folio, qrRaw).ok;
+}
+
+function marcarValeUsado_(folio, agente, registroId) {
+  const key = String(folio || '').trim().toUpperCase();
+  if(!key || key.startsWith('DIRECTO-')) return;
   const vales = getVales();
-  const vale = vales.find(v => v.folio === parsed.folio);
-  if(vale && parsed.hash) return vale.hash === parsed.hash;
-  return true; // folios sin hash (ingreso manual) pasan
+  const idx = vales.findIndex(v => String(v.folio || '').toUpperCase() === key);
+  if(idx < 0) return;
+  vales[idx] = {
+    ...vales[idx],
+    estado: 'USADO',
+    agente: agente || STATE.session?.nombre || 'AGENTE SGM',
+    fechaUso: new Date().toLocaleDateString('es-MX'),
+    registroId: registroId || ''
+  };
+  saveVales(vales);
 }
 
 // ══════════════════════════════════════════════════════════
