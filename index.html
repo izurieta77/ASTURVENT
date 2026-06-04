@@ -3081,7 +3081,7 @@ async function syncPendingRecords() {
         record.FOTO_SELLO_S1 = record.foto_sello_s1 = urls.ss1 || record.FOTO_SELLO_S1 || record.foto_sello_s1 || '';
         record.FOTO_SELLO_S2 = record.foto_sello_s2 = urls.ss2 || record.FOTO_SELLO_S2 || record.foto_sello_s2 || '';
 
-        const complete = evidenceMissingLabels_(urls, isDEH).length === 0;
+        const complete = evidenceMissingLabels_(urls, isDEH, pendingPref).length === 0;
         if(!complete) {
           localStorage.setItem(key, JSON.stringify(record));
           console.warn('[SGM] syncPendingRecords: evidencias aún incompletas para', record.id || record.ID_REGISTRO);
@@ -3965,13 +3965,17 @@ async function uploadPhotoToDrive(dataUrl, filename) {
   }
 }
 
-function evidenceFieldsRequired_(isDEH) {
+const FIRMA_ONLY_EVIDENCE_PREFIXES = new Set(['TOLUT']);
+
+function evidenceFieldsRequired_(isDEH, prefix = '') {
+  const pref = String(prefix || '').trim().toUpperCase();
+  if(FIRMA_ONLY_EVIDENCE_PREFIXES.has(pref)) return ['firma'];
   return isDEH
     ? ['firma','placa','ticket','se1','se2','ss1','ss2']
     : ['firma','placa','ticket'];
 }
 
-function evidenceMissingLabels_(bundle, isDEH) {
+function evidenceMissingLabels_(bundle, isDEH, prefix = '') {
   const labels = {
     firma: 'firma chofer',
     placa: 'foto placa',
@@ -3981,7 +3985,7 @@ function evidenceMissingLabels_(bundle, isDEH) {
     ss1: 'foto sello S1',
     ss2: 'foto sello S2'
   };
-  return evidenceFieldsRequired_(isDEH).filter(k => !(bundle && bundle[k])).map(k => labels[k]);
+  return evidenceFieldsRequired_(isDEH, prefix).filter(k => !(bundle && bundle[k])).map(k => labels[k]);
 }
 
 async function uploadEvidenceBundle_(rid, rawEvidence, isDEH, existingUrls = {}) {
@@ -6149,7 +6153,7 @@ async function saveDespacho() {
     num_sello_s2:   numSelloS2
   };
 
-  const missingEvidence = evidenceMissingLabels_(uploadedEvidence, isDEH);
+  const missingEvidence = evidenceMissingLabels_(uploadedEvidence, isDEH, prefActual);
   if(missingEvidence.length) {
     const pendingRecord = {
       ...record,

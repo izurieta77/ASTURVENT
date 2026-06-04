@@ -14,6 +14,7 @@ var LEGACY_READ_TABS = ['Despachos_SGM_APP', 'Despachos_SGM', 'Sheet1', 'Hoja 1'
 var DRIVE_FOLDER_NAME = 'SGM_Despachos';
 var SALDOS_PROP_KEY = 'SGM_SALDOS_V1';
 var CATALOGO_PROP_KEY = 'SGM_CATALOGO_V1';
+var LAST_APPEND_PROP_KEY = 'SGM_LAST_APPEND_V1';
 
 var BITACORA_SHEET_ID = '';
 var BITACORA_TAB_NAME = 'BITACORA';
@@ -87,7 +88,8 @@ function doGet(e) {
   if (action === 'getCatalogo') return jsonResponse_(loadCatalogo_());
   if (action === 'diag') return jsonResponse_({
     ok: true, version: VERSION, writeTab: WRITE_TAB_NAME,
-    clientesConfigurados: Object.keys(CLIENTE_SHEETS).length
+    clientesConfigurados: Object.keys(CLIENTE_SHEETS).length,
+    lastAppend: loadLastAppend_()
   });
   return jsonResponse_({ ok: true, service: 'SGM Flotillas Backend', version: VERSION });
 }
@@ -123,20 +125,31 @@ function guardarDespacho_(rawRecord) {
   var ss = SpreadsheetApp.openById(cfg.sheetId);
   var sheet = getOrCreateWriteSheet_(ss);
   if (isDuplicateById_(sheet, record.ID_REGISTRO)) {
+    rememberLastAppend_(record, [{ prefix: prefix, tab: WRITE_TAB_NAME, duplicated: true }], []);
     return { ok: true, duplicated: true, prefix: prefix, id: record.ID_REGISTRO };
   }
   ensureHeaders_(sheet, REQUIRED_HEADERS);
   appendRowByHeader_(sheet, record);
   var central = { ok: false, skipped: true };
+  var writes = [{ prefix: prefix, tab: WRITE_TAB_NAME }];
+  var writeErrors = [];
   if (BITACORA_SHEET_ID) {
     try {
       var ssCentral = SpreadsheetApp.openById(BITACORA_SHEET_ID);
       var shCentral = getOrCreateSheetByName_(ssCentral, BITACORA_TAB_NAME);
       ensureHeaders_(shCentral, REQUIRED_HEADERS);
-      if (!isDuplicateById_(shCentral, record.ID_REGISTRO)) appendRowByHeader_(shCentral, record);
+      if (!isDuplicateById_(shCentral, record.ID_REGISTRO)) {
+        appendRowByHeader_(shCentral, record);
+        writes.push({ prefix: prefix, tab: BITACORA_TAB_NAME, central: true });
+      }
       central = { ok: true };
-    } catch (e2) { central = { ok: false, error: String(e2 && e2.message || e2) }; }
+    } catch (e2) {
+      var centralErr = String(e2 && e2.message || e2);
+      central = { ok: false, error: centralErr };
+      writeErrors.push({ prefix: prefix, tab: BITACORA_TAB_NAME, error: centralErr });
+    }
   }
+  rememberLastAppend_(record, writes, writeErrors);
   return { ok: true, prefix: prefix, id: record.ID_REGISTRO, tab: WRITE_TAB_NAME, central: central };
 }
 
@@ -210,7 +223,7 @@ function subirFotoDrive_(body) {
   var file = folder.createFile(blob);
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   var fileId = file.getId();
-  return { ok: true, fileId: fileId, url: 'https://drive.google.com/uc?export=view&id=' + fileId, name: filename };
+  return { ok: true, fileId: fileId, url: 'https://drive.google.com/file/d/' + fileId + '/view', name: filename };
 }
 
 function getOrCreateDriveFolder_(folderName) {
@@ -236,6 +249,29 @@ function loadSaldos_() {
 // ═══════════════════════════════════════════════════════════
 // CATÁLOGO DE UNIDADES (F2a)
 // ═══════════════════════════════════════════════════════════
+function rememberLastAppend_(record, writes, writeErrors) {
+  try {
+    var payload = {
+      ok: true,
+      rid: record && record.ID_REGISTRO || '',
+      id: record && record.ID_REGISTRO || '',
+      prefix: record && record.PREFIX || '',
+      tab: WRITE_TAB_NAME,
+      ts: Date.now(),
+      writes: writes || [],
+      writeErrors: writeErrors || []
+    };
+    PropertiesService.getScriptProperties().setProperty(LAST_APPEND_PROP_KEY, JSON.stringify(payload));
+  } catch (err) {}
+}
+
+function loadLastAppend_() {
+  var raw = PropertiesService.getScriptProperties().getProperty(LAST_APPEND_PROP_KEY);
+  if (!raw) return null;
+  try { return JSON.parse(raw); }
+  catch (err) { return null; }
+}
+
 function loadCatalogo_() {
   var raw = PropertiesService.getScriptProperties().getProperty(CATALOGO_PROP_KEY);
   try { return { ok: true, items: raw ? JSON.parse(raw) : [] }; }
