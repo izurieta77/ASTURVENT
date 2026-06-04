@@ -5271,6 +5271,7 @@ function validateFolio() {
 
   // 2. Anti-duplicado — verificar si ya fue despachado
   const yaUsado = STATE.registros.find(r =>
+    !r._pending &&
     (String(r.folio || '').toUpperCase() === folio ||
      String(r.folio_vale || '').toUpperCase() === folio ||
      String(r.ticket || '').toUpperCase() === folio) && r.litros > 0
@@ -6164,9 +6165,6 @@ async function saveDespacho() {
     }
     STATE.registros.unshift(pendingRecord);
     descontarSaldo(record.prefix, record.monto);
-    if(STATE.currFolio?.valeRef) {
-      marcarValeUsado_(record.folio_vale || record.folio, record.agente, record.id);
-    }
     applyFilters();
     updateProgress(100, 'Evidencias pendientes — guardado local ⚠️');
     showMsg('save-err', `⚠️ No se pudieron preparar todas las evidencias (${missingEvidence.join(', ')}).
@@ -6198,9 +6196,6 @@ El despacho quedó guardado localmente y se sincronizará automáticamente cuand
     if(STATE.currFolio?.esAutz) {
       marcarAutorizacionUsada(record.codigo_autz || record.folio, record.agente);
     }
-    if(STATE.currFolio?.valeRef) {
-      marcarValeUsado_(record.folio_vale || record.folio, record.agente, record.id);
-    }
     applyFilters();
 
     const baseFotos = [firmaUrl, fotoPlacaUrl, fotoTicketUrl];
@@ -6211,6 +6206,9 @@ El despacho quedó guardado localmente y se sincronizará automáticamente cuand
     const fotosTxt = fotosOk === totalFotos ? `📸 ${totalFotos} evidencias guardadas` : fotosOk > 0 ? `📸 ${fotosOk}/${totalFotos} evidencias guardadas` : '⚠️ Sin evidencias';
 
     if(writeResult?.confirmed) {
+      if(STATE.currFolio?.valeRef) {
+        marcarValeUsado_(record.folio_vale || record.folio, record.agente, record.id);
+      }
       updateProgress(100, 'Guardado confirmado en nube ✅');
       setTimeout(() => {
         alert(`✅ Despacho confirmado en Google Sheets
@@ -6235,9 +6233,6 @@ El despacho quedó guardado localmente y seguirá intentando sincronizarse autom
     record._pending = true;
     STATE.registros.unshift(record);
     descontarSaldo(record.prefix, record.monto);
-    if(STATE.currFolio?.valeRef) {
-      marcarValeUsado_(record.folio_vale || record.folio, record.agente, record.id);
-    }
     applyFilters();
     updateProgress(100, 'Error — quedó pendiente local ⚠️');
     showMsg('save-err',
