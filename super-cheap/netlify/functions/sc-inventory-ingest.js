@@ -55,6 +55,25 @@ function valor(raw, keys) {
   return null;
 }
 
+function normalizarTipo(v) {
+  return texto(v)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function esTipoDescartable(v) {
+  const t = normalizarTipo(v);
+  if (!t) return false;
+  const palabras = new Set(t.split(' '));
+  if (['salida', 'salidas', 'venta', 'ventas', 'merma', 'mermas', 'baja', 'bajas', 'resta', 'restas', 'decremento', 'decrementos'].some(p => palabras.has(p))) {
+    return true;
+  }
+  return /(^|\s)devolucion(\s+(a|al))?\s+proveedor(\s|$)/.test(t);
+}
+
 function cantidadPositiva(raw) {
   const anterior = numero(valor(raw, ['existencia_anterior', 'stock_anterior', 'inventario_anterior']));
   const nueva = numero(valor(raw, ['existencia_nueva', 'stock_nuevo', 'inventario_nuevo']));
@@ -101,8 +120,8 @@ function normalizarMovimiento(raw) {
   const cantidad = r2(cantidadPositiva(raw));
   if (!(cantidad > 0)) return null;
 
-  const tipo = texto(valor(raw, ['tipo', 'movimiento', 'motivo', 'concepto'])).toLowerCase();
-  if (/(salida|venta|devolucion proveedor|merma|baja|resta|decremento)/.test(tipo)) return null;
+  const tipo = valor(raw, ['tipo', 'movimiento', 'motivo', 'concepto']);
+  if (esTipoDescartable(tipo)) return null;
 
   const producto = texto(valor(raw, ['producto', 'descripcion', 'articulo', 'nombre']));
   const clave = texto(valor(raw, ['clave', 'codigo', 'sku', 'codigo_producto']));
@@ -208,4 +227,5 @@ module.exports._test = {
   normalizarMovimiento,
   cantidadPositiva,
   numero,
+  esTipoDescartable,
 };

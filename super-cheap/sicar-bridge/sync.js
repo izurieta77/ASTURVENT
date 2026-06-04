@@ -135,6 +135,10 @@ function cargarConfig() {
   }
 }
 
+function sqlActiva(sql) {
+  return typeof sql === 'string' && sql.trim() !== '' && !sql.trim().startsWith('--');
+}
+
 function texto(v) {
   if (v === undefined || v === null) return '';
   return String(v).trim();
@@ -238,6 +242,25 @@ function valorPrimero(raw, keys) {
   return null;
 }
 
+function normalizarTipoMovimiento(v) {
+  return texto(v)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function esTipoInventarioDescartable(v) {
+  const t = normalizarTipoMovimiento(v);
+  if (!t) return false;
+  const palabras = new Set(t.split(' '));
+  if (['salida', 'salidas', 'venta', 'ventas', 'merma', 'mermas', 'baja', 'bajas', 'resta', 'restas', 'decremento', 'decrementos'].some(p => palabras.has(p))) {
+    return true;
+  }
+  return /(^|\s)devolucion(\s+(a|al))?\s+proveedor(\s|$)/.test(t);
+}
+
 function huellaInventario(raw, fecha, producto, clave, cantidad, costo, total) {
   const explicita = texto(valorPrimero(raw, ['movimiento_key', 'movimiento_id', 'id_movimiento', 'id', 'folio', 'documento']));
   if (explicita) return explicita;
@@ -282,8 +305,8 @@ function mapearMovimientoInventario(raw, fechaDefault) {
   const cantidad = cantidadInventario(raw);
   if (!(cantidad > 0)) return null;
 
-  const tipo = texto(valorPrimero(raw, ['tipo', 'movimiento', 'motivo', 'concepto'])).toLowerCase();
-  if (/(salida|venta|devolucion proveedor|merma|baja|resta|decremento)/.test(tipo)) return null;
+  const tipo = normalizarTipoMovimiento(valorPrimero(raw, ['tipo', 'movimiento', 'motivo', 'concepto']));
+  if (esTipoInventarioDescartable(tipo)) return null;
 
   const producto = texto(valorPrimero(raw, ['producto', 'descripcion', 'articulo', 'nombre']));
   const clave = texto(valorPrimero(raw, ['clave', 'codigo', 'sku', 'codigo_producto']));
@@ -358,7 +381,7 @@ async function leerDesdeMysql(cfg, fecha) {
 }
 
 async function leerInventarioDesdeMysql(cfg, fecha) {
-  if (!cfg.sqlInventarioMovimientos) return [];
+  if (!sqlActiva(cfg.sqlInventarioMovimientos)) return [];
   if (!cfg.mysql || !cfg.mysql.host || !cfg.mysql.database || !cfg.mysql.user) {
     throw new Error('Falta mysql.host/user/database en config.json.');
   }
@@ -844,7 +867,7 @@ async function main() {
     }
 
     if (args.inventario && args.modo !== 'excel') {
-      if (cfg.sqlInventarioMovimientos) {
+      if (sqlActiva(cfg.sqlInventarioMovimientos)) {
         const movimientos = await leerInventarioDesdeMysql(cfg, args.fecha);
         const resultadoInv = await enviarInventario(cfg, movimientos, args.dryRun);
         log(`OK inventario. Recibidos: ${resultadoInv.recibidos ?? '?'}, validos: ${resultadoInv.validos ?? '?'}, insertados: ${resultadoInv.insertados ?? '?'}, duplicados: ${resultadoInv.duplicados ?? 0}, descartados: ${resultadoInv.descartados ?? 0}.`);
@@ -874,4 +897,5 @@ module.exports = {
   numero,
   fechaExcel,
   fechaUnica,
+  sqlActiva,
 };
