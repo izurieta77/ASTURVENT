@@ -11,6 +11,7 @@
 //   POST { action:"actualizar", tabla, id, fila }
 //   POST { action:"eliminar",   tabla, id }
 //   POST { action:"importar_ventas", ventas:[...] }  // Plan B Excel SICAR
+//   POST { action:"eliminar_inventario_sicar", desde, hasta } // admin: soft delete bulk
 //
 // Todas las consultas a BigQuery son PARAMETRIZADAS (nunca se concatena input).
 // Todas las lecturas/agregados filtran COALESCE(activo, TRUE) = TRUE (soft delete v2).
@@ -96,8 +97,9 @@ exports.handler = async (event) => {
       if (action === 'insertar')   return await insertar(cors, body);
       if (action === 'actualizar') return await actualizar(cors, body);
       if (action === 'eliminar')   return await eliminar(cors, body);
+      if (action === 'eliminar_inventario_sicar') return await eliminarInventarioSicar(cors, body);
       if (action === 'importar_ventas') return await importarVentas(cors, body);
-      return json(400, cors, { ok: false, error: 'action invalida (insertar|actualizar|eliminar|importar_ventas)' });
+      return json(400, cors, { ok: false, error: 'action invalida (insertar|actualizar|eliminar|eliminar_inventario_sicar|importar_ventas)' });
     }
 
     return json(405, cors, { ok: false, error: 'Method not allowed' });
@@ -1003,6 +1005,40 @@ async function eliminar(cors, body) {
 
   await bq.softDelete(tabla, id);
   return json(200, cors, { ok: true, eliminados: 1 });
+}
+
+// =============================================================================
+// POST action=eliminar_inventario_sicar (soft delete bulk)
+// =============================================================================
+async function eliminarInventarioSicar(cors, body) {
+  const desde = body.desde;
+  const hasta = body.hasta;
+  if (!fechaValida(desde) || !fechaValida(hasta)) {
+    return json(400, cors, { ok: false, error: 'desde/hasta deben ser fechas YYYY-MM-DD' });
+  }
+
+  const ds = bq.DATASET;
+  const params = { desde, hasta };
+  const countRows = await bq.query(
+    `SELECT COUNT(*) AS total
+       FROM \`${ds}.compras\`
+      WHERE fecha BETWEEN @desde AND @hasta
+        AND STARTS_WITH(raw_ocr, 'sicar_inventory:')
+        AND ${ACTIVO}`,
+    params,
+  );
+  const eliminados = Number(countRows[0]?.total || 0);
+  if (eliminados > 0) {
+    await bq.query(
+      `UPDATE \`${ds}.compras\`
+          SET activo = FALSE
+        WHERE fecha BETWEEN @desde AND @hasta
+          AND STARTS_WITH(raw_ocr, 'sicar_inventory:')
+          AND ${ACTIVO}`,
+      params,
+    );
+  }
+  return json(200, cors, { ok: true, eliminados });
 }
 
 // =============================================================================
