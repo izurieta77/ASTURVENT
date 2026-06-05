@@ -12,6 +12,9 @@
    Este programa no modifica SICAR. Solo lee MySQL o un archivo Excel/CSV y envia
    ventas normalizadas a sc-ingest. Si config.json trae sqlInventarioMovimientos,
    tambien envia aumentos positivos de inventario como compras automaticas.
+
+   Backfill historico: si existe inventory-backfill.json, procesa solo inventario
+   por bloques y guarda cursor para continuar sin duplicar.
 */
 
 'use strict';
@@ -24,7 +27,10 @@ const mysql = require('mysql2/promise');
 
 const DEFAULT_SITE = 'https://supercheapp.netlify.app';
 const LOG_DIR = path.join(__dirname, 'logs');
+const BACKFILL_FILE = path.join(__dirname, 'inventory-backfill.json');
 const DEFAULT_HTTP_TIMEOUT_SECONDS = 45;
+const INVENTORY_BATCH_SIZE = 500;
+const DEFAULT_BACKFILL_CHUNK_DAYS = 60;
 
 const ALIASES = {
   fecha: ['fecha', 'date', 'dia', 'fecha venta', 'fecha de venta'],
@@ -79,6 +85,29 @@ function hoyISO() {
 
 function esFechaValida(s) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
+}
+
+function dateFromIso(s) {
+  if (!esFechaValida(s)) return null;
+  const d = new Date(`${s}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function addDaysIso(s, days) {
+  const d = dateFromIso(s);
+  if (!d) return null;
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function compareIsoDate(a, b) {
+  return String(a || '').localeCompare(String(b || ''));
+}
+
+function clampInt(value, fallback, min, max) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.floor(n)));
 }
 
 function normalizarHeader(s) {
@@ -797,38 +826,144 @@ async function enviarInventario(cfg, movimientos, dryRun) {
 
   const url = siteUrl + '/.netlify/functions/sc-inventory-ingest';
   const timeoutSeconds = numberEnv('SC_SYNC_HTTP_TIMEOUT_SECONDS', DEFAULT_HTTP_TIMEOUT_SECONDS, 10, 300);
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutSeconds * 1000);
-  log(`Enviando aumentos de inventario a ${url}`);
-  let res;
-  try {
-    res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Ingest-Token': cfg.ingestToken,
-      },
-      body: JSON.stringify({ movimientos }),
-      signal: controller.signal,
-    });
-  } catch (err) {
-    if (err && err.name === 'AbortError') {
-      throw new Error(`Tiempo agotado enviando inventario a Netlify despues de ${timeoutSeconds}s. Se reintentara.`);
+  const total = { ok: true, recibidos: 0, validos: 0, positivos: 0, insertados: 0, duplicados: 0, descartados: 0 };
+
+  for (let i = 0; i < movimientos.length; i += INVENTORY_BATCH_SIZE) {
+    const lote = movimientos.slice(i, i + INVENTORY_BATCH_SIZE);
+    const loteNum = Math.floor(i / INVENTORY_BATCH_SIZE) + 1;
+    const loteTotal = Math.ceil(movimientos.length / INVENTORY_BATCH_SIZE);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutSeconds * 1000);
+    log(`Enviando aumentos de inventario a ${url} (lote ${loteNum}/${loteTotal}, ${lote.length} movimiento(s)).`);
+    let res;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Ingest-Token': cfg.ingestToken,
+        },
+        body: JSON.stringify({ movimientos: lote }),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (err && err.name === 'AbortError') {
+        throw new Error(`Tiempo agotado enviando inventario a Netlify despues de ${timeoutSeconds}s. Se reintentara.`);
+      }
+      throw new Error(`No pude conectar con Netlify para inventario: ${err.message || String(err)}. Se reintentara.`);
+    } finally {
+      clearTimeout(timeout);
     }
-    throw new Error(`No pude conectar con Netlify para inventario: ${err.message || String(err)}. Se reintentara.`);
-  } finally {
-    clearTimeout(timeout);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) {
+      throw new Error(`Netlify rechazo inventario (HTTP ${res.status}): ${data.error || 'sin detalle'}. Se reintentara.`);
+    }
+    total.recibidos += Number(data.recibidos || 0);
+    total.validos += Number(data.validos || 0);
+    total.positivos += Number(data.positivos || data.validos || 0);
+    total.insertados += Number(data.insertados || 0);
+    total.duplicados += Number(data.duplicados || 0);
+    total.descartados += Number(data.descartados || 0);
   }
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.ok === false) {
-    throw new Error(`Netlify rechazo inventario (HTTP ${res.status}): ${data.error || 'sin detalle'}. Se reintentara.`);
-  }
-  return data;
+  return total;
 }
 
 function fechaUnica(ventas) {
   const fechas = Array.from(new Set((ventas || []).map((v) => v.fecha).filter(esFechaValida)));
   return fechas.length === 1 ? fechas[0] : null;
+}
+
+function leerBackfillControl() {
+  if (!fs.existsSync(BACKFILL_FILE)) return null;
+  try {
+    const raw = fs.readFileSync(BACKFILL_FILE, 'utf8').replace(/^\uFEFF/, '');
+    return JSON.parse(raw);
+  } catch (err) {
+    throw new Error(`No pude leer inventory-backfill.json: ${err.message}`);
+  }
+}
+
+function guardarBackfillControl(control) {
+  const tmp = `${BACKFILL_FILE}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(control, null, 2), 'utf8');
+  fs.renameSync(tmp, BACKFILL_FILE);
+}
+
+function sumarResultadoInventario(dest, src) {
+  for (const key of ['dias_procesados', 'recibidos', 'validos', 'insertados', 'duplicados', 'descartados']) {
+    dest[key] = Number(dest[key] || 0) + Number(src[key] || 0);
+  }
+  return dest;
+}
+
+async function ejecutarBackfillInventarioSiAplica(cfg) {
+  const control = leerBackfillControl();
+  if (!control || control.enabled === false || control.finishedAt) return false;
+
+  const desde = String(control.desde || '').slice(0, 10);
+  const hasta = String(control.hasta || hoyISO()).slice(0, 10);
+  if (!esFechaValida(desde) || !esFechaValida(hasta)) {
+    throw new Error('inventory-backfill.json debe traer desde/hasta en formato YYYY-MM-DD.');
+  }
+  if (compareIsoDate(desde, hasta) > 0) {
+    throw new Error('inventory-backfill.json invalido: desde no puede ser posterior a hasta.');
+  }
+  if (!sqlActiva(cfg.sqlInventarioMovimientos)) {
+    throw new Error('No puedo correr backfill: falta sqlInventarioMovimientos en config.json.');
+  }
+
+  const chunkDays = clampInt(control.chunkDays, DEFAULT_BACKFILL_CHUNK_DAYS, 1, 180);
+  let cursor = String(control.cursor || hasta).slice(0, 10);
+  if (!esFechaValida(cursor) || compareIsoDate(cursor, hasta) > 0) cursor = hasta;
+  if (compareIsoDate(cursor, desde) < 0) {
+    control.enabled = false;
+    control.finishedAt = control.finishedAt || new Date().toISOString();
+    guardarBackfillControl(control);
+    log('Backfill de inventario ya estaba completo.');
+    return true;
+  }
+
+  control.startedAt = control.startedAt || new Date().toISOString();
+  control.updatedAt = new Date().toISOString();
+  control.cursor = cursor;
+  control.chunkDays = chunkDays;
+  control.totals = control.totals || {};
+  guardarBackfillControl(control);
+
+  log(`Backfill inventario activo: desde ${desde} hasta ${hasta}, cursor ${cursor}, bloque ${chunkDays} dia(s).`);
+  const bloque = { dias_procesados: 0, recibidos: 0, validos: 0, insertados: 0, duplicados: 0, descartados: 0 };
+  let fecha = cursor;
+
+  for (let i = 0; i < chunkDays && compareIsoDate(fecha, desde) >= 0; i += 1) {
+    log(`Backfill inventario: procesando ${fecha}.`);
+    const movimientos = await leerInventarioDesdeMysql(cfg, fecha);
+    const resultado = await enviarInventario(cfg, movimientos, false);
+    const resumen = {
+      dias_procesados: 1,
+      recibidos: Number(resultado.recibidos || 0),
+      validos: Number(resultado.validos || 0),
+      insertados: Number(resultado.insertados || 0),
+      duplicados: Number(resultado.duplicados || 0),
+      descartados: Number(resultado.descartados || 0),
+    };
+    sumarResultadoInventario(bloque, resumen);
+    sumarResultadoInventario(control.totals, resumen);
+
+    fecha = addDaysIso(fecha, -1);
+    control.cursor = fecha;
+    control.updatedAt = new Date().toISOString();
+    guardarBackfillControl(control);
+  }
+
+  log(`Backfill inventario bloque OK. Dias=${bloque.dias_procesados}, recibidos=${bloque.recibidos}, validos=${bloque.validos}, insertados=${bloque.insertados}, duplicados=${bloque.duplicados}, descartados=${bloque.descartados}.`);
+
+  if (compareIsoDate(control.cursor, desde) < 0) {
+    control.enabled = false;
+    control.finishedAt = new Date().toISOString();
+    guardarBackfillControl(control);
+    log(`Backfill inventario COMPLETO. Totales: ${JSON.stringify(control.totals)}.`);
+  }
+  return true;
 }
 
 async function main() {
@@ -857,6 +992,12 @@ async function main() {
   }
 
   try {
+    if (await ejecutarBackfillInventarioSiAplica(cfg)) {
+      log('Backfill atendido en esta ejecucion; se omite sincronizacion normal para no tocar ventas.');
+      log('Sincronizacion terminada correctamente.');
+      return;
+    }
+
     if (!args.inventarioOnly) {
       const ventas = args.modo === 'excel'
         ? await leerDesdeExcel(args.excelPath, args.fecha)
@@ -898,4 +1039,5 @@ module.exports = {
   fechaExcel,
   fechaUnica,
   sqlActiva,
+  ejecutarBackfillInventarioSiAplica,
 };
