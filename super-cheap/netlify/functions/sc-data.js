@@ -57,6 +57,8 @@ const COLS_NUMERIC = new Set(['subtotal', 'iva', 'ieps', 'total', 'monto', 'cant
 const META_MARGEN = Number(process.env.META_MARGEN) || 20;
 
 const AJUSTE_INVENTARIO_OLVIDADO_PREFIX = 'sicar_inventory_forgotten:';
+const AJUSTE_INVENTARIO_GENERAL = 0.07;
+const AJUSTE_INVENTARIO_VINOS_LICORES = 0.02;
 const PATRON_VINOS_LICORES = [
   'vino', 'vinos', 'licor', 'licores', 'tequila', 'mezcal', 'whisky', 'whiskey',
   'ron', 'vodka', 'brandy', 'cognac', 'ginebra', 'gin', 'champagne', 'champana',
@@ -855,17 +857,23 @@ async function calcularAjusteInventarioOlvidado(desde, hasta) {
      SELECT
        periodo,
        IF(es_vinos_licores, 'vinos_licores', 'general') AS segmento,
-       IF(es_vinos_licores, 0.05, 0.12) AS porcentaje,
+       IF(es_vinos_licores, @pct_vinos_licores, @pct_general) AS porcentaje,
        COUNT(*) AS movimientos,
        ROUND(IFNULL(SUM(total), 0), 2) AS base_total,
-       ROUND(IFNULL(SUM(total * IF(es_vinos_licores, 0.05, 0.12)), 0), 2) AS ajuste_total,
+       ROUND(IFNULL(SUM(total * IF(es_vinos_licores, @pct_vinos_licores, @pct_general)), 0), 2) AS ajuste_total,
        FORMAT_DATE('%Y-%m-%d', MIN(fecha)) AS primera,
        FORMAT_DATE('%Y-%m-%d', MAX(fecha)) AS ultima
      FROM clasificada
      GROUP BY periodo, segmento, porcentaje
      HAVING ajuste_total > 0
      ORDER BY periodo ASC, segmento ASC`,
-    { desde, hasta, patron },
+    {
+      desde,
+      hasta,
+      patron,
+      pct_general: AJUSTE_INVENTARIO_GENERAL,
+      pct_vinos_licores: AJUSTE_INVENTARIO_VINOS_LICORES,
+    },
   );
   return normalizarResumenAjuste(rows);
 }
