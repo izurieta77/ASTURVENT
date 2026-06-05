@@ -6,6 +6,7 @@
 //   GET  ?action=resumen&desde=YYYY-MM-DD&hasta=YYYY-MM-DD
 //   GET  ?action=lista&tabla=ventas|compras|gastos|nomina&desde=&hasta=
 //   GET  ?action=resumen_inventario_sicar&desde=&hasta=&agrupar=mes|dia
+//   GET  ?action=resumen_ajuste_inventario_olvidado&desde=&hasta=
 //   GET  ?action=analitica&desde=YYYY-MM-DD&hasta=YYYY-MM-DD
 //   GET  ?action=alertas
 //   POST { action:"insertar",   tabla:"compras|gastos|nomina", fila:{...}, imagenes_base64?:[...] }
@@ -13,6 +14,7 @@
 //   POST { action:"eliminar",   tabla, id }
 //   POST { action:"importar_ventas", ventas:[...] }  // Plan B Excel SICAR
 //   POST { action:"eliminar_inventario_sicar", desde, hasta } // admin: soft delete bulk
+//   POST { action:"generar_ajuste_inventario_olvidado", desde, hasta }
 //
 // Todas las consultas a BigQuery son PARAMETRIZADAS (nunca se concatena input).
 // Todas las lecturas/agregados filtran COALESCE(activo, TRUE) = TRUE (soft delete v2).
@@ -54,6 +56,14 @@ const COLS_NUMERIC = new Set(['subtotal', 'iva', 'ieps', 'total', 'monto', 'cant
 // Margen meta por defecto (%); configurable via env META_MARGEN.
 const META_MARGEN = Number(process.env.META_MARGEN) || 20;
 
+const AJUSTE_INVENTARIO_OLVIDADO_PREFIX = 'sicar_inventory_forgotten:';
+const PATRON_VINOS_LICORES = [
+  'vino', 'vinos', 'licor', 'licores', 'tequila', 'mezcal', 'whisky', 'whiskey',
+  'ron', 'vodka', 'brandy', 'cognac', 'ginebra', 'gin', 'champagne', 'champana',
+  'champaña', 'sidra', 'cerveza', 'cervezas', 'bacardi', 'buchanan', 'cuervo',
+  'herradura', 'smirnoff', 'absolut', 'baileys', 'aperol', 'campari',
+].join('|');
+
 // Valida formato YYYY-MM-DD.
 function fechaValida(s) {
   return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
@@ -80,6 +90,7 @@ exports.handler = async (event) => {
       if (action === 'ventas_panel') return await ventasPanel(cors, q);
       if (action === 'lista')     return await lista(cors, q);
       if (action === 'resumen_inventario_sicar') return await resumenInventarioSicar(cors, q);
+      if (action === 'resumen_ajuste_inventario_olvidado') return await resumenAjusteInventarioOlvidado(cors, q);
       if (action === 'analitica') return await analitica(cors, q);
       if (action === 'alertas')   return await alertas(cors, q);
       if (action === 'foto') {
@@ -87,7 +98,7 @@ exports.handler = async (event) => {
         const url = await gcs.firmarUrl(String(q.ref || ''), 60);
         return json(url ? 200 : 404, cors, url ? { ok: true, url } : { ok: false, error: 'Foto no disponible' });
       }
-      return json(400, cors, { ok: false, error: 'action invalida (resumen|ventas_panel|lista|resumen_inventario_sicar|analitica|alertas|foto)' });
+      return json(400, cors, { ok: false, error: 'action invalida (resumen|ventas_panel|lista|resumen_inventario_sicar|resumen_ajuste_inventario_olvidado|analitica|alertas|foto)' });
     }
 
     if (event.httpMethod === 'POST') {
@@ -100,8 +111,9 @@ exports.handler = async (event) => {
       if (action === 'actualizar') return await actualizar(cors, body);
       if (action === 'eliminar')   return await eliminar(cors, body);
       if (action === 'eliminar_inventario_sicar') return await eliminarInventarioSicar(cors, body);
+      if (action === 'generar_ajuste_inventario_olvidado') return await generarAjusteInventarioOlvidado(cors, body);
       if (action === 'importar_ventas') return await importarVentas(cors, body);
-      return json(400, cors, { ok: false, error: 'action invalida (insertar|actualizar|eliminar|eliminar_inventario_sicar|importar_ventas)' });
+      return json(400, cors, { ok: false, error: 'action invalida (insertar|actualizar|eliminar|eliminar_inventario_sicar|generar_ajuste_inventario_olvidado|importar_ventas)' });
     }
 
     return json(405, cors, { ok: false, error: 'Method not allowed' });
@@ -782,6 +794,170 @@ async function resumenInventarioSicar(cors, q) {
       ultima: r.ultima || null,
       max_total: Number(r.max_total || 0),
     })),
+  });
+}
+
+function normalizarResumenAjuste(rows) {
+  const periodos = rows.map(r => ({
+    periodo: r.periodo,
+    segmento: r.segmento,
+    porcentaje: Number(r.porcentaje || 0),
+    movimientos: Number(r.movimientos || 0),
+    base_total: Number(r.base_total || 0),
+    ajuste_total: Number(r.ajuste_total || 0),
+    primera: r.primera || null,
+    ultima: r.ultima || null,
+  }));
+
+  return {
+    resumen: {
+      movimientos: periodos.reduce((sum, r) => sum + r.movimientos, 0),
+      base_total: r2(periodos.reduce((sum, r) => sum + r.base_total, 0)),
+      ajuste_total: r2(periodos.reduce((sum, r) => sum + r.ajuste_total, 0)),
+      primera: periodos.length ? periodos.map(r => r.primera).filter(Boolean).sort()[0] : null,
+      ultima: periodos.length ? periodos.map(r => r.ultima).filter(Boolean).sort().slice(-1)[0] : null,
+      filas_ajuste: periodos.length,
+    },
+    periodos,
+  };
+}
+
+async function calcularAjusteInventarioOlvidado(desde, hasta) {
+  const ds = bq.DATASET;
+  const patron = `(^|[^a-z0-9áéíóúüñ])(${PATRON_VINOS_LICORES})([^a-z0-9áéíóúüñ]|$)`;
+  const rows = await bq.query(
+    `WITH base AS (
+       SELECT
+         fecha,
+         FORMAT_DATE('%Y-%m', fecha) AS periodo,
+         CAST(total AS FLOAT64) AS total,
+         LOWER(CONCAT(IFNULL(categoria, ''), ' ', IFNULL(clasificacion, ''), ' ', IFNULL(conceptos, ''))) AS texto
+       FROM \`${ds}.compras\`
+       WHERE fecha BETWEEN @desde AND @hasta
+         AND STARTS_WITH(IFNULL(raw_ocr, ''), 'sicar_inventory:')
+         AND ${ACTIVO}
+     ),
+     clasificada AS (
+       SELECT
+         periodo,
+         fecha,
+         total,
+         REGEXP_CONTAINS(texto, @patron) AS es_vinos_licores
+       FROM base
+       WHERE total > 0
+     )
+     SELECT
+       periodo,
+       IF(es_vinos_licores, 'vinos_licores', 'general') AS segmento,
+       IF(es_vinos_licores, 0.05, 0.12) AS porcentaje,
+       COUNT(*) AS movimientos,
+       ROUND(IFNULL(SUM(total), 0), 2) AS base_total,
+       ROUND(IFNULL(SUM(total * IF(es_vinos_licores, 0.05, 0.12)), 0), 2) AS ajuste_total,
+       FORMAT_DATE('%Y-%m-%d', MIN(fecha)) AS primera,
+       FORMAT_DATE('%Y-%m-%d', MAX(fecha)) AS ultima
+     FROM clasificada
+     GROUP BY periodo, segmento, porcentaje
+     HAVING ajuste_total > 0
+     ORDER BY periodo ASC, segmento ASC`,
+    { desde, hasta, patron },
+  );
+  return normalizarResumenAjuste(rows);
+}
+
+// =============================================================================
+// GET action=resumen_ajuste_inventario_olvidado
+// =============================================================================
+async function resumenAjusteInventarioOlvidado(cors, q) {
+  const desde = q.desde;
+  const hasta = q.hasta;
+  if (!fechaValida(desde) || !fechaValida(hasta)) {
+    return json(400, cors, { ok: false, error: 'desde/hasta deben ser fechas YYYY-MM-DD' });
+  }
+
+  const resultado = await calcularAjusteInventarioOlvidado(desde, hasta);
+  return json(200, cors, { ok: true, ...resultado });
+}
+
+function filaCompraAjusteInventario(r) {
+  const porcentaje = Number(r.porcentaje || 0);
+  const pctTexto = `${Math.round(porcentaje * 100)}%`;
+  const segmento = r.segmento === 'vinos_licores' ? 'vinos y licores' : 'general';
+  const total = r2(r.ajuste_total);
+  const subtotal = r2(total / 1.16);
+  const iva = r2(total - subtotal);
+  const baseTotal = r2(r.base_total);
+
+  return {
+    id: crypto.randomUUID(),
+    fecha: r.ultima,
+    hora: '23:59:00',
+    proveedor: 'Ajuste inventario SICAR',
+    subtotal,
+    iva,
+    ieps: 0,
+    total,
+    impuestos_estimados: true,
+    categoria: r.segmento === 'vinos_licores'
+      ? 'inventario_olvidado_vinos_licores'
+      : 'inventario_olvidado_general',
+    clasificacion: 'reventa',
+    conceptos: JSON.stringify([{
+      descripcion: `Ajuste mensual ${pctTexto} por compras olvidadas de inventario SICAR - ${segmento} (${r.periodo})`,
+      importe: total,
+      uso: 'reventa',
+      ingrediente: null,
+      cantidad: null,
+      costo_unitario: null,
+      nota: `Base de compras automaticas SICAR: $${baseTotal.toFixed(2)}. Porcentaje aplicado: ${pctTexto}.`,
+    }]),
+    raw_ocr: `${AJUSTE_INVENTARIO_OLVIDADO_PREFIX}${r.periodo}:${r.segmento}`,
+    activo: true,
+  };
+}
+
+// =============================================================================
+// POST action=generar_ajuste_inventario_olvidado
+// =============================================================================
+async function generarAjusteInventarioOlvidado(cors, body) {
+  const desde = body.desde;
+  const hasta = body.hasta;
+  if (!fechaValida(desde) || !fechaValida(hasta)) {
+    return json(400, cors, { ok: false, error: 'desde/hasta deben ser fechas YYYY-MM-DD' });
+  }
+
+  const resultado = await calcularAjusteInventarioOlvidado(desde, hasta);
+  const filas = resultado.periodos.map(filaCompraAjusteInventario);
+  const ds = bq.DATASET;
+  const params = { desde, hasta, prefix: AJUSTE_INVENTARIO_OLVIDADO_PREFIX };
+  const prevRows = await bq.query(
+    `SELECT COUNT(*) AS total
+       FROM \`${ds}.compras\`
+      WHERE fecha BETWEEN @desde AND @hasta
+        AND STARTS_WITH(IFNULL(raw_ocr, ''), @prefix)
+        AND ${ACTIVO}`,
+    params,
+  );
+  const reemplazados = Number(prevRows[0]?.total || 0);
+  if (reemplazados > 0) {
+    await bq.query(
+      `UPDATE \`${ds}.compras\`
+          SET activo = FALSE
+        WHERE fecha BETWEEN @desde AND @hasta
+          AND STARTS_WITH(IFNULL(raw_ocr, ''), @prefix)
+          AND ${ACTIVO}`,
+      params,
+    );
+  }
+
+  if (filas.length) {
+    await bq.insertRows('compras', filas);
+  }
+
+  return json(200, cors, {
+    ok: true,
+    insertados: filas.length,
+    reemplazados,
+    ...resultado,
   });
 }
 
