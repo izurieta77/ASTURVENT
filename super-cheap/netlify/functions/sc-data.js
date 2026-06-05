@@ -57,8 +57,8 @@ const COLS_NUMERIC = new Set(['subtotal', 'iva', 'ieps', 'total', 'monto', 'cant
 const META_MARGEN = Number(process.env.META_MARGEN) || 20;
 
 const AJUSTE_INVENTARIO_OLVIDADO_PREFIX = 'sicar_inventory_forgotten:';
-const AJUSTE_INVENTARIO_GENERAL = 0.07;
-const AJUSTE_INVENTARIO_VINOS_LICORES = 0.02;
+const AJUSTE_INVENTARIO_GENERAL = 0.02;
+const AJUSTE_INVENTARIO_VINOS_LICORES = 0.01;
 const PATRON_VINOS_LICORES = [
   'vino', 'vinos', 'licor', 'licores', 'tequila', 'mezcal', 'whisky', 'whiskey',
   'ron', 'vodka', 'brandy', 'cognac', 'ginebra', 'gin', 'champagne', 'champana',

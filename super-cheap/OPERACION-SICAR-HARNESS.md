@@ -9,8 +9,8 @@ Mantener dos automatizaciones de compras sinteticas en produccion:
 
 1. Todo movimiento positivo de inventario SICAR se registra como compra.
 2. Cada mes se agrega un ajuste por compras olvidadas:
-   - 7% para productos generales.
-   - 2% para vinos y licores.
+   - 2% para productos generales.
+   - 1% para vinos y licores.
 3. Todo articulo con existencia negativa en SICAR se registra como compra sintetica aparte.
 
 ## Prefijos de idempotencia
@@ -72,8 +72,8 @@ Fecha de referencia: `2026-06-04`
 Nota:
 El ajuste mensual puede tener 2 filas por mes:
 
-- `general` al `7%`
-- `vinos_licores` al `2%`
+- `general` al `2%`
+- `vinos_licores` al `1%`
 
 Si un mes no tiene vinos/licores detectados, puede quedar solo una fila.
 
