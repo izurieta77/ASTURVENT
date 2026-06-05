@@ -16,6 +16,7 @@ const { corsHeaders, json, safeEqual } = require('./_lib');
 const bq = require('./_bq');
 
 const MAX_MOVIMIENTOS = 500;
+const MAX_CANTIDAD_INVENTARIO = 10000;
 const ACTIVO = 'COALESCE(activo, TRUE) = TRUE';
 
 function texto(v) {
@@ -75,15 +76,17 @@ function esTipoDescartable(v) {
 }
 
 function cantidadPositiva(raw) {
-  const anterior = numero(valor(raw, ['existencia_anterior', 'stock_anterior', 'inventario_anterior']));
-  const nueva = numero(valor(raw, ['existencia_nueva', 'stock_nuevo', 'inventario_nuevo']));
-  if (anterior !== null && nueva !== null) return nueva - anterior;
-
   const delta = numero(valor(raw, [
     'cantidad_delta', 'delta', 'cambio', 'diferencia', 'entrada', 'entradas',
     'cantidad', 'unidades', 'piezas',
   ]));
-  return delta === null ? 0 : delta;
+  if (delta !== null) return delta;
+
+  const anterior = numero(valor(raw, ['existencia_anterior', 'stock_anterior', 'inventario_anterior']));
+  const nueva = numero(valor(raw, ['existencia_nueva', 'stock_nuevo', 'inventario_nuevo']));
+  if (anterior !== null && nueva !== null) return nueva - anterior;
+
+  return 0;
 }
 
 function costoUnitario(raw, cantidad, totalExplicito) {
@@ -119,6 +122,7 @@ function normalizarMovimiento(raw) {
 
   const cantidad = r2(cantidadPositiva(raw));
   if (!(cantidad > 0)) return null;
+  if (cantidad > MAX_CANTIDAD_INVENTARIO) return null;
 
   const tipo = valor(raw, ['tipo', 'movimiento', 'motivo', 'concepto']);
   if (esTipoDescartable(tipo)) return null;
@@ -129,7 +133,10 @@ function normalizarMovimiento(raw) {
 
   const totalExplicito = numero(valor(raw, ['total', 'importe', 'monto', 'costo_total']));
   const costo = r2(costoUnitario(raw, cantidad, totalExplicito));
-  const total = r2(totalExplicito !== null ? totalExplicito : cantidad * costo);
+  const totalCalculado = r2(cantidad * costo);
+  const total = r2(totalExplicito !== null && totalCalculado > 0 && totalExplicito <= totalCalculado * 5
+    ? totalExplicito
+    : totalCalculado);
   const subtotal = r2(total / 1.16);
   const iva = r2(total - subtotal);
   const proveedor = texto(valor(raw, ['proveedor', 'supplier'])) || 'Inventario SICAR';

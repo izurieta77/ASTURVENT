@@ -31,6 +31,7 @@ const BACKFILL_FILE = path.join(__dirname, 'inventory-backfill.json');
 const DEFAULT_HTTP_TIMEOUT_SECONDS = 45;
 const INVENTORY_BATCH_SIZE = 500;
 const DEFAULT_BACKFILL_CHUNK_DAYS = 60;
+const MAX_CANTIDAD_INVENTARIO = 10000;
 
 const ALIASES = {
   fecha: ['fecha', 'date', 'dia', 'fecha venta', 'fecha de venta'],
@@ -307,14 +308,17 @@ function huellaInventario(raw, fecha, producto, clave, cantidad, costo, total) {
 }
 
 function cantidadInventario(raw) {
-  const anterior = numero(valorPrimero(raw, ['existencia_anterior', 'stock_anterior', 'inventario_anterior']));
-  const nueva = numero(valorPrimero(raw, ['existencia_nueva', 'stock_nuevo', 'inventario_nuevo']));
-  if (anterior !== null && nueva !== null) return nueva - anterior;
   const delta = numero(valorPrimero(raw, [
     'cantidad_delta', 'delta', 'cambio', 'diferencia', 'entrada', 'entradas',
     'cantidad', 'unidades', 'piezas',
   ]));
-  return delta === null ? 0 : delta;
+  if (delta !== null) return delta;
+
+  const anterior = numero(valorPrimero(raw, ['existencia_anterior', 'stock_anterior', 'inventario_anterior']));
+  const nueva = numero(valorPrimero(raw, ['existencia_nueva', 'stock_nuevo', 'inventario_nuevo']));
+  if (anterior !== null && nueva !== null) return nueva - anterior;
+
+  return 0;
 }
 
 function costoInventario(raw, cantidad, totalExplicito) {
@@ -333,6 +337,7 @@ function mapearMovimientoInventario(raw, fechaDefault) {
 
   const cantidad = cantidadInventario(raw);
   if (!(cantidad > 0)) return null;
+  if (cantidad > MAX_CANTIDAD_INVENTARIO) return null;
 
   const tipo = normalizarTipoMovimiento(valorPrimero(raw, ['tipo', 'movimiento', 'motivo', 'concepto']));
   if (esTipoInventarioDescartable(tipo)) return null;
@@ -343,7 +348,10 @@ function mapearMovimientoInventario(raw, fechaDefault) {
 
   const totalExplicito = numero(valorPrimero(raw, ['total', 'importe', 'monto', 'costo_total']));
   const costo = costoInventario(raw, cantidad, totalExplicito);
-  const total = totalExplicito !== null ? totalExplicito : cantidad * costo;
+  const totalCalculado = cantidad * costo;
+  const total = totalExplicito !== null && totalCalculado > 0 && totalExplicito <= totalCalculado * 5
+    ? totalExplicito
+    : totalCalculado;
 
   return {
     fecha,

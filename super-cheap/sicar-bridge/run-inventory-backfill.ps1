@@ -69,3 +69,9 @@ do {
 } while ($State.enabled -eq $true -and -not $State.finishedAt)
 
 Write-BackfillLog "END inventory backfill."
+
+$DaemonPath = Join-Path $Root 'daemon.js'
+if (Test-Path -LiteralPath $DaemonPath) {
+  Start-Process node -WindowStyle Hidden -ArgumentList $DaemonPath -WorkingDirectory $Root
+  Write-BackfillLog "Restarted daemon.js."
+}
