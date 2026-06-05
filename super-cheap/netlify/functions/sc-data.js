@@ -5,6 +5,7 @@
 //
 //   GET  ?action=resumen&desde=YYYY-MM-DD&hasta=YYYY-MM-DD
 //   GET  ?action=lista&tabla=ventas|compras|gastos|nomina&desde=&hasta=
+//   GET  ?action=resumen_inventario_sicar&desde=&hasta=&agrupar=mes|dia
 //   GET  ?action=analitica&desde=YYYY-MM-DD&hasta=YYYY-MM-DD
 //   GET  ?action=alertas
 //   POST { action:"insertar",   tabla:"compras|gastos|nomina", fila:{...}, imagenes_base64?:[...] }
@@ -78,6 +79,7 @@ exports.handler = async (event) => {
       if (action === 'resumen')   return await resumen(cors, q);
       if (action === 'ventas_panel') return await ventasPanel(cors, q);
       if (action === 'lista')     return await lista(cors, q);
+      if (action === 'resumen_inventario_sicar') return await resumenInventarioSicar(cors, q);
       if (action === 'analitica') return await analitica(cors, q);
       if (action === 'alertas')   return await alertas(cors, q);
       if (action === 'foto') {
@@ -85,7 +87,7 @@ exports.handler = async (event) => {
         const url = await gcs.firmarUrl(String(q.ref || ''), 60);
         return json(url ? 200 : 404, cors, url ? { ok: true, url } : { ok: false, error: 'Foto no disponible' });
       }
-      return json(400, cors, { ok: false, error: 'action invalida (resumen|ventas_panel|lista|analitica|alertas|foto)' });
+      return json(400, cors, { ok: false, error: 'action invalida (resumen|ventas_panel|lista|resumen_inventario_sicar|analitica|alertas|foto)' });
     }
 
     if (event.httpMethod === 'POST') {
@@ -710,6 +712,77 @@ async function lista(cors, q) {
   }
 
   return json(200, cors, { ok: true, filas: normalizadas });
+}
+
+// =============================================================================
+// GET action=resumen_inventario_sicar
+// =============================================================================
+async function resumenInventarioSicar(cors, q) {
+  const desde = q.desde;
+  const hasta = q.hasta;
+  const agrupar = String(q.agrupar || 'mes').toLowerCase();
+
+  if (!fechaValida(desde) || !fechaValida(hasta)) {
+    return json(400, cors, { ok: false, error: 'desde/hasta deben ser fechas YYYY-MM-DD' });
+  }
+  if (!['mes', 'dia'].includes(agrupar)) {
+    return json(400, cors, { ok: false, error: 'agrupar debe ser mes|dia' });
+  }
+
+  const ds = bq.DATASET;
+  const params = { desde, hasta };
+  const formato = agrupar === 'dia' ? '%Y-%m-%d' : '%Y-%m';
+  const filtroInventario = `
+    fecha BETWEEN @desde AND @hasta
+    AND STARTS_WITH(IFNULL(raw_ocr, ''), 'sicar_inventory:')
+    AND ${ACTIVO}`;
+
+  const [totales, periodos] = await Promise.all([
+    bq.query(
+      `SELECT COUNT(*) AS conteo,
+              ROUND(IFNULL(SUM(CAST(total AS FLOAT64)), 0), 2) AS total,
+              FORMAT_DATE('%Y-%m-%d', MIN(fecha)) AS primera,
+              FORMAT_DATE('%Y-%m-%d', MAX(fecha)) AS ultima,
+              ROUND(IFNULL(MAX(CAST(total AS FLOAT64)), 0), 2) AS max_total
+         FROM \`${ds}.compras\`
+        WHERE ${filtroInventario}`,
+      params,
+    ),
+    bq.query(
+      `SELECT FORMAT_DATE('${formato}', fecha) AS periodo,
+              COUNT(*) AS conteo,
+              ROUND(IFNULL(SUM(CAST(total AS FLOAT64)), 0), 2) AS total,
+              FORMAT_DATE('%Y-%m-%d', MIN(fecha)) AS primera,
+              FORMAT_DATE('%Y-%m-%d', MAX(fecha)) AS ultima,
+              ROUND(IFNULL(MAX(CAST(total AS FLOAT64)), 0), 2) AS max_total
+         FROM \`${ds}.compras\`
+        WHERE ${filtroInventario}
+        GROUP BY periodo
+        ORDER BY periodo ASC`,
+      params,
+    ),
+  ]);
+
+  const resumen = totales[0] || {};
+  return json(200, cors, {
+    ok: true,
+    agrupar,
+    resumen: {
+      conteo: Number(resumen.conteo || 0),
+      total: Number(resumen.total || 0),
+      primera: resumen.primera || null,
+      ultima: resumen.ultima || null,
+      max_total: Number(resumen.max_total || 0),
+    },
+    periodos: periodos.map(r => ({
+      periodo: r.periodo,
+      conteo: Number(r.conteo || 0),
+      total: Number(r.total || 0),
+      primera: r.primera || null,
+      ultima: r.ultima || null,
+      max_total: Number(r.max_total || 0),
+    })),
+  });
 }
 
 // Aplana tipos especiales del cliente de BigQuery (DATE/TIMESTAMP -> string,
