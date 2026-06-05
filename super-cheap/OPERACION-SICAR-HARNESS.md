@@ -11,13 +11,16 @@ Mantener dos automatizaciones de compras sinteticas en produccion:
 2. Cada mes se agrega un ajuste por compras olvidadas:
    - 12% para productos generales.
    - 5% para vinos y licores.
+3. Todo articulo con existencia negativa en SICAR se registra como compra sintetica aparte.
 
 ## Prefijos de idempotencia
 
 - `sicar_inventory:`
   Compra automatica creada desde un aumento positivo de inventario SICAR.
 - `sicar_inventory_forgotten:`
-  Ajuste mensual por compras olvidadas calculado sobre la base `sicar_inventory:`.
+  Ajuste por compras olvidadas calculado sobre la base `sicar_inventory:`. En el mes en curso se puede materializar prorrateado por dia.
+- `sicar_negative_stock:`
+  Compra automatica creada desde existencias negativas detectadas en SICAR.
 
 Estos prefijos permiten re-ejecutar procesos sin duplicar compras.
 
@@ -62,8 +65,9 @@ Fecha de referencia: `2026-06-04`
 - Rango historico cargado para compras SICAR: `2023-06-01` a `2026-06-04`
 - Compras por inventario SICAR: `46,733`
 - Total base inventario SICAR: `$8,164,655.55`
-- Ajuste mensual por compras olvidadas: `73` filas
+- Ajuste materializado por compras olvidadas: `76` filas
 - Total ajuste mensual: `$956,718.19`
+- Junio 2026 quedo prorrateado en `4` compras diarias de `$527.78`
 
 Nota:
 El ajuste mensual puede tener 2 filas por mes:

@@ -96,6 +96,33 @@ node sync.js --inventario-only --dry-run
 node sync.js --inventario-only
 ```
 
+### Existencias negativas como compras automÃ¡ticas
+
+Si un artÃ­culo aparece con existencia negativa en SICAR, significa que hubo
+entrada fÃ­sica no registrada como compra. Para convertir ese faltante en compra
+automÃ¡tica agrega en `config.json` la consulta `sqlExistenciasNegativas`.
+
+Debe devolver el snapshot actual con estos aliases:
+
+- `fecha` opcional
+- `hora` opcional
+- `snapshot_key` o `articulo_id` recomendado
+- `producto` o `descripcion`
+- `clave` o `codigo`
+- `existencia_negativa`, `stock_negativo`, `inventario_negativo`, `cantidad` o `existencia_actual`
+- `costo_unitario`, `costo`, `precio_compra`, `precio`, `total` o `importe`
+- `proveedor`, `departamento`, `categoria` opcionales
+
+La nube guarda estas compras con huella `sicar_negative_stock:*` y cada corrida
+reemplaza el snapshot anterior completo para no arrastrar negativos viejos.
+
+Para probar solo existencias negativas:
+
+```
+node sync.js --existencias-negativas-only --dry-run
+node sync.js --existencias-negativas-only
+```
+
 ## PLAN B — Importar Excel de SICAR
 
 Si todavía no podemos crear un usuario MySQL de solo lectura, o si la tienda está

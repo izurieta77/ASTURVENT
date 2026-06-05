@@ -822,6 +822,12 @@ function normalizarResumenAjuste(rows) {
   };
 }
 
+function sumarDiasISO(iso, n) {
+  const d = new Date(iso + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
 async function calcularAjusteInventarioOlvidado(desde, hasta) {
   const ds = bq.DATASET;
   const patron = `(^|[^a-z0-9áéíóúüñ])(${PATRON_VINOS_LICORES})([^a-z0-9áéíóúüñ]|$)`;
@@ -878,18 +884,36 @@ async function resumenAjusteInventarioOlvidado(cors, q) {
   return json(200, cors, { ok: true, ...resultado });
 }
 
-function filaCompraAjusteInventario(r) {
+function repartirImporteDiario(total, dias) {
+  const centavos = Math.round(r2(total) * 100);
+  const base = Math.floor(centavos / dias);
+  const remanente = centavos - (base * dias);
+  return Array.from({ length: dias }, (_, i) => ((base + (i < remanente ? 1 : 0)) / 100));
+}
+
+function filaCompraAjusteInventario(r, fechaOverride, totalOverride, opts = {}) {
   const porcentaje = Number(r.porcentaje || 0);
   const pctTexto = `${Math.round(porcentaje * 100)}%`;
   const segmento = r.segmento === 'vinos_licores' ? 'vinos y licores' : 'general';
-  const total = r2(r.ajuste_total);
+  const fecha = fechaOverride || r.ultima;
+  const total = r2(totalOverride !== undefined ? totalOverride : r.ajuste_total);
   const subtotal = r2(total / 1.16);
   const iva = r2(total - subtotal);
   const baseTotal = r2(r.base_total);
+  const esDiario = Boolean(opts.diario);
+  const descripcion = esDiario
+    ? `Ajuste diario prorrateado ${pctTexto} por compras olvidadas de inventario SICAR - ${segmento} (${fecha})`
+    : `Ajuste mensual ${pctTexto} por compras olvidadas de inventario SICAR - ${segmento} (${r.periodo})`;
+  const nota = esDiario
+    ? `Base acumulada del mes en compras automaticas SICAR: $${baseTotal.toFixed(2)}. Porcentaje aplicado: ${pctTexto}. Prorrateo diario del mes en curso.`
+    : `Base de compras automaticas SICAR: $${baseTotal.toFixed(2)}. Porcentaje aplicado: ${pctTexto}.`;
+  const rawOcr = esDiario
+    ? `${AJUSTE_INVENTARIO_OLVIDADO_PREFIX}${r.periodo}:${r.segmento}:${fecha}`
+    : `${AJUSTE_INVENTARIO_OLVIDADO_PREFIX}${r.periodo}:${r.segmento}`;
 
   return {
     id: crypto.randomUUID(),
-    fecha: r.ultima,
+    fecha,
     hora: '23:59:00',
     proveedor: 'Ajuste inventario SICAR',
     subtotal,
@@ -902,17 +926,35 @@ function filaCompraAjusteInventario(r) {
       : 'inventario_olvidado_general',
     clasificacion: 'reventa',
     conceptos: JSON.stringify([{
-      descripcion: `Ajuste mensual ${pctTexto} por compras olvidadas de inventario SICAR - ${segmento} (${r.periodo})`,
+      descripcion,
       importe: total,
       uso: 'reventa',
       ingrediente: null,
       cantidad: null,
       costo_unitario: null,
-      nota: `Base de compras automaticas SICAR: $${baseTotal.toFixed(2)}. Porcentaje aplicado: ${pctTexto}.`,
+      nota,
     }]),
-    raw_ocr: `${AJUSTE_INVENTARIO_OLVIDADO_PREFIX}${r.periodo}:${r.segmento}`,
+    raw_ocr: rawOcr,
     activo: true,
   };
+}
+
+function filasCompraAjusteInventario(r, hasta) {
+  const periodoHasta = String(hasta || '').slice(0, 7);
+  const periodoActual = hoyISO().slice(0, 7);
+  if (r.periodo !== periodoHasta || r.periodo !== periodoActual) {
+    return [filaCompraAjusteInventario(r)];
+  }
+
+  const inicio = inicioMesISO(hasta);
+  const dias = diasEntre(inicio, hasta);
+  const importes = repartirImporteDiario(r.ajuste_total, dias);
+  return importes.map((importe, idx) => filaCompraAjusteInventario(
+    r,
+    sumarDiasISO(inicio, idx),
+    importe,
+    { diario: true },
+  ));
 }
 
 // =============================================================================
@@ -926,7 +968,7 @@ async function generarAjusteInventarioOlvidado(cors, body) {
   }
 
   const resultado = await calcularAjusteInventarioOlvidado(desde, hasta);
-  const filas = resultado.periodos.map(filaCompraAjusteInventario);
+  const filas = resultado.periodos.flatMap(r => filasCompraAjusteInventario(r, hasta));
   const ds = bq.DATASET;
   const params = { desde, hasta, prefix: AJUSTE_INVENTARIO_OLVIDADO_PREFIX };
   const prevRows = await bq.query(

@@ -6,6 +6,7 @@
      node sync.js                         Sincroniza MySQL para hoy.
      node sync.js 2026-05-28              Sincroniza MySQL para una fecha.
      node sync.js --inventario-only       Sincroniza solo aumentos de inventario.
+     node sync.js --existencias-negativas-only  Sincroniza solo existencias negativas.
      node sync.js --excel ventas.xlsx     Importa Excel/CSV exportado de SICAR.
      node sync.js --excel ventas.xlsx --dry-run
 
@@ -130,6 +131,8 @@ function leerArgs(argv) {
     replaceDate: true,
     inventario: true,
     inventarioOnly: false,
+    existenciasNegativas: true,
+    existenciasNegativasOnly: false,
   };
   while (args.length) {
     const a = args.shift();
@@ -145,6 +148,11 @@ function leerArgs(argv) {
     } else if (a === '--inventario-only' || a === '--inventory-only') {
       out.inventarioOnly = true;
       out.inventario = true;
+    } else if (a === '--existencias-negativas-only' || a === '--negative-stock-only') {
+      out.existenciasNegativasOnly = true;
+      out.existenciasNegativas = true;
+      out.inventarioOnly = true;
+      out.inventario = false;
     } else if (!out.fecha) {
       out.fecha = a;
     }
@@ -331,6 +339,16 @@ function costoInventario(raw, cantidad, totalExplicito) {
   return 0;
 }
 
+function cantidadExistenciaNegativa(raw) {
+  const negativa = numero(valorPrimero(raw, [
+    'existencia_negativa', 'stock_negativo', 'inventario_negativo',
+    'existencia_actual', 'stock_actual', 'inventario_actual',
+    'cantidad', 'unidades', 'piezas',
+  ]));
+  if (negativa === null) return 0;
+  return Math.abs(negativa);
+}
+
 function mapearMovimientoInventario(raw, fechaDefault) {
   const fecha = fechaExcel(raw.fecha, fechaDefault);
   if (!esFechaValida(fecha)) return null;
@@ -369,6 +387,42 @@ function mapearMovimientoInventario(raw, fechaDefault) {
     tipo: tipo || 'entrada_inventario',
     existencia_anterior: valorPrimero(raw, ['existencia_anterior', 'stock_anterior', 'inventario_anterior']),
     existencia_nueva: valorPrimero(raw, ['existencia_nueva', 'stock_nuevo', 'inventario_nuevo']),
+  };
+}
+
+function mapearExistenciaNegativa(raw, fechaDefault) {
+  const fecha = fechaExcel(raw.fecha, fechaDefault);
+  if (!esFechaValida(fecha)) return null;
+
+  const cantidad = cantidadExistenciaNegativa(raw);
+  if (!(cantidad > 0)) return null;
+  if (cantidad > MAX_CANTIDAD_INVENTARIO) return null;
+
+  const producto = texto(valorPrimero(raw, ['producto', 'descripcion', 'articulo', 'nombre']));
+  const clave = texto(valorPrimero(raw, ['clave', 'codigo', 'sku', 'codigo_producto']));
+  if (!producto && !clave) return null;
+
+  const totalExplicito = numero(valorPrimero(raw, ['total', 'importe', 'monto', 'costo_total']));
+  const costo = costoInventario(raw, cantidad, totalExplicito);
+  const totalCalculado = cantidad * costo;
+  const total = totalExplicito !== null && totalCalculado > 0 && totalExplicito <= totalCalculado * 5
+    ? totalExplicito
+    : totalCalculado;
+
+  return {
+    fecha,
+    hora: texto(raw.hora),
+    movimiento_key: texto(valorPrimero(raw, ['snapshot_key', 'articulo_id', 'id_articulo', 'id', 'clave'])) || `neg:${clave || producto}`,
+    producto,
+    clave,
+    cantidad_delta: cantidad,
+    costo_unitario: costo,
+    total,
+    proveedor: texto(valorPrimero(raw, ['proveedor', 'supplier'])) || 'Existencia negativa SICAR',
+    departamento: texto(valorPrimero(raw, ['departamento', 'depto'])),
+    categoria: texto(raw.categoria) || 'existencia_negativa',
+    tipo: 'existencia_negativa',
+    existencia_nueva: valorPrimero(raw, ['existencia_actual', 'stock_actual', 'inventario_actual', 'existencia_negativa', 'stock_negativo', 'inventario_negativo']),
   };
 }
 
@@ -470,6 +524,60 @@ async function leerInventarioDesdeMysql(cfg, fecha) {
       tipo: r.tipo || r.movimiento || r.motivo || r.concepto,
       existencia_anterior: r.existencia_anterior || r.stock_anterior || r.inventario_anterior,
       existencia_nueva: r.existencia_nueva || r.stock_nuevo || r.inventario_nuevo,
+    }, fecha)).filter(Boolean);
+  } finally {
+    await conn.end().catch(() => {});
+  }
+}
+
+async function leerExistenciasNegativasDesdeMysql(cfg, fecha) {
+  if (!sqlActiva(cfg.sqlExistenciasNegativas)) return [];
+  if (!cfg.mysql || !cfg.mysql.host || !cfg.mysql.database || !cfg.mysql.user) {
+    throw new Error('Falta mysql.host/user/database en config.json.');
+  }
+  if (String(cfg.mysql.database).toLowerCase() === 'auto') {
+    throw new Error('mysql.database sigue en "auto". Corre node descubrir.js y configura la base real antes de sincronizar existencias negativas.');
+  }
+
+  log(`Conectando a MySQL para existencias negativas ${cfg.mysql.host}:${cfg.mysql.port || 3306} / base "${cfg.mysql.database}"`);
+  const conn = await mysql.createConnection({
+    host: cfg.mysql.host,
+    port: cfg.mysql.port || 3306,
+    user: cfg.mysql.user,
+    password: cfg.mysql.password,
+    database: cfg.mysql.database,
+  });
+
+  try {
+    const sql = cfg.sqlExistenciasNegativas.replace(/:fecha/g, '?');
+    const params = new Array((cfg.sqlExistenciasNegativas.match(/:fecha/g) || []).length).fill(fecha);
+    log('Ejecutando consulta de existencias negativas.');
+    const [rows] = await conn.query(sql, params);
+    log(`MySQL devolvio ${rows.length} articulo(s) con existencia negativa.`);
+    return rows.map((r) => mapearExistenciaNegativa({
+      fecha: r.fecha,
+      hora: r.hora,
+      snapshot_key: r.snapshot_key,
+      articulo_id: r.articulo_id || r.id_articulo || r.id,
+      producto: r.producto || r.descripcion || r.articulo || r.nombre,
+      clave: r.clave || r.codigo || r.sku || r.codigo_producto,
+      cantidad: r.cantidad || r.existencia_negativa || r.stock_negativo || r.inventario_negativo,
+      existencia_actual: r.existencia_actual || r.stock_actual || r.inventario_actual,
+      costo_unitario: r.costo_unitario,
+      costo: r.costo,
+      precio_compra: r.precio_compra,
+      ultimo_costo: r.ultimo_costo,
+      costo_promedio: r.costo_promedio,
+      precio_unitario: r.precio_unitario,
+      precio: r.precio,
+      total: r.total,
+      importe: r.importe,
+      monto: r.monto,
+      costo_total: r.costo_total,
+      proveedor: r.proveedor,
+      supplier: r.supplier,
+      departamento: r.departamento || r.depto,
+      categoria: r.categoria,
     }, fecha)).filter(Boolean);
   } finally {
     await conn.end().catch(() => {});
@@ -876,6 +984,52 @@ async function enviarInventario(cfg, movimientos, dryRun) {
   return total;
 }
 
+async function enviarExistenciasNegativas(cfg, movimientos, dryRun) {
+  const siteUrl = (cfg.siteUrl || DEFAULT_SITE).replace(/\/+$/, '');
+  log(`Existencias negativas normalizadas listas: ${movimientos.length}.`);
+  if (movimientos.length) {
+    const totalCompras = movimientos.reduce((sum, m) => sum + (numero(m.total) || 0), 0);
+    log(`Total de compras automaticas por existencia negativa: $${totalCompras.toFixed(2)}.`);
+  }
+  if (movimientos.length === 0) return { ok: true, recibidos: 0, validos: 0, insertados: 0, reemplazados: 0 };
+  if (dryRun) {
+    log('Dry-run activo: no se enviaron existencias negativas a Netlify.');
+    log('Muestra existencias negativas: ' + JSON.stringify(movimientos.slice(0, 3)));
+    return { ok: true, dryRun: true, recibidos: movimientos.length, validos: movimientos.length, insertados: 0, reemplazados: 0 };
+  }
+  if (!cfg.ingestToken) throw new Error('Falta ingestToken en config.json.');
+
+  const url = siteUrl + '/.netlify/functions/sc-inventory-ingest';
+  const timeoutSeconds = numberEnv('SC_SYNC_HTTP_TIMEOUT_SECONDS', DEFAULT_HTTP_TIMEOUT_SECONDS, 10, 300);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutSeconds * 1000);
+  log(`Enviando existencias negativas a ${url}.`);
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Ingest-Token': cfg.ingestToken,
+      },
+      body: JSON.stringify({ movimientos, modo: 'replace_negative_stock' }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err && err.name === 'AbortError') {
+      throw new Error(`Tiempo agotado enviando existencias negativas a Netlify despues de ${timeoutSeconds}s. Se reintentara.`);
+    }
+    throw new Error(`No pude conectar con Netlify para existencias negativas: ${err.message || String(err)}. Se reintentara.`);
+  } finally {
+    clearTimeout(timeout);
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.ok === false) {
+    throw new Error(`Netlify rechazo existencias negativas (HTTP ${res.status}): ${data.error || 'sin detalle'}. Se reintentara.`);
+  }
+  return data;
+}
+
 function fechaUnica(ventas) {
   const fechas = Array.from(new Set((ventas || []).map((v) => v.fecha).filter(esFechaValida)));
   return fechas.length === 1 ? fechas[0] : null;
@@ -985,6 +1139,7 @@ async function main() {
   }
   log(`Modo: ${args.modo}. Fecha objetivo: ${args.fecha}.`);
   if (args.inventarioOnly) log('Modo inventario-only activo: no se enviaran ventas.');
+  if (args.existenciasNegativasOnly) log('Modo existencias-negativas-only activo: no se enviaran ventas ni aumentos positivos.');
   if (!args.inventario) log('Sincronizacion de inventario desactivada por argumento.');
 
   let cfg;
@@ -1027,6 +1182,16 @@ async function main() {
       log('Inventario omitido en modo Excel; solo se importa ventas del archivo.', 'WARN');
     }
 
+    if (args.existenciasNegativas && args.modo !== 'excel') {
+      if (sqlActiva(cfg.sqlExistenciasNegativas)) {
+        const negativas = await leerExistenciasNegativasDesdeMysql(cfg, args.fecha);
+        const resultadoNeg = await enviarExistenciasNegativas(cfg, negativas, args.dryRun);
+        log(`OK existencias negativas. Recibidos: ${resultadoNeg.recibidos ?? '?'}, validos: ${resultadoNeg.validos ?? '?'}, insertados: ${resultadoNeg.insertados ?? '?'}, reemplazados: ${resultadoNeg.reemplazados ?? 0}, descartados: ${resultadoNeg.descartados ?? 0}.`);
+      } else {
+        log('Existencias negativas no configuradas: agrega sqlExistenciasNegativas en config.json para crear compras automaticas por stock negativo.', 'WARN');
+      }
+    }
+
     log('Sincronizacion terminada correctamente.');
   } catch (e) {
     fail(e.message || String(e));
@@ -1040,8 +1205,10 @@ if (require.main === module) {
 module.exports = {
   leerDesdeExcel,
   leerInventarioDesdeMysql,
+  leerExistenciasNegativasDesdeMysql,
   mapearFila,
   mapearMovimientoInventario,
+  mapearExistenciaNegativa,
   normalizarRowExcel,
   numero,
   fechaExcel,

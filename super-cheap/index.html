@@ -371,6 +371,8 @@ tr:hover td{background:var(--surface-2)}
 .divider{height:1px;background:var(--border);margin:18px 0}
 .chip{display:inline-block;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700}
 .chip-est{background:var(--warn-bg);color:#b45309;border:1px solid var(--warn-bd)}
+.chip-info{background:var(--info-bg);color:var(--info);border:1px solid var(--info-bd)}
+.td-stack{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
 
 /* ====================== MULTI-FOTO ====================== */
 .thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:10px;margin:2px 0 0}
@@ -1443,6 +1445,24 @@ const filtros = {
   nomina:  { q:'', cat:'', desde:'', hasta:'' },
 };
 
+const RAW_OCR_SICAR_PREFIX = 'sicar_inventory:';
+const RAW_OCR_SICAR_FORGOTTEN_PREFIX = 'sicar_inventory_forgotten:';
+const RAW_OCR_NEGATIVE_STOCK_PREFIX = 'sicar_negative_stock:';
+
+function compraAutomaticaMeta(fila){
+  const raw = String((fila && fila.raw_ocr) || '');
+  if(raw.indexOf(RAW_OCR_SICAR_FORGOTTEN_PREFIX) === 0){
+    return { badge:'Ajuste mensual', categoria:'Ajuste compras olvidadas' };
+  }
+  if(raw.indexOf(RAW_OCR_NEGATIVE_STOCK_PREFIX) === 0){
+    return { badge:'Existencia negativa', categoria:'Existencia negativa SICAR' };
+  }
+  if(raw.indexOf(RAW_OCR_SICAR_PREFIX) === 0){
+    return { badge:'Inventario SICAR', categoria:'Inventario automatico SICAR' };
+  }
+  return null;
+}
+
 /* Aplica filtros de UI a las filas en cache */
 function filtrarFilas(tabla){
   const f = filtros[tabla];
@@ -1516,14 +1536,30 @@ function renderLista(tabla, contenedorId, editable){
   if(editable) html += '<th class="no-print" style="text-align:right">Acciones</th>';
   html += '</tr></thead><tbody>';
   filas.forEach(f => {
+    const autoMeta = tabla === 'compras' ? compraAutomaticaMeta(f) : null;
     html += '<tr>';
     columnas.forEach(c => {
       let v = f[c.key];
       if(c.num){ html += '<td class="td-num">' + mxn(v) + '</td>'; }
-      else { html += '<td' + (c.strong ? ' class="td-strong"' : '') + '>' + esc(v ?? '') + '</td>'; }
+      else {
+        let cellHtml = esc(v ?? '');
+        if(autoMeta && c.key === 'proveedor'){
+          cellHtml = '<div class="td-stack"><span>' + esc(v ?? '') + '</span><span class="chip chip-info">' + esc(autoMeta.badge) + '</span></div>';
+        }else if(autoMeta && c.key === 'categoria'){
+          cellHtml = esc(autoMeta.categoria);
+        }
+        html += '<td' + (c.strong ? ' class="td-strong"' : '') + '>' + cellHtml + '</td>';
+      }
     });
     if(editable){
       const id = esc(f.id ?? '');
+      if(autoMeta){
+        html += '<td class="td-acc no-print"><div class="td-stack"><span class="muted">Automatico</span>' +
+          '<span class="chip chip-info">' + esc(autoMeta.badge) + '</span>' +
+          '</div></td>';
+        html += '</tr>';
+        return;
+      }
       if(f.virtual || String(f.id || '').indexOf('auto:') === 0){
         html += '<td class="td-acc no-print"><span class="muted">Automático</span></td>';
         html += '</tr>';

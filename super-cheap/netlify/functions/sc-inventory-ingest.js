@@ -18,6 +18,8 @@ const bq = require('./_bq');
 const MAX_MOVIMIENTOS = 500;
 const MAX_CANTIDAD_INVENTARIO = 10000;
 const ACTIVO = 'COALESCE(activo, TRUE) = TRUE';
+const RAW_OCR_SICAR_PREFIX = 'sicar_inventory:';
+const RAW_OCR_NEGATIVE_STOCK_PREFIX = 'sicar_negative_stock:';
 
 function texto(v) {
   if (v === undefined || v === null) return '';
@@ -75,7 +77,17 @@ function esTipoDescartable(v) {
   return /(^|\s)devolucion(\s+(a|al))?\s+proveedor(\s|$)/.test(t);
 }
 
-function cantidadPositiva(raw) {
+function cantidadPositiva(raw, modo) {
+  if (modo === 'replace_negative_stock') {
+    const negativa = numero(valor(raw, [
+      'existencia_negativa', 'stock_negativo', 'inventario_negativo',
+      'existencia_actual', 'stock_actual', 'inventario_actual',
+      'cantidad_delta', 'cantidad', 'unidades', 'piezas',
+    ]));
+    if (negativa === null) return 0;
+    return Math.abs(negativa);
+  }
+
   const delta = numero(valor(raw, [
     'cantidad_delta', 'delta', 'cambio', 'diferencia', 'entrada', 'entradas',
     'cantidad', 'unidades', 'piezas',
@@ -99,10 +111,11 @@ function costoUnitario(raw, cantidad, totalExplicito) {
   return 0;
 }
 
-function huellaMovimiento(raw, fecha, producto, clave, cantidad, costo, total) {
+function huellaMovimiento(raw, fecha, producto, clave, cantidad, costo, total, modo) {
   const explicita = texto(valor(raw, ['movimiento_key', 'movimiento_id', 'id_movimiento', 'id', 'folio', 'documento']));
   if (explicita) return explicita;
   const base = [
+    modo || 'inventory',
     fecha,
     texto(raw.hora),
     clave || producto,
@@ -115,17 +128,17 @@ function huellaMovimiento(raw, fecha, producto, clave, cantidad, costo, total) {
   return crypto.createHash('sha1').update(base).digest('hex');
 }
 
-function normalizarMovimiento(raw) {
+function normalizarMovimiento(raw, modo = 'inventory') {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const fecha = texto(raw.fecha);
   if (!fechaValida(fecha)) return null;
 
-  const cantidad = r2(cantidadPositiva(raw));
+  const cantidad = r2(cantidadPositiva(raw, modo));
   if (!(cantidad > 0)) return null;
   if (cantidad > MAX_CANTIDAD_INVENTARIO) return null;
 
   const tipo = valor(raw, ['tipo', 'movimiento', 'motivo', 'concepto']);
-  if (esTipoDescartable(tipo)) return null;
+  if (modo !== 'replace_negative_stock' && esTipoDescartable(tipo)) return null;
 
   const producto = texto(valor(raw, ['producto', 'descripcion', 'articulo', 'nombre']));
   const clave = texto(valor(raw, ['clave', 'codigo', 'sku', 'codigo_producto']));
@@ -139,14 +152,19 @@ function normalizarMovimiento(raw) {
     : totalCalculado);
   const subtotal = r2(total / 1.16);
   const iva = r2(total - subtotal);
-  const proveedor = texto(valor(raw, ['proveedor', 'supplier'])) || 'Inventario SICAR';
-  const categoria = texto(valor(raw, ['categoria', 'departamento', 'depto'])) || 'inventario';
+  const proveedor = texto(valor(raw, ['proveedor', 'supplier'])) || (modo === 'replace_negative_stock' ? 'Existencia negativa SICAR' : 'Inventario SICAR');
+  const categoria = texto(valor(raw, ['categoria', 'departamento', 'depto'])) || (modo === 'replace_negative_stock' ? 'existencia_negativa' : 'inventario');
   const hora = texto(raw.hora);
   const desc = [cantidad + ' unidad(es)', producto || clave, clave ? '(' + clave + ')' : ''].filter(Boolean).join(' ');
-  const nota = total > 0
-    ? 'Compra automatica creada por aumento de inventario en SICAR.'
-    : 'Compra automatica creada por aumento de inventario en SICAR; sin costo legible.';
-  const key = huellaMovimiento(raw, fecha, producto, clave, cantidad, costo, total);
+  const nota = modo === 'replace_negative_stock'
+    ? (total > 0
+      ? 'Compra automatica creada por existencia negativa detectada en SICAR.'
+      : 'Compra automatica creada por existencia negativa detectada en SICAR; sin costo legible.')
+    : (total > 0
+      ? 'Compra automatica creada por aumento de inventario en SICAR.'
+      : 'Compra automatica creada por aumento de inventario en SICAR; sin costo legible.');
+  const key = huellaMovimiento(raw, fecha, producto, clave, cantidad, costo, total, modo);
+  const rawOcrPrefix = modo === 'replace_negative_stock' ? RAW_OCR_NEGATIVE_STOCK_PREFIX : RAW_OCR_SICAR_PREFIX;
 
   return {
     fecha,
@@ -168,7 +186,7 @@ function normalizarMovimiento(raw) {
       costo_unitario: costo,
       nota,
     }]),
-    raw_ocr: 'sicar_inventory:' + key,
+    raw_ocr: rawOcrPrefix + key,
     activo: true,
   };
 }
@@ -204,11 +222,44 @@ exports.handler = async (event) => {
   try { body = JSON.parse(event.body || '{}'); }
   catch { return json(400, cors, { ok: false, error: 'JSON invalido' }); }
 
+  const modo = String(body.modo || '').trim().toLowerCase();
   const recibidos = Array.isArray(body.movimientos) ? body.movimientos.slice(0, MAX_MOVIMIENTOS) : null;
   if (!recibidos) return json(400, cors, { ok: false, error: 'Falta movimientos (arreglo)' });
 
   try {
-    const normalizados = recibidos.map(normalizarMovimiento).filter(Boolean);
+    const normalizados = recibidos.map((r) => normalizarMovimiento(r, modo)).filter(Boolean);
+    if (modo === 'replace_negative_stock') {
+      const prefix = RAW_OCR_NEGATIVE_STOCK_PREFIX;
+      const prevRows = await bq.query(
+        `SELECT COUNT(*) AS total
+           FROM \`${bq.DATASET}.compras\`
+          WHERE STARTS_WITH(IFNULL(raw_ocr, ''), @prefix)
+            AND ${ACTIVO}`,
+        { prefix },
+      );
+      const reemplazados = Number(prevRows[0]?.total || 0);
+      if (reemplazados > 0) {
+        await bq.query(
+          `UPDATE \`${bq.DATASET}.compras\`
+              SET activo = FALSE
+            WHERE STARTS_WITH(IFNULL(raw_ocr, ''), @prefix)
+              AND ${ACTIVO}`,
+          { prefix },
+        );
+      }
+      const nuevos = normalizados.map(r => ({ id: crypto.randomUUID(), ...r }));
+      if (nuevos.length) await bq.insertRows('compras', nuevos);
+      return json(200, cors, {
+        ok: true,
+        modo,
+        recibidos: recibidos.length,
+        validos: normalizados.length,
+        insertados: nuevos.length,
+        reemplazados,
+        descartados: recibidos.length - normalizados.length,
+      });
+    }
+
     const existentes = await existentesPorHuella(normalizados.map(r => r.raw_ocr));
     const nuevos = normalizados
       .filter(r => !existentes.has(r.raw_ocr))
