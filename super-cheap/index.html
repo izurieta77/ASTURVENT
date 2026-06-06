@@ -449,6 +449,41 @@ tr:hover td{background:var(--surface-2)}
 .cmp-down{color:var(--err)}
 .cmp-flat{color:var(--text-3)}
 .cmp-prev{font-size:11px;color:var(--text-3);margin-top:3px}
+.analysis-story{display:grid;gap:14px}
+.analysis-hero{border:1px solid var(--border);border-radius:var(--r);background:linear-gradient(180deg,var(--surface),var(--surface-2));padding:18px;box-shadow:var(--shadow)}
+.analysis-kicker{font-size:10px;font-weight:800;letter-spacing:1.3px;text-transform:uppercase;color:var(--text-3);margin-bottom:7px}
+.analysis-headline{font-family:var(--font-d);font-size:clamp(22px,3.1vw,32px);font-weight:800;line-height:1.08;color:var(--text);max-width:900px}
+.analysis-subheadline{margin-top:8px;font-size:13px;line-height:1.45;color:var(--text-2);max-width:920px}
+.analysis-summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px;margin-top:14px}
+.analysis-summary-card{border:1px solid var(--border);border-radius:12px;padding:12px 13px;background:var(--surface)}
+.analysis-summary-card span{display:block;font-size:9px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:6px}
+.analysis-summary-card strong{display:block;font-family:var(--font-d);font-size:20px;line-height:1.05;color:var(--text)}
+.analysis-summary-card small{display:block;margin-top:4px;color:var(--text-3);font-size:10px;line-height:1.35}
+.analysis-summary-card.warn{background:var(--warn-bg);border-color:var(--warn-bd)}
+.analysis-summary-card.warn strong{color:#92400e}
+.analysis-summary-card.danger{background:var(--err-bg);border-color:var(--err-bd)}
+.analysis-summary-card.danger strong{color:var(--err)}
+.analysis-summary-card.ok{background:var(--ok-bg);border-color:var(--ok-bd)}
+.analysis-summary-card.ok strong{color:var(--ok)}
+.analysis-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px}
+.analysis-panel{grid-column:span 12;border:1px solid var(--border);border-radius:var(--r);background:var(--surface);box-shadow:var(--shadow);padding:16px}
+.analysis-panel.half{grid-column:span 6}
+.analysis-panel-title{font-family:var(--font-d);font-size:18px;font-weight:800;line-height:1.2;color:var(--text)}
+.analysis-panel-note{margin-top:5px;font-size:12px;color:var(--text-3);line-height:1.45}
+.analysis-chart-box{position:relative;height:290px;margin-top:10px}
+.analysis-chart-box.tall{height:340px}
+.analysis-mini-table{margin-top:12px;border-top:1px solid var(--border);padding-top:10px;display:grid;gap:7px}
+.analysis-mini-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;font-size:12px}
+.analysis-mini-row strong{color:var(--text)}
+.analysis-mini-row span{color:var(--text-2)}
+.analysis-mini-row b{font-family:var(--font-d);color:var(--text)}
+#view-analisis > .card,
+#view-analisis > .chart-grid{display:none}
+@media(max-width:860px){
+  .analysis-panel.half{grid-column:span 12}
+  .analysis-chart-box{height:250px}
+  .analysis-chart-box.tall{height:300px}
+}
 
 /* ====================== CHAT / ASISTENTE ====================== */
 .chat-box{display:flex;flex-direction:column;gap:12px}
@@ -1110,6 +1145,56 @@ html.dark #header .range-pill.active { background:#f1f5f9; color:#1e3a8a; }
       </div>
 
       <div id="analisis-msg" style="margin-top:14px"></div>
+
+      <div class="analysis-story" style="margin-top:14px">
+        <div class="analysis-hero">
+          <div class="analysis-kicker">Resumen ejecutivo</div>
+          <div class="analysis-headline" id="analysis-headline">Cargando conclusion del periodo...</div>
+          <div class="analysis-subheadline" id="analysis-subheadline">Preparando historia ejecutiva con ventas, compras, gastos y proyeccion.</div>
+          <div class="analysis-summary-grid" id="analysis-summary-grid">
+            <div class="analysis-summary-card"><span>Estado</span><strong>...</strong><small>Cargando analisis</small></div>
+          </div>
+        </div>
+
+        <div class="analysis-grid">
+          <div class="analysis-panel half">
+            <div class="analysis-panel-title">La utilidad del periodo se explica por cuatro bloques: ventas, compras, gastos y nomina</div>
+            <div class="analysis-panel-note">Lectura tipo puente para ver de que lado se esta yendo la caja operativa.</div>
+            <div class="analysis-chart-box"><canvas id="chart-analisis-bridge"></canvas></div>
+            <div class="cmp-grid" id="cmp-grid">
+              <div class="loading-state" style="grid-column:1/-1">Cargando...</div>
+            </div>
+          </div>
+
+          <div class="analysis-panel half">
+            <div class="analysis-panel-title">La presion de compras viene de pocos bloques y debe separarse antes de tocar la regla de negocio</div>
+            <div class="analysis-panel-note">Desglose por compras manuales, inventario SICAR, ajustes olvidados y existencias negativas.</div>
+            <div class="analysis-chart-box"><canvas id="chart-analisis-sources"></canvas></div>
+            <div id="analysis-source-table" class="analysis-mini-table">
+              <div class="loading-state">Cargando...</div>
+            </div>
+          </div>
+
+          <div class="analysis-panel">
+            <div class="analysis-panel-title" id="analysis-trend-title">Compras vs ventas del periodo</div>
+            <div class="analysis-panel-note" id="analysis-trend-note">Serie comparativa para encontrar cuando se rompe la relacion compras / ventas.</div>
+            <div class="analysis-chart-box tall"><canvas id="chart-analisis-trend"></canvas></div>
+          </div>
+
+          <div class="analysis-panel half">
+            <div class="analysis-panel-title">La proyeccion de cierre marca el tamano del problema si no cambian las compras</div>
+            <div class="analysis-panel-note">Run-rate del mes actual con foco en ventas y utilidad proyectada.</div>
+            <div id="proyeccion-box"><div class="loading-state">Cargando...</div></div>
+          </div>
+
+          <div class="analysis-panel half">
+            <div class="analysis-panel-title">Los proveedores y gastos muestran donde concentrar revision operativa</div>
+            <div class="analysis-panel-note">Ranking del periodo para revisar si la presion viene por mezcla, abastecimiento o gasto fijo.</div>
+            <div id="top-proveedores"><div class="loading-state">Cargando...</div></div>
+            <div id="top-categorias" style="margin-top:12px"><div class="loading-state">Cargando...</div></div>
+          </div>
+        </div>
+      </div>
 
       <div class="card" style="margin-top:14px">
         <div class="card-title"><h2 class="h2">Período actual vs anterior</h2></div>
@@ -2571,6 +2656,20 @@ async function guardarTicket(tipo){
    ANÁLISIS (comparativos, proyección, tops)
    ============================================================ */
 let anRangoActual = 'mes';
+const analysisCharts = { bridge:null, sources:null, trend:null };
+
+function analisisDiasEntre(desde, hasta){
+  const a = new Date(desde + 'T00:00:00');
+  const b = new Date(hasta + 'T00:00:00');
+  return Math.round((b - a) / 86400000) + 1;
+}
+
+function destruirChartAnalisis(key){
+  if(analysisCharts[key]){
+    analysisCharts[key].destroy();
+    analysisCharts[key] = null;
+  }
+}
 
 function anRangoFechas(tipo){
   const hoy = new Date();
@@ -2686,8 +2785,267 @@ function pintarTopCategorias(arr){
 /* ============================================================
    ASISTENTE IA (chat → sc-chat)
    ============================================================ */
-let chatCargando = false;
+function marginClass(m){
+  if(Number(m || 0) < 0) return 'danger';
+  if(Number(m || 0) < 10) return 'warn';
+  return 'ok';
+}
 
+function pctSafe(actual, anterior){
+  const a = Number(actual || 0);
+  const b = Number(anterior || 0);
+  if(!b) return null;
+  return ((a - b) / Math.abs(b)) * 100;
+}
+
+function analisisBucketSemanal(periodos){
+  const buckets = {};
+  (periodos || []).forEach(r => {
+    const raw = String(r.periodo || '');
+    const base = raw.length === 10 ? raw : (raw + '-01');
+    const d = fechaGrafica(base);
+    if(!d) return;
+    const key = bucketGrafica(d, 'week').label;
+    if(!buckets[key]){
+      buckets[key] = { periodo:key, ventas:0, compras:0, compras_manual:0, compras_inventario_sicar:0, compras_ajuste_olvidado:0, compras_existencia_negativa:0 };
+    }
+    buckets[key].ventas += Number(r.ventas || 0);
+    buckets[key].compras += Number(r.compras || 0);
+    buckets[key].compras_manual += Number(r.compras_manual || 0);
+    buckets[key].compras_inventario_sicar += Number(r.compras_inventario_sicar || 0);
+    buckets[key].compras_ajuste_olvidado += Number(r.compras_ajuste_olvidado || 0);
+    buckets[key].compras_existencia_negativa += Number(r.compras_existencia_negativa || 0);
+  });
+  return Object.values(buckets).sort((a,b) => String(a.periodo).localeCompare(String(b.periodo))).map(r => ({
+    ...r,
+    compras_pct_ventas: r.ventas > 0 ? (r.compras / r.ventas) * 100 : null,
+    compras_mayores_ventas: r.compras > r.ventas,
+  }));
+}
+
+function pintarNarrativaAnalisis(cmp, proy, tendencia, desde, hasta){
+  const actual = cmp.actual || {};
+  const anterior = cmp.anterior || {};
+  const resumen = tendencia.resumen || {};
+  const ventas = Number(actual.ventas || 0);
+  const compras = Number(actual.compras || 0);
+  const gastos = Number(actual.gastos || 0);
+  const nomina = Number(actual.nomina || 0);
+  const utilidad = Number(actual.utilidad || 0);
+  const margen = ventas > 0 ? (utilidad / ventas) * 100 : 0;
+  const ratioCompras = ventas > 0 ? (compras / ventas) * 100 : 0;
+  const periodos = Number(resumen.periodos || 0);
+  const rojos = Number(resumen.periodos_compras_mayores_ventas || 0);
+  const deltaUtilidad = pctSafe(actual.utilidad, anterior.utilidad);
+  const proyUtilidad = Number(proy.utilidad_proy || 0);
+  const peor = resumen.peor_periodo || null;
+
+  let headline = 'La lectura del periodo es estable y las compras siguen debajo de ventas.';
+  if(utilidad < 0 && ratioCompras >= 100){
+    headline = 'Las compras ya rebasan ventas en el periodo y eso explica la utilidad negativa.';
+  }else if(utilidad < 0){
+    headline = 'La utilidad del periodo es negativa y el deterioro ya no se explica solo por ventas.';
+  }else if(ratioCompras >= 90){
+    headline = 'Las compras estan consumiendo casi todo lo vendido y el margen queda muy delgado.';
+  }
+  if(periodos >= 3 && rojos > 0){
+    headline += ' En el historico consultado, ' + rojos + ' de ' + periodos + ' periodos quedaron en rojo.';
+  }
+  $('analysis-headline').textContent = headline;
+
+  let sub = `Rango ${desde} a ${hasta}. Ventas ${mxn(ventas)}, compras ${mxn(compras)}, gastos ${mxn(gastos)} y nomina ${mxn(nomina)}.`;
+  if(peor && peor.periodo){
+    sub += ' Peor periodo observado: ' + peor.periodo + ' con brecha ' + mxn(peor.brecha) + '.';
+  }
+  $('analysis-subheadline').textContent = sub;
+
+  const cards = [
+    { cls: ratioCompras >= 100 ? 'danger' : (ratioCompras >= 90 ? 'warn' : 'ok'), label:'Compras / ventas', value: ratioCompras.toFixed(1) + '%', note:'Cuanto se compra por cada peso vendido.' },
+    { cls: utilidad < 0 ? 'danger' : 'ok', label:'Utilidad del periodo', value: mxn(utilidad), note: deltaUtilidad == null ? 'Sin base comparable.' : 'Cambio vs anterior: ' + (deltaUtilidad > 0 ? '+' : '') + deltaUtilidad.toFixed(1) + '%' },
+    { cls: proyUtilidad < 0 ? 'danger' : 'warn', label:'Utilidad proyectada', value: mxn(proyUtilidad), note:'Cierre esperado al ritmo actual.' },
+    { cls: rojos > 0 ? 'warn' : 'ok', label:'Periodos en rojo', value: periodos ? (rojos + '/' + periodos) : '0/0', note:'Periodos donde compras supero ventas.' },
+    { cls: marginClass(margen), label:'Margen neto', value: margen.toFixed(1) + '%', note:'Despues de compras, gastos y nomina.' },
+  ];
+  $('analysis-summary-grid').innerHTML = cards.map(c =>
+    '<div class="analysis-summary-card ' + c.cls + '"><span>' + esc(c.label) + '</span><strong>' + esc(c.value) + '</strong><small>' + esc(c.note) + '</small></div>'
+  ).join('');
+}
+
+function pintarBridgeAnalisis(cmp){
+  const actual = cmp.actual || {};
+  const canvas = $('chart-analisis-bridge');
+  if(!canvas || !window.Chart) return;
+  destruirChartAnalisis('bridge');
+  analysisCharts.bridge = new Chart(canvas, {
+    type:'bar',
+    data:{
+      labels:['Ventas','Compras','Gastos','Nomina','Utilidad'],
+      datasets:[{
+        data:[Number(actual.ventas || 0), -Number(actual.compras || 0), -Number(actual.gastos || 0), -Number(actual.nomina || 0), Number(actual.utilidad || 0)],
+        backgroundColor:['#1e3a8a','#f97316','#dc2626','#7c3aed', Number(actual.utilidad || 0) >= 0 ? '#16a34a' : '#b91c1c'],
+        borderRadius:6,
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:(c)=> mxn(c.parsed.y) } } },
+      scales:{
+        x:{ ticks:{ font:{ size:10 } }, grid:{ display:false } },
+        y:{ ticks:{ callback:(v)=> '$' + (Number(v)/1000).toFixed(0) + 'k', font:{ size:10 } }, grid:{ color:'rgba(148,163,184,0.12)' } },
+      }
+    }
+  });
+}
+
+function pintarFuentesCompraAnalisis(tendencia){
+  const resumen = tendencia.resumen || {};
+  const rows = [
+    { label:'Inventario SICAR', total:Number(resumen.compras_inventario_sicar || 0), color:'#1e3a8a' },
+    { label:'Ajuste olvidado', total:Number(resumen.compras_ajuste_olvidado || 0), color:'#f97316' },
+    { label:'Existencia negativa', total:Number(resumen.compras_existencia_negativa || 0), color:'#dc2626' },
+    { label:'Manual / tickets', total:Number(resumen.compras_manual || 0), color:'#16a34a' },
+  ].filter(r => r.total > 0);
+  const total = rows.reduce((s,r)=> s + r.total, 0);
+  const canvas = $('chart-analisis-sources');
+  if(!canvas || !window.Chart) return;
+  destruirChartAnalisis('sources');
+  analysisCharts.sources = new Chart(canvas, {
+    type:'bar',
+    data:{ labels: rows.map(r => r.label), datasets:[{ data: rows.map(r => r.total), backgroundColor: rows.map(r => r.color), borderRadius:6 }] },
+    options:{
+      indexAxis:'y',
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:(c)=> mxn(c.parsed.x) } } },
+      scales:{
+        x:{ ticks:{ callback:(v)=> '$' + (Number(v)/1000).toFixed(0) + 'k', font:{ size:10 } }, grid:{ color:'rgba(148,163,184,0.12)' } },
+        y:{ ticks:{ font:{ size:11 } }, grid:{ display:false } },
+      }
+    }
+  });
+  $('analysis-source-table').innerHTML = rows.map(r => {
+    const pct = total > 0 ? (r.total / total) * 100 : 0;
+    return '<div class="analysis-mini-row"><strong>' + esc(r.label) + '</strong><b>' + mxn(r.total) + '</b><span>' + pct.toFixed(1) + '%</span></div>';
+  }).join('');
+}
+
+function pintarTendenciaAnalisis(tendencia, desde, hasta){
+  const canvas = $('chart-analisis-trend');
+  if(!canvas || !window.Chart) return;
+  destruirChartAnalisis('trend');
+  const dias = analisisDiasEntre(desde, hasta);
+  let rows = Array.isArray(tendencia.periodos) ? tendencia.periodos.slice() : [];
+  if(dias > 21 && dias <= 62) rows = analisisBucketSemanal(rows);
+  rows = rows.filter(r => Number(r.ventas || 0) !== 0 || Number(r.compras || 0) !== 0);
+  const labels = rows.map(r => r.periodo);
+  const ventas = rows.map(r => Number(r.ventas || 0));
+  const compras = rows.map(r => Number(r.compras || 0));
+  const ratio = rows.map(r => r.compras_pct_ventas == null ? null : Number(r.compras_pct_ventas));
+  $('analysis-trend-title').textContent = dias > 62
+    ? 'La historia util esta en agregados mensuales, no en tickets sueltos'
+    : (dias > 21 ? 'La historia util esta en agregados semanales, no en tickets sueltos' : 'Compras vs ventas del periodo');
+  $('analysis-trend-note').textContent = 'La grafica se resume automaticamente cuando el rango crece para evitar ruido y listas infinitas.';
+  analysisCharts.trend = new Chart(canvas, {
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        { label:'Ventas', data:ventas, backgroundColor:'rgba(30,58,138,0.76)', borderRadius:4, yAxisID:'money' },
+        { label:'Compras', data:compras, backgroundColor:compras.map((v,i)=> v > ventas[i] ? 'rgba(220,38,38,0.82)' : 'rgba(249,115,22,0.76)'), borderRadius:4, yAxisID:'money' },
+        { type:'line', label:'Compras / ventas', data:ratio, borderColor:'#334155', backgroundColor:'#334155', borderWidth:2, pointRadius:1.5, tension:0.2, yAxisID:'ratio' },
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false, interaction:{ mode:'index', intersect:false },
+      plugins:{ legend:{ position:'bottom', labels:{ boxWidth:12, font:{ size:10 } } },
+        tooltip:{ callbacks:{ label:(c)=> c.dataset.yAxisID === 'ratio' ? (c.dataset.label + ': ' + Number(c.parsed.y || 0).toFixed(1) + '%') : (c.dataset.label + ': ' + mxn(c.parsed.y)) } } },
+      scales:{
+        x:{ ticks:{ maxTicksLimit: dias > 120 ? 12 : 18, font:{ size:10 } }, grid:{ color:'rgba(148,163,184,0.08)' } },
+        money:{ beginAtZero:true, ticks:{ callback:(v)=> '$' + (Number(v)/1000).toFixed(0) + 'k', font:{ size:10 } }, grid:{ color:'rgba(148,163,184,0.12)' } },
+        ratio:{ beginAtZero:true, position:'right', suggestedMax:140, grid:{ drawOnChartArea:false }, ticks:{ callback:(v)=> Number(v).toFixed(0) + '%', font:{ size:10 } } },
+      }
+    }
+  });
+}
+
+async function cargarAnalisis(){
+  const { desde, hasta } = anRangoFechas(anRangoActual);
+  if(!desde || !hasta){
+    showMsg('analisis-msg','Selecciona las dos fechas del rango personalizado.','warn');
+    return;
+  }
+  showMsg('analisis-msg','');
+  $('cmp-grid').innerHTML = '<div class="loading-state" style="grid-column:1/-1">Cargando...</div>';
+  $('proyeccion-box').innerHTML = '<div class="loading-state">Cargando...</div>';
+  $('top-proveedores').innerHTML = '<div class="loading-state">Cargando...</div>';
+  $('top-categorias').innerHTML = '<div class="loading-state">Cargando...</div>';
+  $('analysis-source-table').innerHTML = '<div class="loading-state">Cargando...</div>';
+  $('analysis-headline').textContent = 'Cargando conclusion del periodo...';
+  $('analysis-subheadline').textContent = 'Preparando historia ejecutiva con ventas, compras, gastos y proyeccion.';
+  $('analysis-summary-grid').innerHTML = '<div class="analysis-summary-card"><span>Estado</span><strong>...</strong><small>Cargando analisis</small></div>';
+  ['bridge','sources','trend'].forEach(destruirChartAnalisis);
+
+  let data, tendencia;
+  try{
+    const dias = analisisDiasEntre(desde, hasta);
+    const agrupar = dias > 62 ? 'mes' : (dias > 21 ? 'semana' : 'dia');
+    [data, tendencia] = await Promise.all([
+      apiFetch('/sc-data?action=analitica&desde=' + encodeURIComponent(desde) + '&hasta=' + encodeURIComponent(hasta)),
+      apiFetch('/sc-data?action=tendencia_compras_ventas&desde=' + encodeURIComponent(desde) + '&hasta=' + encodeURIComponent(hasta) + '&agrupar=' + (agrupar === 'semana' ? 'dia' : agrupar)),
+    ]);
+  }catch(e){
+    showMsg('analisis-msg', e.message, 'err');
+    ['cmp-grid','proyeccion-box','top-proveedores','top-categorias','analysis-source-table'].forEach(id => $(id).innerHTML = '');
+    $('analysis-headline').textContent = 'No se pudo construir la historia del periodo.';
+    $('analysis-subheadline').textContent = e.message;
+    return;
+  }
+
+  pintarComparativo(data.comparativo || {});
+  pintarNarrativaAnalisis(data.comparativo || {}, data.proyeccion_mes || {}, tendencia || {}, desde, hasta);
+  pintarBridgeAnalisis(data.comparativo || {});
+  pintarFuentesCompraAnalisis(tendencia || {});
+  pintarTendenciaAnalisis(tendencia || {}, desde, hasta);
+  pintarProyeccion(data.proyeccion_mes || {});
+  pintarTopProveedores(data.top_proveedores || []);
+  pintarTopCategorias(data.top_categorias_gasto || []);
+}
+
+function pintarProyeccion(p){
+  if(!p || (p.ventas_proy === undefined && p.utilidad_proy === undefined)){
+    $('proyeccion-box').innerHTML = '<div class="empty-state">Sin datos de proyeccion.</div>';
+    return;
+  }
+  const util = Number(p.utilidad_proy || 0);
+  const cls = util < 0 ? 'danger' : 'ok';
+  const dias = (p.dias_transcurridos != null && p.dias_mes != null)
+    ? 'Basado en ' + esc(p.dias_transcurridos) + ' de ' + esc(p.dias_mes) + ' dias del mes.'
+    : 'Sin detalle de dias.';
+  $('proyeccion-box').innerHTML =
+    '<div class="analysis-summary-grid" style="margin-top:10px">' +
+      '<div class="analysis-summary-card ok"><span>Ventas proyectadas</span><strong>' + mxn(p.ventas_proy) + '</strong><small>Run-rate del mes actual.</small></div>' +
+      '<div class="analysis-summary-card ' + cls + '"><span>Utilidad proyectada</span><strong>' + mxn(p.utilidad_proy) + '</strong><small>' + dias + '</small></div>' +
+    '</div>';
+}
+
+function pintarTopProveedores(arr){
+  if(!arr.length){ $('top-proveedores').innerHTML = '<div class="empty-state">Sin datos.</div>'; return; }
+  const total = arr.reduce((s,r)=> s + Number(r.total || 0), 0);
+  $('top-proveedores').innerHTML = arr.slice(0,6).map(r => {
+    const pct = total > 0 ? (Number(r.total || 0) / total) * 100 : 0;
+    return '<div class="analysis-mini-row"><strong>' + esc(r.proveedor || 'Sin proveedor') + '</strong><b>' + mxn(r.total) + '</b><span>' + pct.toFixed(1) + '%</span></div>';
+  }).join('');
+}
+
+function pintarTopCategorias(arr){
+  if(!arr.length){ $('top-categorias').innerHTML = '<div class="empty-state">Sin datos.</div>'; return; }
+  const total = arr.reduce((s,r)=> s + Number(r.total || 0), 0);
+  $('top-categorias').innerHTML = arr.slice(0,6).map(r => {
+    const pct = total > 0 ? (Number(r.total || 0) / total) * 100 : 0;
+    return '<div class="analysis-mini-row"><strong>' + esc(r.categoria || 'Sin categoria') + '</strong><b>' + mxn(r.total) + '</b><span>' + pct.toFixed(1) + '%</span></div>';
+  }).join('');
+}
+
+let chatCargando = false;
 function agregarChat(clase, texto){
   const log = $('chat-log');
   const div = document.createElement('div');
