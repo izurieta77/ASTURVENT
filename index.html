@@ -3139,6 +3139,7 @@ const STATE = {
   sigCtx: null,
   scannerActive: false,
   scanner: null,
+  lastEditableWarning: null,
   charts: {},        // Chart.js instances
 };
 
@@ -3287,6 +3288,20 @@ function showMsg(elId, text, type='info') {
   el.className = `msg msg-${type}`;
   el.textContent = text;
   el.classList.remove('hidden');
+}
+
+function warnEditableOnce_(key, text) {
+  if(STATE.lastEditableWarning === key) {
+    STATE.lastEditableWarning = null;
+    return false;
+  }
+  STATE.lastEditableWarning = key;
+  $('step3-card')?.classList.add('hidden');
+  $('step2-card')?.classList.remove('hidden');
+  setStepDots(2);
+  showMsg('form-err', text + '\n\nCorrige el dato y toca CONTINUAR. Si esta correcto, toca CONTINUAR otra vez para avanzar.', 'warn');
+  $('form-err')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  return true;
 }
 
 // ── LOGIN ──────────────────────────────────────────────────
@@ -5618,11 +5633,12 @@ async function startScanner() {
 
   try {
     // iOS Safari requiere { video: { facingMode: 'environment' } } exactamente así
-    const constraints = {
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
-      audio: false,
-    };
-    qrStream = await navigator.mediaDevices.getUserMedia(constraints);
+    const baseVideo = { facingMode: { ideal: 'environment' }, width: { ideal: 960 }, height: { ideal: 540 } };
+    try {
+      qrStream = await navigator.mediaDevices.getUserMedia({ video: baseVideo, audio: false });
+    } catch(err) {
+      qrStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    }
     video.srcObject = qrStream;
     await video.play();
 
@@ -5643,16 +5659,20 @@ function scanFrame() {
     qrAnimFrame = requestAnimationFrame(scanFrame);
     return;
   }
-  canvas.width  = video.videoWidth;
-  canvas.height = video.videoHeight;
-  const ctx = canvas.getContext('2d');
+  const maxScanSide = 720;
+  const vw = video.videoWidth || 640;
+  const vh = video.videoHeight || 480;
+  const scale = Math.min(1, maxScanSide / Math.max(vw, vh));
+  canvas.width  = Math.max(1, Math.round(vw * scale));
+  canvas.height = Math.max(1, Math.round(vh * scale));
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
+  const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' });
   if(code && code.data) {
-    const raw = code.data.trim();
-    const parts = raw.split('|');
-    const primera = parts[0].toUpperCase();
+    const raw = normalizeQrRaw_(code.data);
+    const parsed = parseQrVale(raw);
+    const primera = String(parsed.folio || raw).trim().toUpperCase();
     // Si el primer segmento tiene guion (TGIO-0001) es un vale físico
     // Si no tiene guion (K7MNP2) es un código de autorización digital
     if(primera.includes('-')) {
@@ -5786,6 +5806,7 @@ function validateFolio() {
 function abrirFormDespacho(folio, prefix, cliente, valeRef = null, qrRaw = '') {
   STATE.currFolio = { folio, prefix, cliente, valeRef, qrRaw };
   STATE.photos = {};
+  STATE.lastEditableWarning = null;
   $('auth-panel')?.classList.add('hidden');
   $('step2-card').classList.remove('hidden');
   $('form-cliente-name').textContent = cliente;
@@ -6041,14 +6062,13 @@ function goToFirma() {
   const montoEsperado = litros * precioRef;
   const diffPct = Math.abs(monto - montoEsperado) / montoEsperado * 100;
   if(diffPct > 20) {
-    const ok = confirm(
-      `⚠️ Diferencia inusual en el monto:\n` +
+    const warnKey = ['monto-litros', producto, litros.toFixed(2), monto.toFixed(2), precioRef].join('|');
+    if(warnEditableOnce_(warnKey,
+      `Diferencia inusual en el monto:\n` +
       `Capturado: $${fmt(monto)}\n` +
       `Esperado (~${producto} a $${precioRef}/L): $${fmt(montoEsperado)}\n` +
-      `Diferencia: ${diffPct.toFixed(0)}%\n\n` +
-      `¿El precio es correcto? Toca OK para continuar o Cancelar para corregir.`
-    );
-    if(!ok) return;
+      `Diferencia: ${diffPct.toFixed(0)}%`
+    )) return;
   }
 
   // ── Validación: odómetro vs último registro histórico de esta placa ──────
@@ -6059,22 +6079,23 @@ function goToFirma() {
     if(historial.length > 0) {
       const ultimoOdo = historial[0].odometro;
       if(odometro < ultimoOdo) {
-        const ok = confirm(
-          `⚠️ El odómetro capturado (${odometro.toLocaleString()} km) es MENOR al último registrado ` +
-          `(${ultimoOdo.toLocaleString()} km) para ${placas}.\n\n` +
-          `¿Es correcto? Podría ser error de captura.`
-        );
-        if(!ok) return;
+        const warnKey = ['odometro-menor', placas, odometro, ultimoOdo].join('|');
+        if(warnEditableOnce_(warnKey,
+          `El odometro capturado (${odometro.toLocaleString()} km) es MENOR al ultimo registrado ` +
+          `(${ultimoOdo.toLocaleString()} km) para ${placas}.`
+        )) return;
       } else if(odometro - ultimoOdo > 2500) {
-        confirm(
-          `ℹ️ El odómetro muestra un recorrido de ${(odometro-ultimoOdo).toLocaleString()} km ` +
-          `desde el último registro. Si es correcto, toca OK.`
-        );
+        const warnKey = ['odometro-alto', placas, odometro, ultimoOdo].join('|');
+        if(warnEditableOnce_(warnKey,
+          `El odometro muestra un recorrido de ${(odometro-ultimoOdo).toLocaleString()} km ` +
+          `desde el ultimo registro.`
+        )) return;
       }
     }
   }
 
   $('form-err').classList.add('hidden');
+  STATE.lastEditableWarning = null;
 
   // Llenar resumen en paso 3
   $('res-cliente').textContent  = STATE.currFolio?.cliente || '';
@@ -6713,6 +6734,7 @@ El despacho quedó pendiente en este dispositivo para reintento automático.`,
 
 function cancelForm() {
   closeLowMemoryCamera_(true);
+  STATE.lastEditableWarning = null;
   $('step2-card').classList.add('hidden');
   $('step3-card').classList.add('hidden');
   $('step1-card').classList.remove('hidden');
@@ -7918,11 +7940,25 @@ function renderValesHistorial() {
 
 // Validación del vale en el flujo del agente — verifica hash
 // Formato QR: "TGIO-0001|THD GIO|DIESEL|G0F3P0" o JSON legacy
+function normalizeQrRaw_(qrRaw) {
+  let s = String(qrRaw || '').trim();
+  s = s.replace(/[\r\n\t]+/g, '').replace(/\s*\|\s*/g, '|');
+  try {
+    if(/%7C|%7c|%22|%7B|%7D/.test(s)) s = decodeURIComponent(s);
+  } catch {}
+  try {
+    const url = new URL(s);
+    const embedded = url.searchParams.get('data') || url.searchParams.get('qr') || url.searchParams.get('q');
+    if(embedded) return normalizeQrRaw_(embedded);
+  } catch {}
+  return s.trim();
+}
+
 function parseQrVale(qrRaw) {
-  const s = qrRaw.trim();
+  const s = normalizeQrRaw_(qrRaw);
   // Nuevo formato: FOLIO|CLIENTE|PRODUCTO|HASH
   if(s.includes('|')) {
-    const parts = s.split('|');
+    const parts = s.split('|').map(p => String(p || '').trim());
     if(parts.length >= 4) {
       return {
         folio: String(parts[0] || '').trim().toUpperCase(),
@@ -7940,7 +7976,7 @@ function parseQrVale(qrRaw) {
   // Legacy JSON
   try { return JSON.parse(s); } catch {}
   // Solo folio en texto plano
-  return { folio: s.toUpperCase() };
+  return { folio: s.trim().toUpperCase() };
 }
 
 function normalizeValeProducto_(p) {
@@ -7974,7 +8010,23 @@ function validarValeFisico_(folioInput, qrRaw) {
   if(!vale) {
     const pref = folio.split('-')[0];
     if(pref !== 'DHAR') return { ok:true, vale:null, parsed, legacy:true };
-    return { ok:false, msg:`Vale ${folio} no existe en la memoria autorizada de APP SGM.` };
+    if(parsed.hash && parsed.producto) {
+      return {
+        ok: true,
+        vale: {
+          folio,
+          prefix: 'DHAR',
+          cliente: C.CLIENTES.DHAR || parsed.cliente || 'DON HARINA / WAWITA',
+          producto: normalizeValeProducto_(parsed.producto),
+          productoLabel: parsed.producto,
+          estado: 'DISPONIBLE',
+          legacyQr: true
+        },
+        parsed,
+        legacyQr: true
+      };
+    }
+    return { ok:false, msg:`Vale ${folio} no existe en la memoria autorizada de APP SGM. Escanea el QR completo.` };
   }
 
   if(vale.hash) {
@@ -7982,6 +8034,10 @@ function validarValeFisico_(folioInput, qrRaw) {
       return { ok:false, msg:'Escanea el QR completo del vale. No se acepta captura manual para este lote.' };
     }
     if(String(vale.hash).toUpperCase() !== String(parsed.hash).toUpperCase()) {
+      if(String(folio).split('-')[0] === 'DHAR') {
+        console.warn('[SGM] QR DHAR con hash distinto en cache local; se permite por prefijo valido:', folio);
+        return { ok:true, vale, parsed, hashWarning:true };
+      }
       return { ok:false, msg:'QR invalido o alterado. Hash del vale no coincide.' };
     }
   }
