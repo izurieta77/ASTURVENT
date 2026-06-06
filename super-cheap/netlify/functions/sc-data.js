@@ -4,6 +4,7 @@
 // Responde con la forma exacta definida en CONTRACT.md (seccion CONTRATO v2).
 //
 //   GET  ?action=resumen&desde=YYYY-MM-DD&hasta=YYYY-MM-DD
+//   GET  ?action=tendencia_compras_ventas&desde=&hasta=&agrupar=mes|dia
 //   GET  ?action=lista&tabla=ventas|compras|gastos|nomina&desde=&hasta=
 //   GET  ?action=resumen_inventario_sicar&desde=&hasta=&agrupar=mes|dia
 //   GET  ?action=resumen_ajuste_inventario_olvidado&desde=&hasta=
@@ -89,6 +90,7 @@ exports.handler = async (event) => {
       const action = String(q.action || '');
 
       if (action === 'resumen')   return await resumen(cors, q);
+      if (action === 'tendencia_compras_ventas' || action === 'tendencia_operativa') return await tendenciaComprasVentas(cors, q);
       if (action === 'ventas_panel') return await ventasPanel(cors, q);
       if (action === 'lista')     return await lista(cors, q);
       if (action === 'resumen_inventario_sicar') return await resumenInventarioSicar(cors, q);
@@ -100,7 +102,7 @@ exports.handler = async (event) => {
         const url = await gcs.firmarUrl(String(q.ref || ''), 60);
         return json(url ? 200 : 404, cors, url ? { ok: true, url } : { ok: false, error: 'Foto no disponible' });
       }
-      return json(400, cors, { ok: false, error: 'action invalida (resumen|ventas_panel|lista|resumen_inventario_sicar|resumen_ajuste_inventario_olvidado|analitica|alertas|foto)' });
+      return json(400, cors, { ok: false, error: 'action invalida (resumen|tendencia_compras_ventas|ventas_panel|lista|resumen_inventario_sicar|resumen_ajuste_inventario_olvidado|analitica|alertas|foto)' });
     }
 
     if (event.httpMethod === 'POST') {
@@ -213,6 +215,172 @@ async function serieVentas(desde, hasta) {
       GROUP BY fecha
       ORDER BY fecha ASC`, { desde, hasta });
   return rows.map(r => ({ fecha: r.fecha, total: Number(r.total || 0) }));
+}
+
+async function primerDiaOperacion() {
+  const ds = bq.DATASET;
+  const rows = await bq.query(
+    `SELECT FORMAT_DATE('%Y-%m-%d', MIN(fecha)) AS fecha
+       FROM (
+         SELECT fecha FROM \`${ds}.ventas\` WHERE ${ACTIVO}
+         UNION ALL
+         SELECT fecha FROM \`${ds}.compras\` WHERE ${ACTIVO}
+       )`,
+  );
+  const fecha = rows[0]?.fecha;
+  return fechaValida(fecha) ? fecha : null;
+}
+
+// Serie mensual/diaria para revisar si las compras estan rebasando ventas.
+async function tendenciaComprasVentas(cors, q) {
+  const agrupar = String(q.agrupar || 'mes').toLowerCase();
+  if (!['mes', 'dia'].includes(agrupar)) {
+    return json(400, cors, { ok: false, error: 'agrupar debe ser mes o dia' });
+  }
+
+  const hasta = fechaValida(q.hasta) ? q.hasta : hoyISO();
+  let desde = fechaValida(q.desde) ? q.desde : null;
+  if (!desde) desde = await primerDiaOperacion() || inicioMesISO(hasta);
+  if (desde > hasta) {
+    return json(400, cors, { ok: false, error: 'desde no puede ser mayor que hasta' });
+  }
+
+  const ds = bq.DATASET;
+  const periodoExpr = agrupar === 'dia'
+    ? "FORMAT_DATE('%Y-%m-%d', fecha)"
+    : "FORMAT_DATE('%Y-%m', fecha)";
+
+  const rows = await bq.query(
+    `WITH ventas AS (
+       SELECT ${periodoExpr} AS periodo,
+              ROUND(IFNULL(SUM(CAST(total AS FLOAT64)), 0), 2) AS ventas,
+              COUNT(*) AS tickets
+         FROM \`${ds}.ventas\`
+        WHERE fecha BETWEEN @desde AND @hasta
+          AND ${ACTIVO}
+        GROUP BY periodo
+     ),
+     compras_base AS (
+       SELECT ${periodoExpr} AS periodo,
+              IFNULL(CAST(total AS FLOAT64), 0) AS total,
+              IFNULL(raw_ocr, '') AS raw_ocr
+         FROM \`${ds}.compras\`
+        WHERE fecha BETWEEN @desde AND @hasta
+          AND ${ACTIVO}
+     ),
+     compras AS (
+       SELECT periodo,
+              ROUND(IFNULL(SUM(total), 0), 2) AS compras,
+              COUNT(*) AS compras_registros,
+              ROUND(IFNULL(SUM(CASE WHEN STARTS_WITH(raw_ocr, 'sicar_inventory:') THEN total ELSE 0 END), 0), 2) AS compras_inventario_sicar,
+              ROUND(IFNULL(SUM(CASE WHEN STARTS_WITH(raw_ocr, @forgotten_prefix) THEN total ELSE 0 END), 0), 2) AS compras_ajuste_olvidado,
+              ROUND(IFNULL(SUM(CASE WHEN STARTS_WITH(raw_ocr, @negative_prefix) THEN total ELSE 0 END), 0), 2) AS compras_existencia_negativa,
+              ROUND(IFNULL(SUM(CASE
+                WHEN raw_ocr = ''
+                  OR (
+                    NOT STARTS_WITH(raw_ocr, 'sicar_inventory:')
+                    AND NOT STARTS_WITH(raw_ocr, @forgotten_prefix)
+                    AND NOT STARTS_WITH(raw_ocr, @negative_prefix)
+                    AND NOT STARTS_WITH(raw_ocr, 'sicar_')
+                  )
+                THEN total ELSE 0 END), 0), 2) AS compras_manual,
+              ROUND(IFNULL(SUM(CASE
+                WHEN STARTS_WITH(raw_ocr, 'sicar_')
+                  AND NOT STARTS_WITH(raw_ocr, 'sicar_inventory:')
+                  AND NOT STARTS_WITH(raw_ocr, @forgotten_prefix)
+                  AND NOT STARTS_WITH(raw_ocr, @negative_prefix)
+                THEN total ELSE 0 END), 0), 2) AS compras_otras_sicar
+         FROM compras_base
+        GROUP BY periodo
+     ),
+     periodos AS (
+       SELECT periodo FROM ventas
+       UNION DISTINCT
+       SELECT periodo FROM compras
+     )
+     SELECT p.periodo,
+            IFNULL(v.ventas, 0) AS ventas,
+            IFNULL(v.tickets, 0) AS tickets,
+            IFNULL(c.compras, 0) AS compras,
+            IFNULL(c.compras_registros, 0) AS compras_registros,
+            IFNULL(c.compras_manual, 0) AS compras_manual,
+            IFNULL(c.compras_inventario_sicar, 0) AS compras_inventario_sicar,
+            IFNULL(c.compras_ajuste_olvidado, 0) AS compras_ajuste_olvidado,
+            IFNULL(c.compras_existencia_negativa, 0) AS compras_existencia_negativa,
+            IFNULL(c.compras_otras_sicar, 0) AS compras_otras_sicar
+       FROM periodos p
+       LEFT JOIN ventas v USING(periodo)
+       LEFT JOIN compras c USING(periodo)
+      ORDER BY p.periodo ASC`,
+    {
+      desde,
+      hasta,
+      forgotten_prefix: AJUSTE_INVENTARIO_OLVIDADO_PREFIX,
+      negative_prefix: 'sicar_negative_stock:',
+    },
+  );
+
+  const periodos = rows.map(r => {
+    const ventas = r2(r.ventas);
+    const compras = r2(r.compras);
+    const brecha = r2(ventas - compras);
+    return {
+      periodo: r.periodo,
+      ventas,
+      compras,
+      tickets: Number(r.tickets || 0),
+      compras_registros: Number(r.compras_registros || 0),
+      compras_manual: r2(r.compras_manual),
+      compras_inventario_sicar: r2(r.compras_inventario_sicar),
+      compras_ajuste_olvidado: r2(r.compras_ajuste_olvidado),
+      compras_existencia_negativa: r2(r.compras_existencia_negativa),
+      compras_otras_sicar: r2(r.compras_otras_sicar),
+      brecha,
+      utilidad_bruta_antes_gastos: brecha,
+      compras_pct_ventas: ventas > 0 ? r2((compras / ventas) * 100) : null,
+      compras_mayores_ventas: compras > ventas,
+      sin_ventas_con_compras: ventas === 0 && compras > 0,
+    };
+  });
+
+  const resumen = periodos.reduce((acc, r) => {
+    acc.total_ventas = r2(acc.total_ventas + r.ventas);
+    acc.total_compras = r2(acc.total_compras + r.compras);
+    acc.compras_manual = r2(acc.compras_manual + r.compras_manual);
+    acc.compras_inventario_sicar = r2(acc.compras_inventario_sicar + r.compras_inventario_sicar);
+    acc.compras_ajuste_olvidado = r2(acc.compras_ajuste_olvidado + r.compras_ajuste_olvidado);
+    acc.compras_existencia_negativa = r2(acc.compras_existencia_negativa + r.compras_existencia_negativa);
+    acc.compras_otras_sicar = r2(acc.compras_otras_sicar + r.compras_otras_sicar);
+    if (r.compras_mayores_ventas) acc.periodos_compras_mayores_ventas += 1;
+    if (r.sin_ventas_con_compras) acc.periodos_sin_ventas_con_compras += 1;
+    if (!acc.peor_periodo || r.brecha < acc.peor_periodo.brecha) {
+      acc.peor_periodo = { periodo: r.periodo, ventas: r.ventas, compras: r.compras, brecha: r.brecha };
+    }
+    return acc;
+  }, {
+    total_ventas: 0,
+    total_compras: 0,
+    compras_manual: 0,
+    compras_inventario_sicar: 0,
+    compras_ajuste_olvidado: 0,
+    compras_existencia_negativa: 0,
+    compras_otras_sicar: 0,
+    periodos_compras_mayores_ventas: 0,
+    periodos_sin_ventas_con_compras: 0,
+    peor_periodo: null,
+  });
+  resumen.total_brecha = r2(resumen.total_ventas - resumen.total_compras);
+  resumen.compras_pct_ventas = resumen.total_ventas > 0
+    ? r2((resumen.total_compras / resumen.total_ventas) * 100)
+    : null;
+  resumen.periodos = periodos.length;
+
+  return json(200, cors, {
+    ok: true,
+    filtros: { desde, hasta, agrupar },
+    resumen,
+    periodos,
+  });
 }
 
 function errorTablaNoExiste(err, tabla) {

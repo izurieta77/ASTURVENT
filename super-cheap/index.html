@@ -597,11 +597,96 @@ tr:hover td{background:var(--surface-2)}
 /* Better chart container */
 .chart-box { position: relative; height: 260px; padding: 4px; }
 .chart-box.small { height: 140px; }
+.chart-box.purchase-sales-chart { height: 310px; }
+
+.purchase-sales-insight {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+.purchase-sales-metric {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: var(--r-xs);
+  padding: 10px 11px;
+  min-height: 74px;
+}
+.purchase-sales-metric span {
+  display: block;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 4px;
+}
+.purchase-sales-metric strong {
+  display: block;
+  font-family: var(--font-d);
+  font-size: 19px;
+  line-height: 1.05;
+  color: var(--text);
+}
+.purchase-sales-metric small {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--text-3);
+  line-height: 1.25;
+}
+.purchase-sales-metric.danger { background: var(--err-bg); border-color: var(--err-bd); }
+.purchase-sales-metric.danger strong { color: var(--err); }
+.purchase-sales-metric.warn { background: var(--warn-bg); border-color: var(--warn-bd); }
+.purchase-sales-metric.warn strong { color: #92400e; }
+.purchase-sales-metric.ok { background: var(--ok-bg); border-color: var(--ok-bd); }
+.purchase-sales-metric.ok strong { color: var(--ok); }
+.audit-badge {
+  font-size: 10px;
+  font-weight: 900;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.audit-badge.danger { background: var(--err-bg); border-color: var(--err-bd); color: var(--err); }
+.audit-badge.ok { background: var(--ok-bg); border-color: var(--ok-bd); color: var(--ok); }
+.purchase-sales-breakdown {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 7px;
+  margin-top: 10px;
+  font-size: 11px;
+}
+.purchase-sales-source {
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  padding: 8px 9px;
+  background: var(--surface);
+}
+.purchase-sales-source .source-label {
+  color: var(--text-3);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  font-size: 8px;
+}
+.purchase-sales-source .source-value {
+  margin-top: 2px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 800;
+  color: var(--text);
+}
 
 /* Responsive tweaks */
 @media (max-width: 720px) {
   .kpi-modern .value { font-size: 18px; }
   .chart-box { height: 200px; }
+  .chart-box.purchase-sales-chart { height: 260px; }
 }
 
 /* Last sync indicator */
@@ -767,6 +852,22 @@ html.dark #header .range-pill.active { background:#f1f5f9; color:#1e3a8a; }
           <div id="payment-mix" class="space-y-1.5 text-sm"></div>
           <div class="mt-3 pt-3 border-t border-[var(--border)] text-xs text-[var(--text-3)]" id="payment-insight"></div>
         </div>
+      </div>
+
+      <!-- Purchase pressure audit -->
+      <div class="card p-4 mb-5" id="compras-ventas-section">
+        <div class="flex flex-wrap items-start justify-between gap-2 mb-2">
+          <div>
+            <div class="font-bold text-sm tracking-tight">Compras vs ventas</div>
+            <div id="compras-ventas-subtitle" class="text-xs text-[var(--text-3)]">Historico mensual</div>
+          </div>
+          <div id="compras-ventas-badge" class="audit-badge">Cargando</div>
+        </div>
+        <div id="compras-ventas-insight" class="purchase-sales-insight">
+          <div class="purchase-sales-metric"><span>Estado</span><strong>...</strong><small>Calculando historico</small></div>
+        </div>
+        <div class="chart-box purchase-sales-chart"><canvas id="chart-compras-ventas"></canvas></div>
+        <div id="compras-ventas-breakdown" class="purchase-sales-breakdown"></div>
       </div>
 
       <!-- Hourly chart (#3) - only shown if data has hora -->
@@ -2998,6 +3099,12 @@ async function cargarDashboardOperativo(forceRefresh = false) {
   $('alertas-operativas').innerHTML = '';
   $('payment-mix').innerHTML = '<div class="text-[var(--text-3)] text-xs py-4">Cargando mix de pagos...</div>';
 
+  if ($('compras-ventas-badge')) $('compras-ventas-badge').textContent = 'Cargando';
+  if ($('compras-ventas-insight')) {
+    $('compras-ventas-insight').innerHTML = '<div class="purchase-sales-metric"><span>Estado</span><strong>...</strong><small>Calculando historico mensual</small></div>';
+  }
+  if ($('compras-ventas-breakdown')) $('compras-ventas-breakdown').innerHTML = '';
+
   const statusEl = $('dashboard-status');
   if (statusEl) statusEl.textContent = 'Cargando datos de ventas...';
 
@@ -3031,6 +3138,7 @@ async function cargarDashboardOperativo(forceRefresh = false) {
 
     renderOperativeKPIs(k, prevK, rows, panel);
     renderSalesTrendChart(panel.serie_ventas || [], dash.compare, prevSeries, prevLabel);
+    renderPurchaseSalesTrend().catch(e => renderPurchaseSalesTrendError(e));
     panelFiltradoRows = rows;
     poblarFiltrosPanel(panel);
     renderTopProducts(rows);
@@ -3088,6 +3196,7 @@ async function cargarDashboardOperativo(forceRefresh = false) {
     // Main trend chart with real comparison overlay
     const series = (resumen && resumen.serie_ventas) ? resumen.serie_ventas : [];
     renderSalesTrendChart(series, dash.compare, prevSeries, prevLabel);
+    renderPurchaseSalesTrend().catch(e => renderPurchaseSalesTrendError(e));
 
     // Top products + filters (#2)
     panelFiltradoRows = rows;
@@ -3397,6 +3506,214 @@ function renderSalesTrendChart(series, withCompare, prevSeries = null, prevLabel
         y: { grid: { color: 'rgba(148,163,184,0.1)' }, ticks: { font:{size:10}, callback: v => '$'+(v/1000)+'k' } }
       }
     }
+  });
+}
+
+function renderPurchaseSalesTrendError(e) {
+  if ($('compras-ventas-badge')) {
+    $('compras-ventas-badge').className = 'audit-badge danger';
+    $('compras-ventas-badge').textContent = 'Error';
+  }
+  if ($('compras-ventas-insight')) {
+    $('compras-ventas-insight').innerHTML =
+      `<div class="purchase-sales-metric danger"><span>Datos</span><strong>Error</strong><small>${esc(e.message || 'No se pudo cargar')}</small></div>`;
+  }
+}
+
+function ratioComprasVentas(compras, ventas) {
+  const v = Number(ventas || 0);
+  const c = Number(compras || 0);
+  return v > 0 ? (c / v) * 100 : null;
+}
+
+function renderPurchaseSalesInsight(data, rows) {
+  const resumen = data.resumen || {};
+  const totalVentas = Number(resumen.total_ventas || 0);
+  const totalCompras = Number(resumen.total_compras || 0);
+  const totalBrecha = Number(resumen.total_brecha || 0);
+  const periodos = Number(resumen.periodos || rows.length || 0);
+  const mesesRojos = Number(resumen.periodos_compras_mayores_ventas || 0);
+  const ratio = resumen.compras_pct_ventas == null ? ratioComprasVentas(totalCompras, totalVentas) : Number(resumen.compras_pct_ventas);
+  const peor = resumen.peor_periodo || null;
+
+  const badge = $('compras-ventas-badge');
+  if (badge) {
+    badge.className = mesesRojos > 0 ? 'audit-badge danger' : 'audit-badge ok';
+    badge.textContent = mesesRojos > 0 ? `${mesesRojos} meses en rojo` : 'Sin meses en rojo';
+  }
+  if ($('compras-ventas-subtitle')) {
+    const desde = (data.filtros && data.filtros.desde) || '';
+    const hasta = (data.filtros && data.filtros.hasta) || '';
+    $('compras-ventas-subtitle').textContent = desde && hasta
+      ? `Historico mensual ${desde} a ${hasta}`
+      : 'Historico mensual';
+  }
+
+  const estadoClass = mesesRojos > 0 ? 'danger' : 'ok';
+  const brechaClass = totalBrecha < 0 ? 'danger' : 'ok';
+  const ratioClass = ratio != null && ratio > 100 ? 'danger' : (ratio != null && ratio > 85 ? 'warn' : 'ok');
+
+  const insight = $('compras-ventas-insight');
+  if (insight) {
+    insight.innerHTML = `
+      <div class="purchase-sales-metric ${estadoClass}">
+        <span>Meses compras &gt; ventas</span>
+        <strong>${mesesRojos}/${periodos}</strong>
+        <small>${mesesRojos ? 'Revisar meses marcados en rojo' : 'Compras debajo de ventas por periodo'}</small>
+      </div>
+      <div class="purchase-sales-metric ${ratioClass}">
+        <span>Compras / ventas</span>
+        <strong>${ratio == null ? 's/v' : ratio.toFixed(0) + '%'}</strong>
+        <small>${fmtMXN(totalCompras)} comprados vs ${fmtMXN(totalVentas)} vendidos</small>
+      </div>
+      <div class="purchase-sales-metric ${brechaClass}">
+        <span>Brecha acumulada</span>
+        <strong>${fmtMXN(totalBrecha)}</strong>
+        <small>Ventas menos compras, antes de gastos y nomina</small>
+      </div>
+      <div class="purchase-sales-metric ${peor && peor.brecha < 0 ? 'danger' : 'ok'}">
+        <span>Peor periodo</span>
+        <strong>${peor ? esc(peor.periodo) : '-'}</strong>
+        <small>${peor ? `${fmtMXN(peor.compras)} compras vs ${fmtMXN(peor.ventas)} ventas` : 'Sin datos'}</small>
+      </div>`;
+  }
+
+  const breakdown = $('compras-ventas-breakdown');
+  if (breakdown) {
+    const buckets = [
+      ['Manual / tickets', Number(resumen.compras_manual || 0)],
+      ['Inventario SICAR', Number(resumen.compras_inventario_sicar || 0)],
+      ['Ajuste olvidado', Number(resumen.compras_ajuste_olvidado || 0)],
+      ['Existencia negativa', Number(resumen.compras_existencia_negativa || 0)],
+      ['Otros SICAR', Number(resumen.compras_otras_sicar || 0)],
+    ].filter(([, value], idx) => value > 0 || idx < 4);
+
+    breakdown.innerHTML = buckets.map(([label, value]) => {
+      const p = totalCompras > 0 ? (value / totalCompras) * 100 : 0;
+      return `<div class="purchase-sales-source">
+        <div class="source-label">${esc(label)}</div>
+        <div class="source-value"><span>${fmtMXN(value)}</span><span>${p.toFixed(0)}%</span></div>
+      </div>`;
+    }).join('');
+  }
+}
+
+async function renderPurchaseSalesTrend() {
+  const canvas = $('chart-compras-ventas');
+  if (!canvas || !window.Chart) return;
+
+  const req = (window._purchaseSalesReq || 0) + 1;
+  window._purchaseSalesReq = req;
+
+  const data = await apiFetch('/sc-data?action=tendencia_compras_ventas&agrupar=mes');
+  if (req !== window._purchaseSalesReq) return;
+
+  const rows = (data.periodos || []).filter(r => Number(r.ventas || 0) !== 0 || Number(r.compras || 0) !== 0);
+  renderPurchaseSalesInsight(data, rows);
+
+  if (window._purchaseSalesChart) {
+    window._purchaseSalesChart.destroy();
+    window._purchaseSalesChart = null;
+  }
+
+  if (!rows.length) {
+    if ($('compras-ventas-insight')) {
+      $('compras-ventas-insight').innerHTML = '<div class="purchase-sales-metric"><span>Estado</span><strong>Sin datos</strong><small>No hay ventas o compras para graficar</small></div>';
+    }
+    return;
+  }
+
+  const labels = rows.map(r => r.periodo);
+  const ventas = rows.map(r => Number(r.ventas || 0));
+  const compras = rows.map(r => Number(r.compras || 0));
+  const ratios = rows.map(r => r.compras_pct_ventas == null ? null : Number(r.compras_pct_ventas));
+  const compraColors = rows.map(r => r.compras_mayores_ventas ? 'rgba(220,38,38,0.86)' : 'rgba(249,115,22,0.72)');
+
+  window._purchaseSalesChart = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Ventas',
+          data: ventas,
+          backgroundColor: 'rgba(30,58,138,0.74)',
+          borderColor: '#1e3a8a',
+          borderWidth: 1,
+          borderRadius: 4,
+          yAxisID: 'money',
+        },
+        {
+          label: 'Compras',
+          data: compras,
+          backgroundColor: compraColors,
+          borderColor: rows.map(r => r.compras_mayores_ventas ? '#b91c1c' : '#f97316'),
+          borderWidth: 1,
+          borderRadius: 4,
+          yAxisID: 'money',
+        },
+        {
+          type: 'line',
+          label: 'Compras / ventas',
+          data: ratios,
+          borderColor: '#334155',
+          backgroundColor: '#334155',
+          borderWidth: 2,
+          tension: 0.25,
+          pointRadius: 2,
+          pointHoverRadius: 4,
+          yAxisID: 'ratio',
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: true, position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const label = ctx.dataset.label || '';
+              const value = Number(ctx.parsed.y || 0);
+              if (ctx.dataset.yAxisID === 'ratio') return `${label}: ${value.toFixed(1)}%`;
+              return `${label}: ${fmtMXN(value)}`;
+            },
+            afterBody: items => {
+              const idx = items && items.length ? items[0].dataIndex : -1;
+              const r = rows[idx];
+              if (!r) return [];
+              return [
+                `Brecha: ${fmtMXN(r.brecha)}`,
+                `Manual/tickets: ${fmtMXN(r.compras_manual)}`,
+                `Inventario SICAR: ${fmtMXN(r.compras_inventario_sicar)}`,
+                `Ajuste olvidado: ${fmtMXN(r.compras_ajuste_olvidado)}`,
+                `Existencia negativa: ${fmtMXN(r.compras_existencia_negativa)}`,
+              ];
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(148,163,184,0.08)' },
+          ticks: { font: { size: 10 }, maxTicksLimit: 24 },
+        },
+        money: {
+          beginAtZero: true,
+          grid: { color: 'rgba(148,163,184,0.12)' },
+          ticks: { font: { size: 10 }, callback: v => '$' + (Number(v) / 1000).toFixed(0) + 'k' },
+        },
+        ratio: {
+          beginAtZero: true,
+          position: 'right',
+          suggestedMax: 140,
+          grid: { drawOnChartArea: false },
+          ticks: { font: { size: 10 }, callback: v => Number(v).toFixed(0) + '%' },
+        },
+      },
+    },
   });
 }
 
@@ -3942,6 +4259,28 @@ async function exportarPanelPDF() {
         doc.addPage();
         y = 20;
       }
+      doc.addImage(chartImg, 'PNG', 15, y, imgWidth, imgHeight);
+      y += imgHeight + 6;
+    } catch (e) {
+      // fallback: skip image
+    }
+  }
+
+  // === PURCHASE PRESSURE CHART ===
+  const comprasVentasCanvas = document.getElementById('chart-compras-ventas');
+  if (comprasVentasCanvas) {
+    try {
+      const chartImg = comprasVentasCanvas.toDataURL('image/png', 0.85);
+      const imgWidth = pageW - 30;
+      const imgHeight = 60;
+      if (y + imgHeight + 10 > 260) {
+        doc.addPage();
+        y = 20;
+      }
+      doc.setFont(undefined, 'bold');
+      doc.setFontSize(11);
+      doc.text('COMPRAS VS VENTAS', 15, y);
+      y += 5;
       doc.addImage(chartImg, 'PNG', 15, y, imgWidth, imgHeight);
       y += imgHeight + 6;
     } catch (e) {

@@ -150,6 +150,27 @@ Devuelve datos ya agregados para el Panel Operativo:
 }
 ```
 
+### GET `?action=tendencia_compras_ventas&desde=&hasta=&agrupar=mes|dia`
+Devuelve la serie agregada para auditar si compras rebasa ventas. Si `desde` no se manda, usa el primer dia con ventas o compras.
+```
+{ ok:true,
+  filtros:{desde,hasta,agrupar},
+  resumen:{
+    total_ventas,total_compras,total_brecha,compras_pct_ventas,
+    periodos,periodos_compras_mayores_ventas,
+    compras_manual,compras_inventario_sicar,compras_ajuste_olvidado,
+    compras_existencia_negativa,compras_otras_sicar,
+    peor_periodo:{periodo,ventas,compras,brecha}
+  },
+  periodos:[{
+    periodo,ventas,compras,brecha,compras_pct_ventas,
+    compras_mayores_ventas,
+    compras_manual,compras_inventario_sicar,compras_ajuste_olvidado,
+    compras_existencia_negativa,compras_otras_sicar
+  }]
+}
+```
+
 ## sc-ingest v2 compatible
 - Sigue aceptando el contrato original `{ ventas:[ { fecha, ticket_id, total, forma_pago, items } ] }`.
 - Para evitar duplicados mas robustos, el bridge nuevo manda `venta_key` estable
