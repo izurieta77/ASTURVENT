@@ -14,7 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
 <!-- SheetJS (exportar Excel) por CDN -->
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.20.1/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <!-- Tailwind Play CDN para diseño moderno 2026 (sin build) -->
 <script src="https://cdn.tailwindcss.com"></script>
@@ -3359,8 +3359,55 @@ async function enviarPregunta(){
    EXPORTAR (Excel via SheetJS / PDF via print)
    ============================================================ */
 
+function descargarArchivo(nombre, contenido, tipo){
+  const blob = contenido instanceof Blob ? contenido : new Blob([contenido], { type: tipo || 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nombre;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    URL.revokeObjectURL(url);
+    a.remove();
+  }, 1500);
+}
+
+function escExcel(v){
+  return String(v ?? '').replace(/[&<>"']/g, c => (
+    { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]
+  ));
+}
+
+function tablaHtmlExcel(titulo, filas){
+  const headers = Object.keys((filas || [])[0] || {});
+  let html = '<h2>' + escExcel(titulo) + '</h2><table><thead><tr>';
+  headers.forEach(h => { html += '<th>' + escExcel(h) + '</th>'; });
+  html += '</tr></thead><tbody>';
+  (filas || []).forEach(row => {
+    html += '<tr>';
+    headers.forEach(h => {
+      const v = row[h];
+      const isNum = typeof v === 'number' && isFinite(v);
+      html += '<td' + (isNum ? ' style="mso-number-format:General;text-align:right"' : '') + '>' + escExcel(v) + '</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table><br>';
+  return html;
+}
+
+function exportarXlsFallback(nombre, secciones){
+  const body = (secciones || []).map(s => tablaHtmlExcel(s.nombre, s.filas)).join('');
+  const html = '<!doctype html><html><head><meta charset="UTF-8">' +
+    '<style>body{font-family:Arial,sans-serif}table{border-collapse:collapse;margin-bottom:18px}' +
+    'th{background:#1e3a8a;color:#fff;font-weight:bold}td,th{border:1px solid #94a3b8;padding:6px 8px;font-size:12px}' +
+    'h2{color:#1e3a8a}</style></head><body>' + body + '</body></html>';
+  descargarArchivo(nombre, '\ufeff' + html, 'application/vnd.ms-excel;charset=utf-8');
+}
+
 function exportarPlanComprasExcel(){
-  if(typeof XLSX === 'undefined'){ alert('La libreria de exportacion aun no carga. Intenta de nuevo.'); return; }
   const filas = planComprasFiltrados();
   if(!filas.length){ alert('No hay productos para exportar.'); return; }
   const datos = filas.map(p => ({
@@ -3378,9 +3425,8 @@ function exportarPlanComprasExcel(){
     Tickets: Number(p.tickets || 0),
     Prioridad: prioridadLabel(p.prioridad),
   }));
-  const wb = XLSX.utils.book_new();
   const resumen = planComprasCache.resumen || {};
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{
+  const resumenDatos = [{
     Desde: (planComprasCache.filtros || {}).desde || '',
     Hasta: (planComprasCache.filtros || {}).hasta || '',
     SemanasPeriodo: resumen.semanas_periodo || 0,
@@ -3390,9 +3436,23 @@ function exportarPlanComprasExcel(){
     CompraSugeridaSemana: resumen.compra_sugerida_total || 0,
     ProductosConColchon: resumen.productos_colchon || 0,
     Regla: 'ceil(vendido por semana); colchon maximo +2 si precio promedio <= 100 y el producto rota',
-  }]), 'Resumen');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(datos), 'Plan semanal');
-  XLSX.writeFile(wb, 'super-cheap-plan-compras-semanal-' + hoyISO() + '.xlsx');
+  }];
+  const nombreXlsx = 'super-cheap-plan-compras-semanal-' + hoyISO() + '.xlsx';
+  if(typeof XLSX !== 'undefined'){
+    try{
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumenDatos), 'Resumen');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(datos), 'Plan semanal');
+      XLSX.writeFile(wb, nombreXlsx);
+      return;
+    }catch(e){
+      console.warn('Fallo SheetJS, usando fallback XLS', e);
+    }
+  }
+  exportarXlsFallback(nombreXlsx.replace(/\.xlsx$/i, '.xls'), [
+    { nombre:'Resumen', filas:resumenDatos },
+    { nombre:'Plan semanal', filas:datos },
+  ]);
 }
 
 /* Exporta una lista (compras/gastos/nomina/ventas) a .xlsx con los filtros aplicados */
