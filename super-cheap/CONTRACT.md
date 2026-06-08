@@ -188,14 +188,19 @@ de 2 recibe +1; desde 2 piezas/semana recibe +2.
   regla:{base:String,colchon:String},
   resumen:{
     total_productos,productos_sugeridos,categorias,semanas_periodo,
-    piezas_semana_total,compra_sugerida_total,productos_colchon
+    piezas_semana_total,compra_sugerida_total,productos_colchon,
+    costo_estimado_semana,productos_con_costo,productos_sin_costo
   },
-  categorias:[{categoria,productos,piezas_semana,compra_sugerida_semana,importe_anio}],
+  categorias:[{
+    categoria,productos,piezas_semana,compra_sugerida_semana,importe_anio,
+    costo_estimado_semana,productos_sin_costo
+  }],
   productos:[{
     categoria,producto,clave,
     unidades_anio,importe_anio,semanas_con_venta,dias_con_venta,tickets,
     piezas_semana,precio_promedio,
     compra_base_semana,colchon_piezas,compra_sugerida_semana,
+    costo_unitario,costo_semana,costo_fecha,costo_origen,costo_proveedor,
     prioridad
   }]
 }

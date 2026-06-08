@@ -321,7 +321,7 @@ html.dark .purchase-plan-card{
 .purchase-plan-head{align-items:flex-start}
 .purchase-plan-summary{
   display:grid;
-  grid-template-columns:repeat(4,minmax(0,1fr));
+  grid-template-columns:repeat(auto-fit,minmax(142px,1fr));
   gap:10px;
   margin-bottom:12px;
 }
@@ -339,12 +339,13 @@ html.dark .plan-kpi{background:rgba(15,23,42,.54);border-color:rgba(125,211,252,
 .plan-kpi .s{font-size:11px;color:var(--text-3);margin-top:3px}
 .plan-toolbar{
   display:grid;
-  grid-template-columns:2fr 1.2fr 1fr;
+  grid-template-columns:2fr 1fr 1.2fr 1fr;
   gap:8px;
   margin:10px 0 12px;
 }
+.plan-actions{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
 .plan-note{font-size:11px;color:var(--text-3);margin:0 0 9px;line-height:1.45}
-.purchase-plan-table{min-width:860px}
+.purchase-plan-table{min-width:1120px}
 .purchase-plan-table tbody tr.plan-cat-row td{
   background:rgba(14,165,233,.09);
   color:var(--text);
@@ -357,6 +358,24 @@ html.dark .plan-kpi{background:rgba(15,23,42,.54);border-color:rgba(125,211,252,
 .plan-product{display:flex;flex-direction:column;gap:3px;min-width:260px}
 .plan-product strong{color:var(--text);font-size:13px;line-height:1.25}
 .plan-product span{font-size:11px;color:var(--text-3)}
+.plan-check{
+  width:18px;height:18px;accent-color:var(--navy);cursor:pointer;
+}
+.plan-qty{
+  width:76px;
+  min-height:32px;
+  padding:6px 8px;
+  text-align:right;
+  font-family:var(--font-d);
+  font-weight:800;
+}
+.plan-move{
+  width:30px;height:30px;padding:0;border-radius:8px;
+}
+.plan-move + .plan-move{margin-left:4px}
+.plan-cost-missing{color:var(--warn);font-weight:800;font-size:11px}
+.purchase-plan-row.is-out td{opacity:.56}
+.purchase-plan-row.is-in td{background:rgba(16,185,129,.04)}
 .plan-pill{
   display:inline-flex;
   align-items:center;
@@ -388,6 +407,7 @@ html.dark .plan-kpi{background:rgba(15,23,42,.54);border-color:rgba(125,211,252,
 @media(max-width:720px){
   .purchase-plan-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
   .plan-toolbar{grid-template-columns:1fr}
+  .plan-actions .btn{flex:1}
   .purchase-plan-head{display:grid}
   .purchase-plan-head .row-actions{width:100%}
   .purchase-plan-head .row-actions .btn{flex:1}
@@ -1120,7 +1140,7 @@ html.dark #header .range-pill.active { background:#f1f5f9; color:#1e3a8a; }
             <div id="plan-compras-subtitle" class="muted">Ventas reales de este anio, agrupadas por producto y categoria.</div>
           </div>
           <span class="row-actions">
-            <button class="btn btn-sm btn-ghost no-print" onclick="exportarPlanComprasExcel()">Exportar Excel</button>
+            <button class="btn btn-sm btn-ghost no-print" onclick="exportarPlanComprasExcel()">Exportar pedido</button>
             <button class="btn btn-sm btn-navy" onclick="cargarPlanCompras()">Actualizar</button>
           </span>
         </div>
@@ -1130,6 +1150,12 @@ html.dark #header .range-pill.active { background:#f1f5f9; color:#1e3a8a; }
         </div>
         <div class="plan-toolbar no-print">
           <input id="plan-q" class="inp" type="search" placeholder="Buscar producto o clave" oninput="renderPlanCompras()">
+          <select id="plan-alcance" class="inp" onchange="aplicarAlcancePlan(this.value)">
+            <option value="alta_media">Alta y media</option>
+            <option value="alta">Solo alta</option>
+            <option value="todos">Todos con compra</option>
+            <option value="seleccionados">Solo seleccionados</option>
+          </select>
           <select id="plan-categoria" class="inp" onchange="renderPlanCompras()">
             <option value="">Todas las categorias</option>
           </select>
@@ -1139,6 +1165,11 @@ html.dark #header .range-pill.active { background:#f1f5f9; color:#1e3a8a; }
             <option value="media">Media</option>
             <option value="baja">Baja</option>
           </select>
+        </div>
+        <div class="plan-actions no-print">
+          <button class="btn btn-sm btn-ghost" onclick="seleccionarPlanVisible(true)">Poner visibles</button>
+          <button class="btn btn-sm btn-ghost" onclick="seleccionarPlanVisible(false)">Quitar visibles</button>
+          <button class="btn btn-sm btn-ghost" onclick="restaurarCantidadesPlan()">Restaurar piezas</button>
         </div>
         <div id="plan-compras-list"><div class="loading-state">Cargando plan...</div></div>
       </div>
@@ -1916,6 +1947,8 @@ let planComprasCache = {
   filtros: null,
   detalle_disponible: true,
 };
+const PLAN_PEDIDO_KEY = 'sc_plan_compras_pedido_v1';
+let planPedidoState = { incluidos:{}, cantidades:{}, orden:[] };
 
 function planNum(n, dec=0){
   const v = Number(n);
@@ -1936,6 +1969,112 @@ function prioridadLabel(p){
   return 'Baja';
 }
 
+function jsArg(v){
+  return esc(JSON.stringify(String(v ?? '')));
+}
+
+function planKey(p){
+  return [p.clave || '', p.producto || '', p.categoria || ''].join('|');
+}
+
+function planItemByKey(k){
+  return (planComprasCache.productos || []).find(p => planKey(p) === k) || null;
+}
+
+function cargarPedidoPlanGuardado(){
+  try{
+    const raw = localStorage.getItem(PLAN_PEDIDO_KEY);
+    if(!raw) return { incluidos:{}, cantidades:{}, orden:[] };
+    const parsed = JSON.parse(raw);
+    return {
+      incluidos: parsed && parsed.incluidos && typeof parsed.incluidos === 'object' ? parsed.incluidos : {},
+      cantidades: parsed && parsed.cantidades && typeof parsed.cantidades === 'object' ? parsed.cantidades : {},
+      orden: Array.isArray(parsed && parsed.orden) ? parsed.orden : [],
+    };
+  }catch(_){
+    return { incluidos:{}, cantidades:{}, orden:[] };
+  }
+}
+
+function guardarPedidoPlan(){
+  try{ localStorage.setItem(PLAN_PEDIDO_KEY, JSON.stringify(planPedidoState)); }catch(_){}
+}
+
+function planQty(p){
+  const k = planKey(p);
+  const custom = Number(planPedidoState.cantidades[k]);
+  if(isFinite(custom) && custom >= 0) return custom;
+  return Number(p.compra_sugerida_semana || 0);
+}
+
+function planIncluido(p){
+  return planPedidoState.incluidos[planKey(p)] === true;
+}
+
+function planCostoSemanaEditado(p){
+  const costo = Number(p.costo_unitario);
+  if(!isFinite(costo) || costo <= 0) return null;
+  return Math.round(costo * planQty(p) * 100) / 100;
+}
+
+function productosPedidoPlan(){
+  const productos = planComprasCache.productos || [];
+  const porKey = new Map(productos.map(p => [planKey(p), p]));
+  const usados = new Set();
+  const ordenados = [];
+  (planPedidoState.orden || []).forEach(k => {
+    const p = porKey.get(k);
+    if(p && planIncluido(p)){
+      usados.add(k);
+      ordenados.push(p);
+    }
+  });
+  productos.forEach(p => {
+    const k = planKey(p);
+    if(!usados.has(k) && planIncluido(p)) ordenados.push(p);
+  });
+  return ordenados.filter(p => planQty(p) > 0);
+}
+
+function inicializarPedidoPlan(){
+  const guardado = cargarPedidoPlanGuardado();
+  const productos = planComprasCache.productos || [];
+  const keysActuales = new Set(productos.map(planKey));
+  planPedidoState = { incluidos:{}, cantidades:{}, orden:[] };
+  productos.forEach(p => {
+    const k = planKey(p);
+    const tieneGuardado = Object.prototype.hasOwnProperty.call(guardado.incluidos, k);
+    const defaultIn = (p.prioridad === 'alta' || p.prioridad === 'media') && Number(p.compra_sugerida_semana || 0) > 0;
+    planPedidoState.incluidos[k] = tieneGuardado ? guardado.incluidos[k] === true : defaultIn;
+    const q = Number(guardado.cantidades[k]);
+    planPedidoState.cantidades[k] = isFinite(q) && q >= 0 ? q : Number(p.compra_sugerida_semana || 0);
+  });
+  guardado.orden.forEach(k => { if(keysActuales.has(k)) planPedidoState.orden.push(k); });
+  productos.forEach(p => {
+    const k = planKey(p);
+    if(planPedidoState.incluidos[k] && !planPedidoState.orden.includes(k)) planPedidoState.orden.push(k);
+  });
+  guardarPedidoPlan();
+}
+
+function resumenPedidoPlan(){
+  return productosPedidoPlan().reduce((acc, p) => {
+    const qty = planQty(p);
+    acc.productos += 1;
+    acc.piezas += qty;
+    const costo = planCostoSemanaEditado(p);
+    if(costo !== null){
+      acc.costo += costo;
+      acc.conCosto += 1;
+    }else{
+      acc.sinCosto += 1;
+    }
+    if(p.prioridad === 'alta') acc.alta += 1;
+    if(p.prioridad === 'media') acc.media += 1;
+    return acc;
+  }, { productos:0, piezas:0, costo:0, conCosto:0, sinCosto:0, alta:0, media:0 });
+}
+
 function planResumenCard(k, v, s){
   return '<div class="plan-kpi"><div class="k">' + esc(k) + '</div><div class="v">' + esc(v) + '</div><div class="s">' + esc(s) + '</div></div>';
 }
@@ -1943,12 +2082,12 @@ function planResumenCard(k, v, s){
 function renderPlanResumen(){
   const box = $('plan-compras-summary');
   if(!box) return;
-  const r = planComprasCache.resumen || {};
+  const p = resumenPedidoPlan();
   box.innerHTML =
-    planResumenCard('Productos', planNum(r.productos_sugeridos || r.total_productos || 0), 'con compra semanal') +
-    planResumenCard('Venta semanal', planNum(r.piezas_semana_total || 0, 1), 'piezas promedio') +
-    planResumenCard('Compra sugerida', planNum(r.compra_sugerida_total || 0), 'piezas por semana') +
-    planResumenCard('Con colchon', planNum(r.productos_colchon || 0), 'precio <= $100 y rota');
+    planResumenCard('Pedido', planNum(p.productos), 'productos seleccionados') +
+    planResumenCard('Piezas', planNum(p.piezas, 0), 'compra semanal editable') +
+    planResumenCard('Costo semanal', mxn(p.costo), p.sinCosto ? (p.sinCosto + ' sin costo') : 'costos completos') +
+    planResumenCard('Alta / media', planNum(p.alta) + ' / ' + planNum(p.media), 'prioridad incluida');
 }
 
 function actualizarCategoriasPlan(){
@@ -1966,7 +2105,12 @@ function planComprasFiltrados(){
   const q = planTexto(($('plan-q') || {}).value || '');
   const categoria = (($('plan-categoria') || {}).value || '').trim();
   const prioridad = (($('plan-prioridad') || {}).value || '').trim();
-  return (planComprasCache.productos || []).filter(p => {
+  const alcance = (($('plan-alcance') || {}).value || 'alta_media').trim();
+  let base = alcance === 'seleccionados' ? productosPedidoPlan() : (planComprasCache.productos || []);
+  if(alcance === 'alta') base = base.filter(p => p.prioridad === 'alta' && Number(p.compra_sugerida_semana || 0) > 0);
+  if(alcance === 'alta_media') base = base.filter(p => (p.prioridad === 'alta' || p.prioridad === 'media') && Number(p.compra_sugerida_semana || 0) > 0);
+  if(alcance === 'todos') base = base.filter(p => Number(p.compra_sugerida_semana || 0) > 0);
+  return base.filter(p => {
     if(categoria && p.categoria !== categoria) return false;
     if(prioridad && p.prioridad !== prioridad) return false;
     if(q){
@@ -1975,6 +2119,76 @@ function planComprasFiltrados(){
     }
     return true;
   });
+}
+
+function setPlanIncluido(k, incluido){
+  const p = planItemByKey(k);
+  if(!p) return;
+  planPedidoState.incluidos[k] = !!incluido;
+  if(planPedidoState.cantidades[k] === undefined) planPedidoState.cantidades[k] = Number(p.compra_sugerida_semana || 0);
+  if(incluido && !planPedidoState.orden.includes(k)) planPedidoState.orden.push(k);
+  guardarPedidoPlan();
+  renderPlanCompras();
+}
+
+function setPlanCantidad(k, valor){
+  const qty = Math.max(0, Math.round((Number(valor) || 0) * 100) / 100);
+  planPedidoState.cantidades[k] = qty;
+  if(qty > 0) planPedidoState.incluidos[k] = true;
+  guardarPedidoPlan();
+  renderPlanCompras();
+}
+
+function moverPlan(k, dir){
+  const orden = planPedidoState.orden.filter(x => planPedidoState.incluidos[x] === true);
+  const idx = orden.indexOf(k);
+  const next = idx + dir;
+  if(idx < 0 || next < 0 || next >= orden.length) return;
+  const tmp = orden[idx];
+  orden[idx] = orden[next];
+  orden[next] = tmp;
+  const resto = planPedidoState.orden.filter(x => !orden.includes(x));
+  planPedidoState.orden = orden.concat(resto);
+  guardarPedidoPlan();
+  if($('plan-alcance')) $('plan-alcance').value = 'seleccionados';
+  renderPlanCompras();
+}
+
+function aplicarAlcancePlan(valor){
+  const productos = planComprasCache.productos || [];
+  if(valor === 'alta' || valor === 'alta_media' || valor === 'todos'){
+    productos.forEach(p => {
+      const k = planKey(p);
+      const compra = Number(p.compra_sugerida_semana || 0) > 0;
+      planPedidoState.incluidos[k] = compra && (
+        valor === 'todos' ||
+        (valor === 'alta' && p.prioridad === 'alta') ||
+        (valor === 'alta_media' && (p.prioridad === 'alta' || p.prioridad === 'media'))
+      );
+      if(planPedidoState.cantidades[k] === undefined) planPedidoState.cantidades[k] = Number(p.compra_sugerida_semana || 0);
+    });
+    planPedidoState.orden = productos.filter(p => planPedidoState.incluidos[planKey(p)]).map(planKey);
+    guardarPedidoPlan();
+  }
+  renderPlanCompras();
+}
+
+function seleccionarPlanVisible(incluir){
+  planComprasFiltrados().forEach(p => {
+    const k = planKey(p);
+    planPedidoState.incluidos[k] = !!incluir;
+    if(incluir && !planPedidoState.orden.includes(k)) planPedidoState.orden.push(k);
+  });
+  guardarPedidoPlan();
+  renderPlanCompras();
+}
+
+function restaurarCantidadesPlan(){
+  (planComprasCache.productos || []).forEach(p => {
+    planPedidoState.cantidades[planKey(p)] = Number(p.compra_sugerida_semana || 0);
+  });
+  guardarPedidoPlan();
+  renderPlanCompras();
 }
 
 function renderPlanCompras(){
@@ -1995,14 +2209,14 @@ function renderPlanCompras(){
   const visibles = filas.slice(0, maxRows);
   let html = '';
   if(filas.length > maxRows){
-    html += '<p class="plan-note">Mostrando ' + maxRows + ' de ' + filas.length + ' productos filtrados. El Excel exporta todos los filtrados.</p>';
+    html += '<p class="plan-note">Mostrando ' + maxRows + ' de ' + filas.length + ' productos. El Excel exporta el pedido seleccionado, en el orden que armes.</p>';
   }else{
-    html += '<p class="plan-note">Regla: comprar lo vendido por semana redondeado hacia arriba; colchon maximo de 2 piezas solo si el precio promedio no excede $100 y el producto si rota.</p>';
+    html += '<p class="plan-note">Marca productos, ajusta piezas y mueve el orden con flechas. El costo semanal usa el ultimo costo unitario disponible; si falta, queda como sin costo.</p>';
   }
   html += '<div class="tbl-wrap"><table class="purchase-plan-table"><thead><tr>' +
-    '<th>Producto</th><th style="text-align:right">Vend/sem</th><th style="text-align:right">Comprar/sem</th>' +
-    '<th style="text-align:right">+2</th><th style="text-align:right">Precio prom</th><th style="text-align:right">Vendidas anio</th>' +
-    '<th style="text-align:right">Semanas</th><th style="text-align:right">Dias</th><th>Prioridad</th>' +
+    '<th>Usar</th><th>Producto</th><th style="text-align:right">Vend/sem</th><th style="text-align:right">Pedir</th>' +
+    '<th style="text-align:right">Costo unit</th><th style="text-align:right">Costo sem</th><th style="text-align:right">Venta prom</th>' +
+    '<th style="text-align:right">Semanas</th><th>Prioridad</th><th>Orden</th>' +
     '</tr></thead><tbody>';
 
   let catActual = '';
@@ -2010,19 +2224,24 @@ function renderPlanCompras(){
     if(p.categoria !== catActual){
       catActual = p.categoria;
       const catRows = filas.filter(x => x.categoria === catActual);
-      const catComprar = catRows.reduce((sum, x) => sum + (Number(x.compra_sugerida_semana) || 0), 0);
-      html += '<tr class="plan-cat-row"><td colspan="9">' + esc(catActual) + ' | ' + catRows.length + ' productos | comprar ' + planNum(catComprar) + ' pzas/sem</td></tr>';
+      const catComprar = catRows.reduce((sum, x) => sum + (planIncluido(x) ? planQty(x) : 0), 0);
+      const catCosto = catRows.reduce((sum, x) => sum + (planIncluido(x) && planCostoSemanaEditado(x) !== null ? planCostoSemanaEditado(x) : 0), 0);
+      html += '<tr class="plan-cat-row"><td colspan="10">' + esc(catActual) + ' | ' + catRows.length + ' productos | pedir ' + planNum(catComprar) + ' pzas/sem | costo ' + mxn(catCosto) + '</td></tr>';
     }
-    html += '<tr class="purchase-plan-row">' +
+    const k = planKey(p);
+    const incluido = planIncluido(p);
+    const costoSemana = planCostoSemanaEditado(p);
+    html += '<tr class="purchase-plan-row ' + (incluido ? 'is-in' : 'is-out') + '">' +
+      '<td><input class="plan-check" type="checkbox" ' + (incluido ? 'checked' : '') + ' onchange="setPlanIncluido(' + jsArg(k) + ',this.checked)"></td>' +
       '<td><div class="plan-product"><strong>' + esc(p.producto) + '</strong><span>' + (p.clave ? 'Clave ' + esc(p.clave) + ' | ' : '') + esc(p.tickets || 0) + ' tickets</span></div></td>' +
       '<td class="td-num">' + planNum(p.piezas_semana, 2) + '</td>' +
-      '<td class="td-num"><span class="plan-pill">' + planNum(p.compra_sugerida_semana) + '</span></td>' +
-      '<td class="td-num">' + (Number(p.colchon_piezas) > 0 ? '+' + planNum(p.colchon_piezas) : '-') + '</td>' +
+      '<td class="td-num"><input class="inp plan-qty" type="number" min="0" step="1" value="' + esc(planQty(p)) + '" onchange="setPlanCantidad(' + jsArg(k) + ',this.value)"></td>' +
+      '<td class="td-num">' + (p.costo_unitario !== null ? mxn(p.costo_unitario) : '<span class="plan-cost-missing">Sin costo</span>') + '</td>' +
+      '<td class="td-num">' + (costoSemana !== null ? mxn(costoSemana) : '<span class="plan-cost-missing">Pendiente</span>') + '</td>' +
       '<td class="td-num">' + mxn(p.precio_promedio) + '</td>' +
-      '<td class="td-num">' + planNum(p.unidades_anio, 1) + '</td>' +
       '<td class="td-num">' + planNum(p.semanas_con_venta) + '</td>' +
-      '<td class="td-num">' + planNum(p.dias_con_venta) + '</td>' +
       '<td><span class="plan-priority ' + esc(p.prioridad) + '">' + esc(prioridadLabel(p.prioridad)) + '</span></td>' +
+      '<td><button class="btn btn-sm btn-ghost plan-move" title="Subir" onclick="moverPlan(' + jsArg(k) + ',-1)">↑</button><button class="btn btn-sm btn-ghost plan-move" title="Bajar" onclick="moverPlan(' + jsArg(k) + ',1)">↓</button></td>' +
       '</tr>';
   });
   html += '</tbody></table></div>';
@@ -2050,6 +2269,7 @@ async function cargarPlanCompras(){
       $('plan-compras-subtitle').textContent = 'Del ' + (f.desde || '') + ' al ' + (f.hasta || '') + ' | ' + (r.semanas_periodo || 0) + ' semanas | colchon maximo +2 hasta $100';
     }
     actualizarCategoriasPlan();
+    inicializarPedidoPlan();
     renderPlanCompras();
   }catch(e){
     planComprasCache = { productos: [], categorias: [], resumen: null, filtros: null, detalle_disponible: true };
@@ -3408,16 +3628,21 @@ function exportarXlsFallback(nombre, secciones){
 }
 
 function exportarPlanComprasExcel(){
-  const filas = planComprasFiltrados();
-  if(!filas.length){ alert('No hay productos para exportar.'); return; }
+  const filas = productosPedidoPlan();
+  if(!filas.length){ alert('No hay productos seleccionados para exportar.'); return; }
   const datos = filas.map(p => ({
     Categoria: p.categoria || '',
     Producto: p.producto || '',
     Clave: p.clave || '',
     PiezasVendidasSemana: Number(p.piezas_semana || 0),
-    CompraSugeridaSemana: Number(p.compra_sugerida_semana || 0),
+    CompraSugeridaSemanaOriginal: Number(p.compra_sugerida_semana || 0),
+    PiezasPedidoSemana: Number(planQty(p) || 0),
     ColchonPiezas: Number(p.colchon_piezas || 0),
-    PrecioPromedio: Number(p.precio_promedio || 0),
+    CostoUnitario: p.costo_unitario === null ? '' : Number(p.costo_unitario || 0),
+    CostoSemanal: planCostoSemanaEditado(p) === null ? '' : Number(planCostoSemanaEditado(p) || 0),
+    CostoOrigen: p.costo_origen || '',
+    CostoFecha: p.costo_fecha || '',
+    PrecioVentaPromedio: Number(p.precio_promedio || 0),
     UnidadesVendidasAnio: Number(p.unidades_anio || 0),
     ImporteVendidoAnio: Number(p.importe_anio || 0),
     SemanasConVenta: Number(p.semanas_con_venta || 0),
@@ -3425,17 +3650,17 @@ function exportarPlanComprasExcel(){
     Tickets: Number(p.tickets || 0),
     Prioridad: prioridadLabel(p.prioridad),
   }));
-  const resumen = planComprasCache.resumen || {};
+  const resumen = resumenPedidoPlan();
   const resumenDatos = [{
     Desde: (planComprasCache.filtros || {}).desde || '',
     Hasta: (planComprasCache.filtros || {}).hasta || '',
-    SemanasPeriodo: resumen.semanas_periodo || 0,
-    Productos: resumen.total_productos || 0,
-    ProductosConCompraSemanal: resumen.productos_sugeridos || 0,
-    PiezasSemanaVendidas: resumen.piezas_semana_total || 0,
-    CompraSugeridaSemana: resumen.compra_sugerida_total || 0,
-    ProductosConColchon: resumen.productos_colchon || 0,
-    Regla: 'ceil(vendido por semana); colchon maximo +2 si precio promedio <= 100 y el producto rota',
+    SemanasPeriodo: (planComprasCache.resumen || {}).semanas_periodo || 0,
+    ProductosSeleccionados: resumen.productos || 0,
+    PiezasPedidoSemana: resumen.piezas || 0,
+    CostoSemanalEstimado: resumen.costo || 0,
+    ProductosConCosto: resumen.conCosto || 0,
+    ProductosSinCosto: resumen.sinCosto || 0,
+    Regla: 'Pedido editable desde plan semanal; costos segun ultimo costo unitario disponible',
   }];
   const nombreXlsx = 'super-cheap-plan-compras-semanal-' + hoyISO() + '.xlsx';
   if(typeof XLSX !== 'undefined'){

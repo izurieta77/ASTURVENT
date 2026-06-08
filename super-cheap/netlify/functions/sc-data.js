@@ -96,6 +96,88 @@ function categoriaPlanCompra(categoria, producto, clave) {
   return match ? match.categoria : 'Sin categoria';
 }
 
+function textoPlanKey(s) {
+  return textoSinAcentos(s)
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function clavePlanKey(s) {
+  return textoPlanKey(s).replace(/\s+/g, '');
+}
+
+function parseJsonArraySeguro(s) {
+  if (!s) return [];
+  try {
+    const v = JSON.parse(String(s));
+    return Array.isArray(v) ? v : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function productoClaveDesdeConcepto(concepto) {
+  const desc = String((concepto && concepto.descripcion) || '').trim();
+  let producto = desc
+    .replace(/^\s*[\d.,]+\s+unidad(?:es)?\s*/i, '')
+    .trim();
+  let clave = String((concepto && (concepto.clave || concepto.codigo || concepto.sku)) || '').trim();
+  const m = /\(([^()]+)\)\s*$/.exec(producto);
+  if (m) {
+    if (!clave) clave = m[1].trim();
+    producto = producto.slice(0, m.index).trim();
+  }
+  return { producto, clave };
+}
+
+function costoDesdeConcepto(concepto) {
+  if (!concepto || typeof concepto !== 'object') return null;
+  const directo = Number(concepto.costo_unitario ?? concepto.costo ?? concepto.precio_compra ?? concepto.ultimo_costo ?? concepto.costo_promedio);
+  if (Number.isFinite(directo) && directo > 0) return directo;
+  const importe = Number(concepto.importe ?? concepto.total ?? concepto.monto);
+  const cantidad = Number(concepto.cantidad);
+  if (Number.isFinite(importe) && importe > 0 && Number.isFinite(cantidad) && cantidad > 0) {
+    return importe / cantidad;
+  }
+  return null;
+}
+
+async function costosUnitariosPlanCompra(hasta) {
+  const rows = await bq.query(
+    `SELECT fecha, proveedor, conceptos, raw_ocr
+       FROM \`${bq.DATASET}.compras\`
+      WHERE fecha <= @hasta
+        AND ${ACTIVO}
+        AND conceptos IS NOT NULL
+        AND conceptos != ''
+      ORDER BY fecha DESC
+      LIMIT 20000`,
+    { hasta },
+  );
+  const porClave = new Map();
+  const porProducto = new Map();
+  for (const row of rows) {
+    const conceptos = parseJsonArraySeguro(row.conceptos);
+    for (const c of conceptos) {
+      const costo = costoDesdeConcepto(c);
+      if (!(costo > 0)) continue;
+      const info = productoClaveDesdeConcepto(c);
+      const dato = {
+        costo: r2(costo),
+        fecha: row.fecha || null,
+        proveedor: row.proveedor || '',
+        origen: String(row.raw_ocr || '').startsWith('sicar_') ? 'SICAR' : 'ticket',
+      };
+      const claveKey = clavePlanKey(info.clave);
+      const productoKey = textoPlanKey(info.producto);
+      if (claveKey && !porClave.has(claveKey)) porClave.set(claveKey, dato);
+      if (productoKey && !porProducto.has(productoKey)) porProducto.set(productoKey, dato);
+    }
+  }
+  return { porClave, porProducto };
+}
+
 // Valida formato YYYY-MM-DD.
 function fechaValida(s) {
   return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
@@ -883,7 +965,8 @@ async function planComprasSemanal(cors, q) {
 
   const semanasPeriodo = Math.max(1, Math.ceil(diasEntre(desde, hasta) / 7));
   const ds = bq.DATASET;
-  const rows = await queryDetalleArticulos(
+  const [rows, costos] = await Promise.all([
+    queryDetalleArticulos(
     `SELECT COALESCE(NULLIF(TRIM(categoria), ''), NULLIF(TRIM(departamento), ''), 'Sin categoria') AS categoria,
             COALESCE(NULLIF(TRIM(producto), ''), NULLIF(TRIM(clave), ''), 'Sin nombre') AS producto,
             COALESCE(NULLIF(TRIM(clave), ''), '') AS clave,
@@ -902,8 +985,10 @@ async function planComprasSemanal(cors, q) {
      HAVING IFNULL(SUM(CAST(cantidad AS FLOAT64)), 0) > 0
       ORDER BY categoria ASC, piezas_semana DESC, importe_anio DESC
       LIMIT @limite`,
-    { desde, hasta, semanas_periodo: semanasPeriodo, limite },
-  );
+      { desde, hasta, semanas_periodo: semanasPeriodo, limite },
+    ),
+    costosUnitariosPlanCompra(hasta),
+  ]);
 
   if (rows === null) {
     return json(200, cors, {
@@ -918,6 +1003,9 @@ async function planComprasSemanal(cors, q) {
         piezas_semana_total: 0,
         compra_sugerida_total: 0,
         productos_colchon: 0,
+        costo_estimado_semana: 0,
+        productos_con_costo: 0,
+        productos_sin_costo: 0,
       },
       categorias: [],
       productos: [],
@@ -937,6 +1025,9 @@ async function planComprasSemanal(cors, q) {
     const prioridad = (piezasSemana >= 5 || semanasConVenta >= Math.max(4, semanasPeriodo * 0.55))
       ? 'alta'
       : (piezasSemana >= 1 || semanasConVenta >= 2 ? 'media' : 'baja');
+    const costo = costos.porClave.get(clavePlanKey(r.clave)) || costos.porProducto.get(textoPlanKey(r.producto));
+    const costoUnitario = costo && costo.costo > 0 ? r2(costo.costo) : null;
+    const costoSemana = costoUnitario !== null && compraSugerida > 0 ? r2(costoUnitario * compraSugerida) : null;
     return {
       categoria,
       producto: r.producto || 'Sin nombre',
@@ -951,6 +1042,11 @@ async function planComprasSemanal(cors, q) {
       compra_base_semana: baseCompra,
       colchon_piezas: colchon,
       compra_sugerida_semana: compraSugerida,
+      costo_unitario: costoUnitario,
+      costo_semana: costoSemana,
+      costo_fecha: costo ? costo.fecha : null,
+      costo_origen: costo ? costo.origen : '',
+      costo_proveedor: costo ? costo.proveedor : '',
       prioridad,
     };
   });
@@ -962,17 +1058,27 @@ async function planComprasSemanal(cors, q) {
     acc.piezas_semana_total = r2(acc.piezas_semana_total + p.piezas_semana);
     acc.compra_sugerida_total += p.compra_sugerida_semana;
     if (p.colchon_piezas > 0) acc.productos_colchon += 1;
+    if (p.costo_semana !== null) {
+      acc.costo_estimado_semana = r2(acc.costo_estimado_semana + p.costo_semana);
+      if (p.compra_sugerida_semana > 0) acc.productos_con_costo += 1;
+    } else if (p.compra_sugerida_semana > 0) {
+      acc.productos_sin_costo += 1;
+    }
     const cat = porCategoria.get(p.categoria) || {
       categoria: p.categoria,
       productos: 0,
       piezas_semana: 0,
       compra_sugerida_semana: 0,
       importe_anio: 0,
+      costo_estimado_semana: 0,
+      productos_sin_costo: 0,
     };
     cat.productos += 1;
     cat.piezas_semana = r2(cat.piezas_semana + p.piezas_semana);
     cat.compra_sugerida_semana += p.compra_sugerida_semana;
     cat.importe_anio = r2(cat.importe_anio + p.importe_anio);
+    if (p.costo_semana !== null) cat.costo_estimado_semana = r2(cat.costo_estimado_semana + p.costo_semana);
+    else if (p.compra_sugerida_semana > 0) cat.productos_sin_costo += 1;
     porCategoria.set(p.categoria, cat);
     return acc;
   }, {
@@ -983,6 +1089,9 @@ async function planComprasSemanal(cors, q) {
     piezas_semana_total: 0,
     compra_sugerida_total: 0,
     productos_colchon: 0,
+    costo_estimado_semana: 0,
+    productos_con_costo: 0,
+    productos_sin_costo: 0,
   });
   resumen.categorias = porCategoria.size;
 
