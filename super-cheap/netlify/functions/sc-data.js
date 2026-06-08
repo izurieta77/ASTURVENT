@@ -5,6 +5,7 @@
 //
 //   GET  ?action=resumen&desde=YYYY-MM-DD&hasta=YYYY-MM-DD
 //   GET  ?action=tendencia_compras_ventas&desde=&hasta=&agrupar=mes|dia
+//   GET  ?action=plan_compras_semanal&desde=&hasta=&limite=
 //   GET  ?action=lista&tabla=ventas|compras|gastos|nomina&desde=&hasta=
 //   GET  ?action=resumen_inventario_sicar&desde=&hasta=&agrupar=mes|dia
 //   GET  ?action=resumen_ajuste_inventario_olvidado&desde=&hasta=
@@ -65,7 +66,35 @@ const PATRON_VINOS_LICORES = [
   'ron', 'vodka', 'brandy', 'cognac', 'ginebra', 'gin', 'champagne', 'champana',
   'champaña', 'sidra', 'cerveza', 'cervezas', 'bacardi', 'buchanan', 'cuervo',
   'herradura', 'smirnoff', 'absolut', 'baileys', 'aperol', 'campari',
+  'modelo', 'victoria', 'tecate', 'pacifico', 'stella', 'miller', 'new mix',
 ].join('|');
+
+const CATEGORIAS_PLAN_COMPRA = [
+  { categoria: 'Vinos y licores', re: new RegExp(PATRON_VINOS_LICORES, 'i') },
+  { categoria: 'Comida preparada', re: /\b(torta|sandwich|baguette|cargo por porcion|mezcla de la casa)\b/i },
+  { categoria: 'Bebidas', re: /\b(coca|cocacola|pepsi|sprite|fanta|fresca|sidral|jarrito|boing|jumex|del valle|gatorade|powerade|suero|electrolit|agua|ciel|bonafont|refresco|jugo|leche|yogurt|yakult|amper|monster|fuze|delaware|penafiel|selz|vive 100|red bull|hielo)\b/i },
+  { categoria: 'Dulces y botanas', re: /\b(sabrita|ruffles|dorito|doritos|cheeto|cheetos|takis|chips|papas|cacahuate|botana|palomita|dulce|chocolate|mazapan|paleta|chicle|gomita|galleta|marinela|pinguino|gansito|submarino|bubu|kinder|snicker|m&m|panditas|bolzaza|churrumais|clorets|tutsi|picafresa|pikaros|kiyakis|pollitos|trident|orbit|alfajor|canasta)\b/i },
+  { categoria: 'Pan y reposteria', re: /\b(pan|bimbo|tortilla|tortillina|cuernito|concha|bolillo|telera|pastel|panque|reposteria|donita|donitas|donas|roles|nito|duo nito|rebanadas|crossantines|croissantines)\b/i },
+  { categoria: 'Abarrotes', re: /\b(arroz|frijol|aceite|atun|sardina|sopa|pasta|azucar|sal|cafe|huevo|mayonesa|catsup|salsa|lata|conserva|harina|cereal|avena|consome|knorr)\b/i },
+  { categoria: 'Limpieza', re: /\b(cloro|detergente|fabuloso|pinol|suavitel|jabon|escoba|trapeador|bolsa basura|limpiador|desinfectante|servitoalla)\b/i },
+  { categoria: 'Cuidado personal', re: /\b(shampoo|desodorante|pasta dental|cepillo|crema|rastrillo|papel higienico|toalla femenina|panal|panales|gel|talco)\b/i },
+  { categoria: 'Cigarros', re: /\b(cigarro|cigarros|marlboro|pall mall|camel|chesterfield|delicados|montana|lucky|faritos)\b/i },
+  { categoria: 'Papeleria y varios', re: /\b(estampa|estampas|sobre|pluma|lapiz|cuaderno|cinta|encendedor|vaso|plato|servilleta|popote|bolsa)\b/i },
+];
+
+function textoSinAcentos(s) {
+  return String(s || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function categoriaPlanCompra(categoria, producto, clave) {
+  const cat = String(categoria || '').trim();
+  if (cat && !/^sin categor/i.test(textoSinAcentos(cat))) return cat;
+  const texto = textoSinAcentos([producto, clave].filter(Boolean).join(' '));
+  const match = CATEGORIAS_PLAN_COMPRA.find(c => c.re.test(texto));
+  return match ? match.categoria : 'Sin categoria';
+}
 
 // Valida formato YYYY-MM-DD.
 function fechaValida(s) {
@@ -92,6 +121,7 @@ exports.handler = async (event) => {
       if (action === 'resumen')   return await resumen(cors, q);
       if (action === 'tendencia_compras_ventas' || action === 'tendencia_operativa') return await tendenciaComprasVentas(cors, q);
       if (action === 'ventas_panel') return await ventasPanel(cors, q);
+      if (action === 'plan_compras_semanal') return await planComprasSemanal(cors, q);
       if (action === 'lista')     return await lista(cors, q);
       if (action === 'resumen_inventario_sicar') return await resumenInventarioSicar(cors, q);
       if (action === 'resumen_ajuste_inventario_olvidado') return await resumenAjusteInventarioOlvidado(cors, q);
@@ -102,7 +132,7 @@ exports.handler = async (event) => {
         const url = await gcs.firmarUrl(String(q.ref || ''), 60);
         return json(url ? 200 : 404, cors, url ? { ok: true, url } : { ok: false, error: 'Foto no disponible' });
       }
-      return json(400, cors, { ok: false, error: 'action invalida (resumen|tendencia_compras_ventas|ventas_panel|lista|resumen_inventario_sicar|resumen_ajuste_inventario_olvidado|analitica|alertas|foto)' });
+      return json(400, cors, { ok: false, error: 'action invalida (resumen|tendencia_compras_ventas|ventas_panel|plan_compras_semanal|lista|resumen_inventario_sicar|resumen_ajuste_inventario_olvidado|analitica|alertas|foto)' });
     }
 
     if (event.httpMethod === 'POST') {
@@ -835,6 +865,141 @@ async function ventasPanel(cors, q) {
     cajas: (cajasRows || []).map(r => r.caja).filter(Boolean),
     pagos: pagosRows.map(r => r.forma_pago || 'desconocido').filter(Boolean),
     ultima_venta: ventasAgg.ultima_venta || null,
+  });
+}
+
+// =============================================================================
+// GET action=plan_compras_semanal
+// =============================================================================
+async function planComprasSemanal(cors, q) {
+  const hoy = hoyISO();
+  const desde = fechaValida(q.desde) ? q.desde : `${hoy.slice(0, 4)}-01-01`;
+  const hasta = fechaValida(q.hasta) ? q.hasta : hoy;
+  const limite = Math.min(3000, Math.max(50, Number(q.limite) || 1500));
+
+  if (desde > hasta) {
+    return json(400, cors, { ok: false, error: 'desde no puede ser mayor que hasta' });
+  }
+
+  const semanasPeriodo = Math.max(1, Math.ceil(diasEntre(desde, hasta) / 7));
+  const ds = bq.DATASET;
+  const rows = await queryDetalleArticulos(
+    `SELECT COALESCE(NULLIF(TRIM(categoria), ''), NULLIF(TRIM(departamento), ''), 'Sin categoria') AS categoria,
+            COALESCE(NULLIF(TRIM(producto), ''), NULLIF(TRIM(clave), ''), 'Sin nombre') AS producto,
+            COALESCE(NULLIF(TRIM(clave), ''), '') AS clave,
+            IFNULL(SUM(CAST(cantidad AS FLOAT64)), 0) AS unidades_anio,
+            IFNULL(SUM(CAST(importe AS FLOAT64)), 0) AS importe_anio,
+            COUNT(DISTINCT FORMAT_DATE('%G-%V', fecha)) AS semanas_con_venta,
+            COUNT(DISTINCT fecha) AS dias_con_venta,
+            COUNT(DISTINCT ticket_id) AS tickets,
+            ROUND(SAFE_DIVIDE(IFNULL(SUM(CAST(cantidad AS FLOAT64)), 0), @semanas_periodo), 2) AS piezas_semana,
+            ROUND(SAFE_DIVIDE(IFNULL(SUM(CAST(importe AS FLOAT64)), 0), NULLIF(IFNULL(SUM(CAST(cantidad AS FLOAT64)), 0), 0)), 2) AS precio_promedio
+       FROM \`${ds}.ventas_articulos\`
+      WHERE fecha BETWEEN @desde AND @hasta
+        AND ${ACTIVO}
+        AND (producto IS NOT NULL OR clave IS NOT NULL)
+      GROUP BY categoria, producto, clave
+     HAVING IFNULL(SUM(CAST(cantidad AS FLOAT64)), 0) > 0
+      ORDER BY categoria ASC, piezas_semana DESC, importe_anio DESC
+      LIMIT @limite`,
+    { desde, hasta, semanas_periodo: semanasPeriodo, limite },
+  );
+
+  if (rows === null) {
+    return json(200, cors, {
+      ok: true,
+      detalle_disponible: false,
+      filtros: { desde, hasta, limite },
+      resumen: {
+        total_productos: 0,
+        productos_sugeridos: 0,
+        categorias: 0,
+        semanas_periodo: semanasPeriodo,
+        piezas_semana_total: 0,
+        compra_sugerida_total: 0,
+        productos_colchon: 0,
+      },
+      categorias: [],
+      productos: [],
+    });
+  }
+
+  const productos = rows.map(r => {
+    const categoria = categoriaPlanCompra(r.categoria, r.producto, r.clave);
+    const precioPromedio = r2(r.precio_promedio);
+    const piezasSemana = r2(r.piezas_semana);
+    const baseCompra = piezasSemana >= 0.25 ? Math.ceil(piezasSemana) : 0;
+    const colchon = precioPromedio > 0 && precioPromedio <= 100
+      ? (piezasSemana >= 2 ? 2 : (piezasSemana >= 1 ? 1 : 0))
+      : 0;
+    const compraSugerida = baseCompra + colchon;
+    const semanasConVenta = Number(r.semanas_con_venta || 0);
+    const prioridad = (piezasSemana >= 5 || semanasConVenta >= Math.max(4, semanasPeriodo * 0.55))
+      ? 'alta'
+      : (piezasSemana >= 1 || semanasConVenta >= 2 ? 'media' : 'baja');
+    return {
+      categoria,
+      producto: r.producto || 'Sin nombre',
+      clave: r.clave || '',
+      unidades_anio: r2(r.unidades_anio),
+      importe_anio: r2(r.importe_anio),
+      semanas_con_venta: semanasConVenta,
+      dias_con_venta: Number(r.dias_con_venta || 0),
+      tickets: Number(r.tickets || 0),
+      piezas_semana: piezasSemana,
+      precio_promedio: precioPromedio,
+      compra_base_semana: baseCompra,
+      colchon_piezas: colchon,
+      compra_sugerida_semana: compraSugerida,
+      prioridad,
+    };
+  });
+
+  const porCategoria = new Map();
+  const resumen = productos.reduce((acc, p) => {
+    acc.total_productos += 1;
+    if (p.compra_sugerida_semana > 0) acc.productos_sugeridos += 1;
+    acc.piezas_semana_total = r2(acc.piezas_semana_total + p.piezas_semana);
+    acc.compra_sugerida_total += p.compra_sugerida_semana;
+    if (p.colchon_piezas > 0) acc.productos_colchon += 1;
+    const cat = porCategoria.get(p.categoria) || {
+      categoria: p.categoria,
+      productos: 0,
+      piezas_semana: 0,
+      compra_sugerida_semana: 0,
+      importe_anio: 0,
+    };
+    cat.productos += 1;
+    cat.piezas_semana = r2(cat.piezas_semana + p.piezas_semana);
+    cat.compra_sugerida_semana += p.compra_sugerida_semana;
+    cat.importe_anio = r2(cat.importe_anio + p.importe_anio);
+    porCategoria.set(p.categoria, cat);
+    return acc;
+  }, {
+    total_productos: 0,
+    productos_sugeridos: 0,
+    categorias: 0,
+    semanas_periodo: semanasPeriodo,
+    piezas_semana_total: 0,
+    compra_sugerida_total: 0,
+    productos_colchon: 0,
+  });
+  resumen.categorias = porCategoria.size;
+
+  const categorias = Array.from(porCategoria.values())
+    .sort((a, b) => b.compra_sugerida_semana - a.compra_sugerida_semana || a.categoria.localeCompare(b.categoria));
+
+  return json(200, cors, {
+    ok: true,
+    detalle_disponible: true,
+    filtros: { desde, hasta, limite },
+    regla: {
+      base: 'ceil(piezas vendidas por semana en el periodo)',
+      colchon: '+2 maximo si precio promedio no excede 100 pesos: +2 desde 2 pzas/sem, +1 desde 1 pza/sem, 0 si rota menos',
+    },
+    resumen,
+    categorias,
+    productos,
   });
 }
 

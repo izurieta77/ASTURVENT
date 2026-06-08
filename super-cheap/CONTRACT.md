@@ -171,6 +171,36 @@ Devuelve la serie agregada para auditar si compras rebasa ventas. Si `desde` no 
 }
 ```
 
+### GET `?action=plan_compras_semanal&desde=&hasta=&limite=`
+Devuelve una guia de compra semanal por producto, calculada desde `ventas_articulos`.
+Si `desde/hasta` no se mandan, usa el anio actual hasta hoy.
+La categoria usa la categoria/departamento de SICAR cuando existe; si viene vacia,
+se infiere de palabras del producto para separar bebidas, botanas, pan, abarrotes,
+limpieza, cuidado personal, comida preparada, cigarros, papeleria/varios y vinos/licores.
+Regla operativa: `ceil(piezas vendidas por semana)` y colchon maximo de `+2`
+piezas solo si el precio promedio vendido es mayor a 0, no excede $100 y el
+producto rota. Si rota menos de 1 pieza/semana no recibe colchon; de 1 a menos
+de 2 recibe +1; desde 2 piezas/semana recibe +2.
+```
+{ ok:true,
+  detalle_disponible:Boolean,
+  filtros:{desde,hasta,limite},
+  regla:{base:String,colchon:String},
+  resumen:{
+    total_productos,productos_sugeridos,categorias,semanas_periodo,
+    piezas_semana_total,compra_sugerida_total,productos_colchon
+  },
+  categorias:[{categoria,productos,piezas_semana,compra_sugerida_semana,importe_anio}],
+  productos:[{
+    categoria,producto,clave,
+    unidades_anio,importe_anio,semanas_con_venta,dias_con_venta,tickets,
+    piezas_semana,precio_promedio,
+    compra_base_semana,colchon_piezas,compra_sugerida_semana,
+    prioridad
+  }]
+}
+```
+
 ## sc-ingest v2 compatible
 - Sigue aceptando el contrato original `{ ventas:[ { fecha, ticket_id, total, forma_pago, items } ] }`.
 - Para evitar duplicados mas robustos, el bridge nuevo manda `venta_key` estable
