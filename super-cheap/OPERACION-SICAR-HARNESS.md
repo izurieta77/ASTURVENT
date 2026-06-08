@@ -77,21 +77,86 @@ El ajuste mensual puede tener 2 filas por mes:
 
 Si un mes no tiene vinos/licores detectados, puede quedar solo una fila.
 
+## Estado app y plan semanal validado
+
+Fecha de referencia: `2026-06-08`
+
+- Sitio produccion: `https://supercheapp.netlify.app`
+- Branch de trabajo: `codex/super-cheap-sicar-finish`
+- Commits recientes clave:
+  - `ec9ba63` - grafica compras vs ventas.
+  - `b54818d` - analisis agregado para rangos largos, evita graficas infinitas/tickets sueltos.
+  - `5aaf3c8` - prorrateo del mes actual y compras sinteticas por existencia negativa.
+  - `26e67d6` / `22512f9` - ajuste compras olvidadas bajado a 2% general y 1% vinos/licores.
+  - `9684822` - plan semanal de compras por producto desde `ventas_articulos`.
+  - `23580ef` - exportacion Excel corregida: SheetJS `xlsx@0.18.5` y fallback `.xls`.
+  - `4d315b5` - plan semanal editable: seleccionar/quitar, editar piezas, mover orden, costo semanal y exportar pedido.
+- El plan semanal se calcula con ventas YTD por producto:
+  - base: `ceil(piezas vendidas por semana)`;
+  - colchon maximo `+2` solo si precio promedio vendido no excede `$100` y el producto rota;
+  - de 1 a menos de 2 piezas/semana recibe `+1`; desde 2 piezas/semana recibe `+2`; menos de 1 no recibe colchon.
+- En la UI de Compras el pedido semanal es editable:
+  - alcance: Alta y media, Solo alta, Todos con compra, Solo seleccionados;
+  - checkbox para poner/quitar;
+  - cantidad editable por producto;
+  - flechas para ordenar;
+  - exporta el pedido seleccionado, no toda la base.
+- Costos del plan:
+  - `sc-data?action=plan_compras_semanal` busca el ultimo `costo_unitario` disponible en `compras.conceptos`;
+  - si no hay costo legible, el producto queda como pendiente y no se inventa costo.
+- Mejora posterior por agentes, `2026-06-08`:
+  - el selector de alcance ya no borra el pedido armado; solo filtra la vista;
+  - seleccionar/quitar visibles actua solo sobre filas realmente visibles;
+  - se agrego filtro de costo (`con costo` / `sin costo`);
+  - exportacion agrega proveedor, metodo/confianza y hoja `Pendientes costo`;
+  - el backend deduplica lineas de `ventas_articulos` por `fecha + ticket_id + linea_key`;
+  - el costo por nombre solo se usa si no hay clave y el nombre no parece ambiguo;
+  - cada producto devuelve `costo_confianza` (`alta`, `media`, `baja`, `sin_costo`).
+- Ultima verificacion real del endpoint publicado tras la ronda de agentes:
+  - deploy Netlify: `6a273c89ce26e36ce2cf6465`;
+  - productos: `1769`;
+  - productos sugeridos: `1110`;
+  - con costo: `1067`;
+  - sin costo sugerido: `43`;
+  - costo semanal estimado: `$51,448.34`.
+- HTML publicado verificado con:
+  - `plan-alcance`;
+  - `Costo semanal`;
+  - `moverPlan`;
+  - `exportarXlsFallback`;
+  - `xlsx@0.18.5/dist/xlsx.full.min.js`.
+
 ## Reanudacion rapida
 
 Cuando una sesion se corte, retomar asi:
 
 1. Revisar este archivo.
-2. Correr:
+2. Verificar estado git y no revertir cambios ajenos:
+   ```powershell
+   git status --short --branch
+   ```
+   Pendientes conocidos que pueden ser ajenos: `super-cheap/sicar-bridge/package-lock.json` y `tmp-drive-design/`.
+3. Correr:
    ```powershell
    cd super-cheap
    .\ops\run-sicar-harness.ps1 -Action snapshot
    ```
-3. Comparar `inventario`, `ajuste` y `comprasAjuste` contra `ops/state/last-sicar-harness.json`.
-4. Si el ajuste no esta insertado o quedo desfasado, correr:
+4. Comparar `inventario`, `ajuste` y `comprasAjuste` contra `ops/state/last-sicar-harness.json`.
+5. Si el ajuste no esta insertado o quedo desfasado, correr:
    ```powershell
    .\ops\run-sicar-harness.ps1 -Action generate-adjustment
    ```
+6. Para cambios del dashboard, validar antes de deploy:
+   ```powershell
+   node --check super-cheap\netlify\functions\sc-data.js
+   node -e "const fs=require('fs'); const html=fs.readFileSync('super-cheap/index.html','utf8'); const scripts=[...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)].map(m=>m[1]).join('\n'); new Function(scripts); console.log('inline script syntax ok');"
+   ```
+7. Desplegar desde `super-cheap/`:
+   ```powershell
+   cd super-cheap
+   npx netlify deploy --prod --dir .
+   ```
+   Si Netlify genera `super-cheap/package-lock.json`, limpiarlo antes de commit si no era parte del cambio.
 
 ## Deploy
 

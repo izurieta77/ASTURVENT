@@ -174,6 +174,8 @@ Devuelve la serie agregada para auditar si compras rebasa ventas. Si `desde` no 
 ### GET `?action=plan_compras_semanal&desde=&hasta=&limite=`
 Devuelve una guia de compra semanal por producto, calculada desde `ventas_articulos`.
 Si `desde/hasta` no se mandan, usa el anio actual hasta hoy.
+`limite` se fuerza entre 50 y 3000 productos. Antes de sumar ventas se deduplican
+lineas por `fecha + ticket_id + linea_key` para reducir riesgo de reingestas.
 La categoria usa la categoria/departamento de SICAR cuando existe; si viene vacia,
 se infiere de palabras del producto para separar bebidas, botanas, pan, abarrotes,
 limpieza, cuidado personal, comida preparada, cigarros, papeleria/varios y vinos/licores.
@@ -181,6 +183,10 @@ Regla operativa: `ceil(piezas vendidas por semana)` y colchon maximo de `+2`
 piezas solo si el precio promedio vendido es mayor a 0, no excede $100 y el
 producto rota. Si rota menos de 1 pieza/semana no recibe colchon; de 1 a menos
 de 2 recibe +1; desde 2 piezas/semana recibe +2.
+El costo semanal usa el ultimo `costo_unitario` disponible en `compras.conceptos`.
+Matching de costo: primero por clave normalizada; solo usa producto normalizado si
+no hay clave y el nombre no parece ambiguo. Si falta costo, se devuelve `null` y la
+UI lo marca como pendiente.
 ```
 { ok:true,
   detalle_disponible:Boolean,
@@ -201,6 +207,7 @@ de 2 recibe +1; desde 2 piezas/semana recibe +2.
     piezas_semana,precio_promedio,
     compra_base_semana,colchon_piezas,compra_sugerida_semana,
     costo_unitario,costo_semana,costo_fecha,costo_origen,costo_proveedor,
+    costo_metodo,costo_confianza,
     prioridad
   }]
 }

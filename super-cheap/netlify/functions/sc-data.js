@@ -156,7 +156,7 @@ async function costosUnitariosPlanCompra(hasta) {
     { hasta },
   );
   const porClave = new Map();
-  const porProducto = new Map();
+  const porProductoDatos = new Map();
   for (const row of rows) {
     const conceptos = parseJsonArraySeguro(row.conceptos);
     for (const c of conceptos) {
@@ -171,8 +171,19 @@ async function costosUnitariosPlanCompra(hasta) {
       };
       const claveKey = clavePlanKey(info.clave);
       const productoKey = textoPlanKey(info.producto);
-      if (claveKey && !porClave.has(claveKey)) porClave.set(claveKey, dato);
-      if (productoKey && !porProducto.has(productoKey)) porProducto.set(productoKey, dato);
+      if (claveKey && !porClave.has(claveKey)) porClave.set(claveKey, { ...dato, metodo: 'clave' });
+      if (productoKey) {
+        if (!porProductoDatos.has(productoKey)) {
+          porProductoDatos.set(productoKey, { dato: { ...dato, metodo: 'producto' }, claves: new Set() });
+        }
+        if (claveKey) porProductoDatos.get(productoKey).claves.add(claveKey);
+      }
+    }
+  }
+  const porProducto = new Map();
+  for (const [productoKey, entry] of porProductoDatos.entries()) {
+    if (productoKey.length >= 8 && entry.claves.size <= 1) {
+      porProducto.set(productoKey, entry.dato);
     }
   }
   return { porClave, porProducto };
@@ -967,7 +978,22 @@ async function planComprasSemanal(cors, q) {
   const ds = bq.DATASET;
   const [rows, costos] = await Promise.all([
     queryDetalleArticulos(
-    `SELECT COALESCE(NULLIF(TRIM(categoria), ''), NULLIF(TRIM(departamento), ''), 'Sin categoria') AS categoria,
+    `WITH dedup AS (
+       SELECT * EXCEPT(rn)
+       FROM (
+         SELECT *,
+                ROW_NUMBER() OVER (
+                  PARTITION BY fecha, ticket_id, COALESCE(linea_key, CONCAT(IFNULL(clave, ''), '|', IFNULL(producto, ''), '|', CAST(precio AS STRING)))
+                  ORDER BY ts DESC
+                ) AS rn
+           FROM \`${ds}.ventas_articulos\`
+          WHERE fecha BETWEEN @desde AND @hasta
+            AND ${ACTIVO}
+            AND (producto IS NOT NULL OR clave IS NOT NULL)
+       )
+       WHERE rn = 1
+     )
+     SELECT COALESCE(NULLIF(TRIM(categoria), ''), NULLIF(TRIM(departamento), ''), 'Sin categoria') AS categoria,
             COALESCE(NULLIF(TRIM(producto), ''), NULLIF(TRIM(clave), ''), 'Sin nombre') AS producto,
             COALESCE(NULLIF(TRIM(clave), ''), '') AS clave,
             IFNULL(SUM(CAST(cantidad AS FLOAT64)), 0) AS unidades_anio,
@@ -977,10 +1003,7 @@ async function planComprasSemanal(cors, q) {
             COUNT(DISTINCT ticket_id) AS tickets,
             ROUND(SAFE_DIVIDE(IFNULL(SUM(CAST(cantidad AS FLOAT64)), 0), @semanas_periodo), 2) AS piezas_semana,
             ROUND(SAFE_DIVIDE(IFNULL(SUM(CAST(importe AS FLOAT64)), 0), NULLIF(IFNULL(SUM(CAST(cantidad AS FLOAT64)), 0), 0)), 2) AS precio_promedio
-       FROM \`${ds}.ventas_articulos\`
-      WHERE fecha BETWEEN @desde AND @hasta
-        AND ${ACTIVO}
-        AND (producto IS NOT NULL OR clave IS NOT NULL)
+       FROM dedup
       GROUP BY categoria, producto, clave
      HAVING IFNULL(SUM(CAST(cantidad AS FLOAT64)), 0) > 0
       ORDER BY categoria ASC, piezas_semana DESC, importe_anio DESC
@@ -1025,9 +1048,14 @@ async function planComprasSemanal(cors, q) {
     const prioridad = (piezasSemana >= 5 || semanasConVenta >= Math.max(4, semanasPeriodo * 0.55))
       ? 'alta'
       : (piezasSemana >= 1 || semanasConVenta >= 2 ? 'media' : 'baja');
-    const costo = costos.porClave.get(clavePlanKey(r.clave)) || costos.porProducto.get(textoPlanKey(r.producto));
+    const claveKey = clavePlanKey(r.clave);
+    const productoKey = textoPlanKey(r.producto);
+    const costo = costos.porClave.get(claveKey) || (!claveKey ? costos.porProducto.get(productoKey) : null);
     const costoUnitario = costo && costo.costo > 0 ? r2(costo.costo) : null;
     const costoSemana = costoUnitario !== null && compraSugerida > 0 ? r2(costoUnitario * compraSugerida) : null;
+    const costoConfianza = costoUnitario === null
+      ? 'sin_costo'
+      : (costo.metodo === 'clave' && costo.origen === 'SICAR' ? 'alta' : (costo.metodo === 'clave' ? 'media' : 'baja'));
     return {
       categoria,
       producto: r.producto || 'Sin nombre',
@@ -1047,6 +1075,8 @@ async function planComprasSemanal(cors, q) {
       costo_fecha: costo ? costo.fecha : null,
       costo_origen: costo ? costo.origen : '',
       costo_proveedor: costo ? costo.proveedor : '',
+      costo_metodo: costo ? costo.metodo : '',
+      costo_confianza: costoConfianza,
       prioridad,
     };
   });

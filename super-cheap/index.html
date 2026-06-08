@@ -339,7 +339,7 @@ html.dark .plan-kpi{background:rgba(15,23,42,.54);border-color:rgba(125,211,252,
 .plan-kpi .s{font-size:11px;color:var(--text-3);margin-top:3px}
 .plan-toolbar{
   display:grid;
-  grid-template-columns:2fr 1fr 1.2fr 1fr;
+  grid-template-columns:2fr 1fr 1.2fr 1fr 1fr;
   gap:8px;
   margin:10px 0 12px;
 }
@@ -1165,8 +1165,15 @@ html.dark #header .range-pill.active { background:#f1f5f9; color:#1e3a8a; }
             <option value="media">Media</option>
             <option value="baja">Baja</option>
           </select>
+          <select id="plan-costo" class="inp" onchange="renderPlanCompras()">
+            <option value="">Todos los costos</option>
+            <option value="con">Con costo</option>
+            <option value="sin">Sin costo</option>
+          </select>
         </div>
         <div class="plan-actions no-print">
+          <button class="btn btn-sm btn-ghost" onclick="seleccionarPresetPlan('alta_media')">Seleccionar alta/media</button>
+          <button class="btn btn-sm btn-ghost" onclick="seleccionarPresetPlan('alta')">Seleccionar solo alta</button>
           <button class="btn btn-sm btn-ghost" onclick="seleccionarPlanVisible(true)">Poner visibles</button>
           <button class="btn btn-sm btn-ghost" onclick="seleccionarPlanVisible(false)">Quitar visibles</button>
           <button class="btn btn-sm btn-ghost" onclick="restaurarCantidadesPlan()">Restaurar piezas</button>
@@ -1949,6 +1956,7 @@ let planComprasCache = {
 };
 const PLAN_PEDIDO_KEY = 'sc_plan_compras_pedido_v1';
 let planPedidoState = { incluidos:{}, cantidades:{}, orden:[] };
+let planVisibleKeys = [];
 
 function planNum(n, dec=0){
   const v = Number(n);
@@ -2105,6 +2113,7 @@ function planComprasFiltrados(){
   const q = planTexto(($('plan-q') || {}).value || '');
   const categoria = (($('plan-categoria') || {}).value || '').trim();
   const prioridad = (($('plan-prioridad') || {}).value || '').trim();
+  const costoFiltro = (($('plan-costo') || {}).value || '').trim();
   const alcance = (($('plan-alcance') || {}).value || 'alta_media').trim();
   let base = alcance === 'seleccionados' ? productosPedidoPlan() : (planComprasCache.productos || []);
   if(alcance === 'alta') base = base.filter(p => p.prioridad === 'alta' && Number(p.compra_sugerida_semana || 0) > 0);
@@ -2113,6 +2122,8 @@ function planComprasFiltrados(){
   return base.filter(p => {
     if(categoria && p.categoria !== categoria) return false;
     if(prioridad && p.prioridad !== prioridad) return false;
+    if(costoFiltro === 'con' && p.costo_unitario === null) return false;
+    if(costoFiltro === 'sin' && p.costo_unitario !== null) return false;
     if(q){
       const t = planTexto([p.producto, p.clave, p.categoria].join(' '));
       if(!t.includes(q)) return false;
@@ -2155,6 +2166,10 @@ function moverPlan(k, dir){
 }
 
 function aplicarAlcancePlan(valor){
+  renderPlanCompras();
+}
+
+function seleccionarPresetPlan(valor){
   const productos = planComprasCache.productos || [];
   if(valor === 'alta' || valor === 'alta_media' || valor === 'todos'){
     productos.forEach(p => {
@@ -2170,11 +2185,13 @@ function aplicarAlcancePlan(valor){
     planPedidoState.orden = productos.filter(p => planPedidoState.incluidos[planKey(p)]).map(planKey);
     guardarPedidoPlan();
   }
+  if($('plan-alcance')) $('plan-alcance').value = 'seleccionados';
   renderPlanCompras();
 }
 
 function seleccionarPlanVisible(incluir){
-  planComprasFiltrados().forEach(p => {
+  const visibles = planVisibleKeys.map(planItemByKey).filter(Boolean);
+  visibles.forEach(p => {
     const k = planKey(p);
     planPedidoState.incluidos[k] = !!incluir;
     if(incluir && !planPedidoState.orden.includes(k)) planPedidoState.orden.push(k);
@@ -2196,17 +2213,20 @@ function renderPlanCompras(){
   if(!cont) return;
   renderPlanResumen();
   if(!planComprasCache.detalle_disponible){
+    planVisibleKeys = [];
     cont.innerHTML = '<div class="empty-state">Falta la tabla ventas_articulos. Cuando el bridge mande detalle por articulo, aqui se arma el plan.</div>';
     return;
   }
   const filas = planComprasFiltrados();
   if(!filas.length){
+    planVisibleKeys = [];
     cont.innerHTML = '<div class="empty-state">Ningun producto coincide con los filtros.</div>';
     return;
   }
 
   const maxRows = 700;
   const visibles = filas.slice(0, maxRows);
+  planVisibleKeys = visibles.map(planKey);
   let html = '';
   if(filas.length > maxRows){
     html += '<p class="plan-note">Mostrando ' + maxRows + ' de ' + filas.length + ' productos. El Excel exporta el pedido seleccionado, en el orden que armes.</p>';
@@ -2215,7 +2235,7 @@ function renderPlanCompras(){
   }
   html += '<div class="tbl-wrap"><table class="purchase-plan-table"><thead><tr>' +
     '<th>Usar</th><th>Producto</th><th style="text-align:right">Vend/sem</th><th style="text-align:right">Pedir</th>' +
-    '<th style="text-align:right">Costo unit</th><th style="text-align:right">Costo sem</th><th style="text-align:right">Venta prom</th>' +
+    '<th style="text-align:right">Costo unit</th><th style="text-align:right">Costo sem</th><th>Confianza</th><th style="text-align:right">Venta prom</th>' +
     '<th style="text-align:right">Semanas</th><th>Prioridad</th><th>Orden</th>' +
     '</tr></thead><tbody>';
 
@@ -2226,7 +2246,7 @@ function renderPlanCompras(){
       const catRows = filas.filter(x => x.categoria === catActual);
       const catComprar = catRows.reduce((sum, x) => sum + (planIncluido(x) ? planQty(x) : 0), 0);
       const catCosto = catRows.reduce((sum, x) => sum + (planIncluido(x) && planCostoSemanaEditado(x) !== null ? planCostoSemanaEditado(x) : 0), 0);
-      html += '<tr class="plan-cat-row"><td colspan="10">' + esc(catActual) + ' | ' + catRows.length + ' productos | pedir ' + planNum(catComprar) + ' pzas/sem | costo ' + mxn(catCosto) + '</td></tr>';
+      html += '<tr class="plan-cat-row"><td colspan="11">' + esc(catActual) + ' | ' + catRows.length + ' productos | pedir ' + planNum(catComprar) + ' pzas/sem | costo ' + mxn(catCosto) + '</td></tr>';
     }
     const k = planKey(p);
     const incluido = planIncluido(p);
@@ -2238,6 +2258,7 @@ function renderPlanCompras(){
       '<td class="td-num"><input class="inp plan-qty" type="number" min="0" step="1" value="' + esc(planQty(p)) + '" onchange="setPlanCantidad(' + jsArg(k) + ',this.value)"></td>' +
       '<td class="td-num">' + (p.costo_unitario !== null ? mxn(p.costo_unitario) : '<span class="plan-cost-missing">Sin costo</span>') + '</td>' +
       '<td class="td-num">' + (costoSemana !== null ? mxn(costoSemana) : '<span class="plan-cost-missing">Pendiente</span>') + '</td>' +
+      '<td><span class="chip chip-info">' + esc(p.costo_confianza || 'sin_costo') + '</span></td>' +
       '<td class="td-num">' + mxn(p.precio_promedio) + '</td>' +
       '<td class="td-num">' + planNum(p.semanas_con_venta) + '</td>' +
       '<td><span class="plan-priority ' + esc(p.prioridad) + '">' + esc(prioridadLabel(p.prioridad)) + '</span></td>' +
@@ -3641,6 +3662,9 @@ function exportarPlanComprasExcel(){
     CostoUnitario: p.costo_unitario === null ? '' : Number(p.costo_unitario || 0),
     CostoSemanal: planCostoSemanaEditado(p) === null ? '' : Number(planCostoSemanaEditado(p) || 0),
     CostoOrigen: p.costo_origen || '',
+    CostoMetodo: p.costo_metodo || '',
+    CostoConfianza: p.costo_confianza || '',
+    ProveedorCosto: p.costo_proveedor || '',
     CostoFecha: p.costo_fecha || '',
     PrecioVentaPromedio: Number(p.precio_promedio || 0),
     UnidadesVendidasAnio: Number(p.unidades_anio || 0),
@@ -3662,12 +3686,14 @@ function exportarPlanComprasExcel(){
     ProductosSinCosto: resumen.sinCosto || 0,
     Regla: 'Pedido editable desde plan semanal; costos segun ultimo costo unitario disponible',
   }];
+  const pendientesCosto = datos.filter(row => row.CostoUnitario === '');
   const nombreXlsx = 'super-cheap-plan-compras-semanal-' + hoyISO() + '.xlsx';
   if(typeof XLSX !== 'undefined'){
     try{
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumenDatos), 'Resumen');
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(datos), 'Plan semanal');
+      if(pendientesCosto.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pendientesCosto), 'Pendientes costo');
       XLSX.writeFile(wb, nombreXlsx);
       return;
     }catch(e){
@@ -3677,6 +3703,7 @@ function exportarPlanComprasExcel(){
   exportarXlsFallback(nombreXlsx.replace(/\.xlsx$/i, '.xls'), [
     { nombre:'Resumen', filas:resumenDatos },
     { nombre:'Plan semanal', filas:datos },
+    ...(pendientesCosto.length ? [{ nombre:'Pendientes costo', filas:pendientesCosto }] : []),
   ]);
 }
 
