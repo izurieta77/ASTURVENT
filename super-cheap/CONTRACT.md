@@ -213,6 +213,11 @@ UI lo marca como pendiente.
 }
 ```
 
+Exportacion del plan semanal:
+- Hoja `Plan semanal` con `Costo unitario` por producto e `Importe compra semanal`.
+- Hoja `Pendientes costo` cuando existan productos sin costo unitario registrado.
+- Las columnas de costo se exportan como moneda cuando SheetJS esta disponible.
+
 ## sc-ingest v2 compatible
 - Sigue aceptando el contrato original `{ ventas:[ { fecha, ticket_id, total, forma_pago, items } ] }`.
 - Para evitar duplicados mas robustos, el bridge nuevo manda `venta_key` estable

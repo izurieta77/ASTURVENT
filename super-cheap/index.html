@@ -3648,31 +3648,88 @@ function exportarXlsFallback(nombre, secciones){
   descargarArchivo(nombre, '\ufeff' + html, 'application/vnd.ms-excel;charset=utf-8');
 }
 
+function costoUnitarioPlanExport(p){
+  const costo = Number(p.costo_unitario);
+  return isFinite(costo) && costo > 0 ? Math.round(costo * 100) / 100 : 'Sin costo registrado';
+}
+
+function costoSemanalPlanExport(p){
+  const costo = planCostoSemanaEditado(p);
+  return costo === null ? 'Pendiente por costo' : Number(costo || 0);
+}
+
+function aplicarFormatoPlanExcel(ws, headers){
+  if(!ws || !ws['!ref'] || typeof XLSX === 'undefined') return;
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  const moneda = new Set(['Costo unitario', 'Importe compra semanal', 'Precio venta promedio', 'Importe vendido anio']);
+  const numero = new Set(['Piezas vendidas semana', 'Compra sugerida original', 'Piezas a comprar', 'Colchon piezas', 'Unidades vendidas anio', 'Semanas con venta', 'Dias con venta', 'Tickets']);
+  for(let c = range.s.c; c <= range.e.c; c++){
+    const header = headers[c] || '';
+    for(let r = range.s.r + 1; r <= range.e.r; r++){
+      const addr = XLSX.utils.encode_cell({ r, c });
+      const cell = ws[addr];
+      if(!cell || typeof cell.v !== 'number') continue;
+      if(moneda.has(header)) cell.z = '$#,##0.00';
+      else if(numero.has(header)) cell.z = '#,##0.00';
+    }
+  }
+  ws['!cols'] = headers.map(h => {
+    if(h === 'Producto') return { wch: 42 };
+    if(h === 'Categoria') return { wch: 22 };
+    if(h.includes('Costo') || h.includes('Importe') || h.includes('Precio')) return { wch: 18 };
+    if(h.includes('Proveedor')) return { wch: 26 };
+    return { wch: Math.min(Math.max(String(h).length + 3, 12), 24) };
+  });
+}
+
 function exportarPlanComprasExcel(){
   const filas = productosPedidoPlan();
   if(!filas.length){ alert('No hay productos seleccionados para exportar.'); return; }
+  const planHeaders = [
+    'Categoria',
+    'Producto',
+    'Clave',
+    'Costo unitario',
+    'Piezas a comprar',
+    'Importe compra semanal',
+    'Piezas vendidas semana',
+    'Compra sugerida original',
+    'Colchon piezas',
+    'Precio venta promedio',
+    'Unidades vendidas anio',
+    'Importe vendido anio',
+    'Semanas con venta',
+    'Dias con venta',
+    'Tickets',
+    'Prioridad',
+    'Confianza del costo',
+    'Proveedor del costo',
+    'Fecha del costo',
+    'Origen del costo',
+    'Metodo del costo',
+  ];
   const datos = filas.map(p => ({
     Categoria: p.categoria || '',
     Producto: p.producto || '',
     Clave: p.clave || '',
-    PiezasVendidasSemana: Number(p.piezas_semana || 0),
-    CompraSugeridaSemanaOriginal: Number(p.compra_sugerida_semana || 0),
-    PiezasPedidoSemana: Number(planQty(p) || 0),
-    ColchonPiezas: Number(p.colchon_piezas || 0),
-    CostoUnitario: p.costo_unitario === null ? '' : Number(p.costo_unitario || 0),
-    CostoSemanal: planCostoSemanaEditado(p) === null ? '' : Number(planCostoSemanaEditado(p) || 0),
-    CostoOrigen: p.costo_origen || '',
-    CostoMetodo: p.costo_metodo || '',
-    CostoConfianza: p.costo_confianza || '',
-    ProveedorCosto: p.costo_proveedor || '',
-    CostoFecha: p.costo_fecha || '',
-    PrecioVentaPromedio: Number(p.precio_promedio || 0),
-    UnidadesVendidasAnio: Number(p.unidades_anio || 0),
-    ImporteVendidoAnio: Number(p.importe_anio || 0),
-    SemanasConVenta: Number(p.semanas_con_venta || 0),
-    DiasConVenta: Number(p.dias_con_venta || 0),
+    'Costo unitario': costoUnitarioPlanExport(p),
+    'Piezas a comprar': Number(planQty(p) || 0),
+    'Importe compra semanal': costoSemanalPlanExport(p),
+    'Piezas vendidas semana': Number(p.piezas_semana || 0),
+    'Compra sugerida original': Number(p.compra_sugerida_semana || 0),
+    'Colchon piezas': Number(p.colchon_piezas || 0),
+    'Precio venta promedio': Number(p.precio_promedio || 0),
+    'Unidades vendidas anio': Number(p.unidades_anio || 0),
+    'Importe vendido anio': Number(p.importe_anio || 0),
+    'Semanas con venta': Number(p.semanas_con_venta || 0),
+    'Dias con venta': Number(p.dias_con_venta || 0),
     Tickets: Number(p.tickets || 0),
     Prioridad: prioridadLabel(p.prioridad),
+    'Confianza del costo': p.costo_confianza || '',
+    'Proveedor del costo': p.costo_proveedor || '',
+    'Fecha del costo': p.costo_fecha || '',
+    'Origen del costo': p.costo_origen || '',
+    'Metodo del costo': p.costo_metodo || '',
   }));
   const resumen = resumenPedidoPlan();
   const resumenDatos = [{
@@ -3686,14 +3743,20 @@ function exportarPlanComprasExcel(){
     ProductosSinCosto: resumen.sinCosto || 0,
     Regla: 'Pedido editable desde plan semanal; costos segun ultimo costo unitario disponible',
   }];
-  const pendientesCosto = datos.filter(row => row.CostoUnitario === '');
+  const pendientesCosto = datos.filter(row => row['Costo unitario'] === 'Sin costo registrado');
   const nombreXlsx = 'super-cheap-plan-compras-semanal-' + hoyISO() + '.xlsx';
   if(typeof XLSX !== 'undefined'){
     try{
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumenDatos), 'Resumen');
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(datos), 'Plan semanal');
-      if(pendientesCosto.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pendientesCosto), 'Pendientes costo');
+      const wsPlan = XLSX.utils.json_to_sheet(datos, { header: planHeaders });
+      aplicarFormatoPlanExcel(wsPlan, planHeaders);
+      XLSX.utils.book_append_sheet(wb, wsPlan, 'Plan semanal');
+      if(pendientesCosto.length){
+        const wsPendientes = XLSX.utils.json_to_sheet(pendientesCosto, { header: planHeaders });
+        aplicarFormatoPlanExcel(wsPendientes, planHeaders);
+        XLSX.utils.book_append_sheet(wb, wsPendientes, 'Pendientes costo');
+      }
       XLSX.writeFile(wb, nombreXlsx);
       return;
     }catch(e){
