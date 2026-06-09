@@ -215,6 +215,11 @@ UI lo marca como pendiente.
 
 Exportacion del plan semanal:
 - Hoja `Plan semanal` con `Costo unitario` por producto e `Importe compra semanal`.
+- Hoja `Flujo de caja` con venta semanal estimada, reserva de gastos, disponible
+  para compras, tope de compra hoy y compra autorizada.
+- Hojas operativas `Comprar hoy`, `Esta semana` y `Ventas buenas`, calculadas
+  contra el presupuesto editable de flujo de caja para evitar autorizar el plan
+  completo de golpe.
 - Hoja `Pendientes costo` cuando existan productos sin costo unitario registrado.
 - Las columnas de costo se exportan como moneda cuando SheetJS esta disponible.
 

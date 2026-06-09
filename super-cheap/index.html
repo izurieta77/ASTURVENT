@@ -337,6 +337,32 @@ html.dark .plan-kpi{background:rgba(15,23,42,.54);border-color:rgba(125,211,252,
 .plan-kpi .k{font-size:10px;font-weight:800;text-transform:uppercase;color:var(--text-3);letter-spacing:0}
 .plan-kpi .v{font-family:var(--font-d);font-size:24px;font-weight:900;color:var(--text);line-height:1.1;margin-top:7px}
 .plan-kpi .s{font-size:11px;color:var(--text-3);margin-top:3px}
+.plan-cashflow{
+  margin:0 0 12px;
+  padding:12px;
+  border:1px solid rgba(15,23,42,.10);
+  border-radius:var(--r-sm);
+  background:rgba(255,255,255,.62);
+}
+html.dark .plan-cashflow{background:rgba(15,23,42,.48);border-color:rgba(148,163,184,.22)}
+.plan-cashflow-head{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:8px;
+  margin-bottom:10px;
+}
+.plan-cashflow-title{font-size:12px;font-weight:900;color:var(--text);text-transform:uppercase;letter-spacing:0}
+.plan-cashflow-status{font-size:11px;color:var(--text-3);line-height:1.45}
+.plan-cashflow-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(132px,1fr));
+  gap:8px;
+}
+.plan-cashflow-grid label{display:flex;flex-direction:column;gap:4px}
+.plan-cashflow-grid span{font-size:10px;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:0}
+.plan-cashflow-grid .inp{min-height:36px;padding:7px 9px;font-family:var(--font-d);font-weight:800}
 .plan-toolbar{
   display:grid;
   grid-template-columns:2fr 1fr 1.2fr 1fr 1fr;
@@ -345,7 +371,7 @@ html.dark .plan-kpi{background:rgba(15,23,42,.54);border-color:rgba(125,211,252,
 }
 .plan-actions{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
 .plan-note{font-size:11px;color:var(--text-3);margin:0 0 9px;line-height:1.45}
-.purchase-plan-table{min-width:1120px}
+.purchase-plan-table{min-width:1420px}
 .purchase-plan-table tbody tr.plan-cat-row td{
   background:rgba(14,165,233,.09);
   color:var(--text);
@@ -376,6 +402,29 @@ html.dark .plan-kpi{background:rgba(15,23,42,.54);border-color:rgba(125,211,252,
 .plan-cost-missing{color:var(--warn);font-weight:800;font-size:11px}
 .purchase-plan-row.is-out td{opacity:.56}
 .purchase-plan-row.is-in td{background:rgba(16,185,129,.04)}
+.purchase-plan-row.stage-hoy td{box-shadow:inset 4px 0 0 rgba(220,38,38,.75)}
+.purchase-plan-row.stage-semana td{box-shadow:inset 4px 0 0 rgba(234,179,8,.78)}
+.purchase-plan-row.stage-buenas td{box-shadow:inset 4px 0 0 rgba(249,115,22,.70)}
+.purchase-plan-row.stage-cotizar td{box-shadow:inset 4px 0 0 rgba(124,58,237,.70)}
+.purchase-plan-row.stage-pausar td{box-shadow:inset 4px 0 0 rgba(100,116,139,.45)}
+.plan-stage{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:92px;
+  min-height:24px;
+  padding:3px 7px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:900;
+  border:1px solid var(--border);
+  white-space:nowrap;
+}
+.plan-stage.hoy{background:rgba(220,38,38,.12);color:#b91c1c;border-color:rgba(220,38,38,.28)}
+.plan-stage.semana{background:rgba(234,179,8,.16);color:#854d0e;border-color:rgba(234,179,8,.30)}
+.plan-stage.buenas{background:rgba(249,115,22,.13);color:#c2410c;border-color:rgba(249,115,22,.28)}
+.plan-stage.cotizar{background:rgba(124,58,237,.13);color:#6d28d9;border-color:rgba(124,58,237,.26)}
+.plan-stage.pausar{background:rgba(100,116,139,.12);color:var(--text-2);border-color:rgba(100,116,139,.22)}
 .plan-pill{
   display:inline-flex;
   align-items:center;
@@ -1147,6 +1196,23 @@ html.dark #header .range-pill.active { background:#f1f5f9; color:#1e3a8a; }
         <div id="plan-compras-msg"></div>
         <div id="plan-compras-summary" class="purchase-plan-summary">
           <div class="loading-state">Calculando plan semanal...</div>
+        </div>
+        <div class="plan-cashflow no-print">
+          <div class="plan-cashflow-head">
+            <div>
+              <div class="plan-cashflow-title">Flujo de caja para autorizar compra</div>
+              <div id="plan-flujo-status" class="plan-cashflow-status">Usa ventas esperadas menos reserva para separar el pedido por tramos.</div>
+            </div>
+            <button class="btn btn-sm btn-ghost" type="button" onclick="restaurarFlujoPlan()">Restaurar supuestos</button>
+          </div>
+          <div class="plan-cashflow-grid">
+            <label><span>Venta normal</span><input id="plan-flujo-venta-normal" class="inp" type="number" min="0" step="100" oninput="actualizarFlujoPlan()"></label>
+            <label><span>Dias normales</span><input id="plan-flujo-dias-normal" class="inp" type="number" min="0" step="1" oninput="actualizarFlujoPlan()"></label>
+            <label><span>Venta buena</span><input id="plan-flujo-venta-buena" class="inp" type="number" min="0" step="100" oninput="actualizarFlujoPlan()"></label>
+            <label><span>Dias buenos</span><input id="plan-flujo-dias-bueno" class="inp" type="number" min="0" step="1" oninput="actualizarFlujoPlan()"></label>
+            <label><span>Reserva gastos</span><input id="plan-flujo-reserva" class="inp" type="number" min="0" step="500" oninput="actualizarFlujoPlan()"></label>
+            <label><span>Tope compra hoy</span><input id="plan-flujo-tope-hoy" class="inp" type="number" min="0" step="500" oninput="actualizarFlujoPlan()"></label>
+          </div>
         </div>
         <div class="plan-toolbar no-print">
           <input id="plan-q" class="inp" type="search" placeholder="Buscar producto o clave" oninput="renderPlanCompras()">
@@ -1955,13 +2021,28 @@ let planComprasCache = {
   detalle_disponible: true,
 };
 const PLAN_PEDIDO_KEY = 'sc_plan_compras_pedido_v1';
+const PLAN_FLUJO_KEY = 'sc_plan_compras_flujo_v1';
+const PLAN_FLUJO_DEFAULT = {
+  ventaNormal: 5500,
+  diasNormal: 5,
+  ventaBuena: 9500,
+  diasBueno: 2,
+  reserva: 15000,
+  topeHoy: 15000,
+};
 let planPedidoState = { incluidos:{}, cantidades:{}, orden:[] };
+let planFlujoState = cargarFlujoPlanGuardado();
 let planVisibleKeys = [];
 
 function planNum(n, dec=0){
   const v = Number(n);
   if(!isFinite(v)) return '0';
   return v.toLocaleString('es-MX', { minimumFractionDigits:dec, maximumFractionDigits:dec });
+}
+
+function planR2(n){
+  const v = Number(n);
+  return isFinite(v) ? Math.round(v * 100) / 100 : 0;
 }
 
 function planTexto(s){
@@ -1987,6 +2068,85 @@ function planKey(p){
 
 function planItemByKey(k){
   return (planComprasCache.productos || []).find(p => planKey(p) === k) || null;
+}
+
+function normalizarFlujoPlan(raw){
+  const src = Object.assign({}, PLAN_FLUJO_DEFAULT, raw || {});
+  return {
+    ventaNormal: Math.max(0, planR2(src.ventaNormal)),
+    diasNormal: Math.max(0, planR2(src.diasNormal)),
+    ventaBuena: Math.max(0, planR2(src.ventaBuena)),
+    diasBueno: Math.max(0, planR2(src.diasBueno)),
+    reserva: Math.max(0, planR2(src.reserva)),
+    topeHoy: Math.max(0, planR2(src.topeHoy)),
+  };
+}
+
+function cargarFlujoPlanGuardado(){
+  try{
+    const raw = localStorage.getItem(PLAN_FLUJO_KEY);
+    return normalizarFlujoPlan(raw ? JSON.parse(raw) : null);
+  }catch(_){
+    return normalizarFlujoPlan();
+  }
+}
+
+function guardarFlujoPlan(){
+  try{ localStorage.setItem(PLAN_FLUJO_KEY, JSON.stringify(planFlujoState)); }catch(_){}
+}
+
+function setFlujoInput(id, value){
+  const el = $(id);
+  if(el && document.activeElement !== el) el.value = String(value);
+}
+
+function sincronizarFlujoInputs(){
+  setFlujoInput('plan-flujo-venta-normal', planFlujoState.ventaNormal);
+  setFlujoInput('plan-flujo-dias-normal', planFlujoState.diasNormal);
+  setFlujoInput('plan-flujo-venta-buena', planFlujoState.ventaBuena);
+  setFlujoInput('plan-flujo-dias-bueno', planFlujoState.diasBueno);
+  setFlujoInput('plan-flujo-reserva', planFlujoState.reserva);
+  setFlujoInput('plan-flujo-tope-hoy', planFlujoState.topeHoy);
+}
+
+function leerFlujoInputs(){
+  const val = (id, fallback) => {
+    const el = $(id);
+    const n = Number(el ? el.value : fallback);
+    return isFinite(n) ? n : fallback;
+  };
+  return normalizarFlujoPlan({
+    ventaNormal: val('plan-flujo-venta-normal', planFlujoState.ventaNormal),
+    diasNormal: val('plan-flujo-dias-normal', planFlujoState.diasNormal),
+    ventaBuena: val('plan-flujo-venta-buena', planFlujoState.ventaBuena),
+    diasBueno: val('plan-flujo-dias-bueno', planFlujoState.diasBueno),
+    reserva: val('plan-flujo-reserva', planFlujoState.reserva),
+    topeHoy: val('plan-flujo-tope-hoy', planFlujoState.topeHoy),
+  });
+}
+
+function actualizarFlujoPlan(){
+  planFlujoState = leerFlujoInputs();
+  guardarFlujoPlan();
+  renderPlanCompras();
+}
+
+function restaurarFlujoPlan(){
+  planFlujoState = normalizarFlujoPlan();
+  guardarFlujoPlan();
+  sincronizarFlujoInputs();
+  renderPlanCompras();
+}
+
+function resumenFlujoCajaPlan(){
+  const ventaSemanal = planR2((planFlujoState.ventaNormal * planFlujoState.diasNormal) + (planFlujoState.ventaBuena * planFlujoState.diasBueno));
+  const disponibleCompras = Math.max(0, planR2(ventaSemanal - planFlujoState.reserva));
+  const presupuestoHoy = Math.max(0, planR2(Math.min(disponibleCompras, planFlujoState.topeHoy)));
+  return Object.assign({}, planFlujoState, {
+    ventaSemanal,
+    disponibleCompras,
+    presupuestoHoy,
+  });
 }
 
 function cargarPedidoPlanGuardado(){
@@ -2023,6 +2183,174 @@ function planCostoSemanaEditado(p){
   const costo = Number(p.costo_unitario);
   if(!isFinite(costo) || costo <= 0) return null;
   return Math.round(costo * planQty(p) * 100) / 100;
+}
+
+function planCostoUnitarioNum(p){
+  const costo = Number(p.costo_unitario);
+  return isFinite(costo) && costo > 0 ? planR2(costo) : null;
+}
+
+function planVentaPotencial(p, qty){
+  const precio = Number(p.precio_promedio);
+  const piezas = Number(qty);
+  if(!isFinite(precio) || precio <= 0 || !isFinite(piezas) || piezas <= 0) return 0;
+  return planR2(precio * piezas);
+}
+
+function planUtilidadBruta(p, qty){
+  const costo = planCostoUnitarioNum(p);
+  if(costo === null) return null;
+  return planR2(planVentaPotencial(p, qty) - (costo * Number(qty || 0)));
+}
+
+function planTramoLabel(k){
+  if(k === 'hoy') return 'Comprar hoy';
+  if(k === 'semana') return 'Esta semana';
+  if(k === 'buenas') return 'Ventas buenas';
+  if(k === 'cotizar') return 'Cotizar costo';
+  return 'Pausar';
+}
+
+function planStageHtml(k){
+  const key = k || 'pausar';
+  return '<span class="plan-stage ' + esc(key) + '">' + esc(planTramoLabel(key)) + '</span>';
+}
+
+function planScoreCompra(r){
+  const prioridad = r.prioridad === 'alta' ? 3 : (r.prioridad === 'media' ? 2 : 1);
+  const confianza = r.costo_confianza === 'alta' ? 3 : (r.costo_confianza === 'media' ? 2 : 1);
+  const margen = r.costoPlan > 0 ? Math.max(-1, (r.utilidadPlan || 0) / r.costoPlan) : 0;
+  return (prioridad * 100000) + (confianza * 10000) + (margen * 1000) + (Number(r.piezas_semana || 0) * 100) + Math.max(0, r.utilidadPlan || 0);
+}
+
+function asignarPiezasPorPresupuesto(r, disponible){
+  if(!r.costoUnitario || disponible < r.costoUnitario || r.qtyRestante <= 0) return 0;
+  const maxPiezas = Math.floor((disponible + 0.0001) / r.costoUnitario);
+  return Math.max(0, Math.min(r.qtyRestante, maxPiezas));
+}
+
+function calcularPlanFlujo(){
+  const flujo = resumenFlujoCajaPlan();
+  const records = productosPedidoPlan().map(p => {
+    const qtyPlan = Math.max(0, planR2(planQty(p)));
+    const costoUnitario = planCostoUnitarioNum(p);
+    const costoPlan = costoUnitario === null ? null : planR2(costoUnitario * qtyPlan);
+    const ventaPlan = planVentaPotencial(p, qtyPlan);
+    const utilidadPlan = costoUnitario === null ? null : planR2(ventaPlan - (costoUnitario * qtyPlan));
+    return {
+      key: planKey(p),
+      producto: p,
+      categoria: p.categoria || 'Sin categoria',
+      nombre: p.producto || '',
+      clave: p.clave || '',
+      prioridad: p.prioridad || 'baja',
+      piezas_semana: Number(p.piezas_semana || 0),
+      costo_confianza: p.costo_confianza || 'sin_costo',
+      qtyPlan,
+      qtyRestante: qtyPlan,
+      costoUnitario,
+      costoPlan,
+      ventaPlan,
+      utilidadPlan,
+      qtyHoy: 0,
+      costoHoy: 0,
+      ventaHoy: 0,
+      utilidadHoy: 0,
+      qtySemana: 0,
+      costoSemanaAut: 0,
+      qtyBuenas: 0,
+      costoBuenas: 0,
+      qtyPausar: 0,
+      costoPausar: 0,
+      tramo: costoUnitario === null ? 'cotizar' : 'pausar',
+    };
+  });
+
+  const conCosto = records
+    .filter(r => r.costoUnitario !== null && r.qtyPlan > 0)
+    .sort((a, b) => planScoreCompra(b) - planScoreCompra(a));
+
+  let restanteHoy = flujo.presupuestoHoy;
+  conCosto.forEach(r => {
+    const qty = asignarPiezasPorPresupuesto(r, restanteHoy);
+    if(qty > 0){
+      r.qtyHoy = planR2(qty);
+      r.costoHoy = planR2(qty * r.costoUnitario);
+      r.ventaHoy = planVentaPotencial(r.producto, qty);
+      r.utilidadHoy = planUtilidadBruta(r.producto, qty) || 0;
+      r.qtyRestante = planR2(r.qtyRestante - qty);
+      restanteHoy = planR2(restanteHoy - r.costoHoy);
+    }
+  });
+
+  const costoHoyTotal = records.reduce((sum, r) => planR2(sum + r.costoHoy), 0);
+  let restanteSemana = Math.max(0, planR2(flujo.disponibleCompras - costoHoyTotal));
+  conCosto.forEach(r => {
+    const qty = asignarPiezasPorPresupuesto(r, restanteSemana);
+    if(qty > 0){
+      r.qtySemana = planR2(qty);
+      r.costoSemanaAut = planR2(qty * r.costoUnitario);
+      r.qtyRestante = planR2(r.qtyRestante - qty);
+      restanteSemana = planR2(restanteSemana - r.costoSemanaAut);
+    }
+  });
+
+  records.forEach(r => {
+    if(r.costoUnitario === null){
+      r.tramo = 'cotizar';
+      return;
+    }
+    if(r.qtyRestante > 0){
+      if((r.utilidadPlan || 0) > 0 && r.prioridad !== 'baja'){
+        r.qtyBuenas = r.qtyRestante;
+        r.costoBuenas = planR2(r.qtyBuenas * r.costoUnitario);
+      }else{
+        r.qtyPausar = r.qtyRestante;
+        r.costoPausar = planR2(r.qtyPausar * r.costoUnitario);
+      }
+    }
+    r.tramo = r.qtyHoy > 0 ? 'hoy'
+      : (r.qtySemana > 0 ? 'semana'
+      : (r.qtyBuenas > 0 ? 'buenas' : 'pausar'));
+  });
+
+  const totales = records.reduce((acc, r) => {
+    acc.productos += 1;
+    acc.piezas += r.qtyPlan;
+    if(r.costoPlan !== null){
+      acc.costoPlan = planR2(acc.costoPlan + r.costoPlan);
+      acc.conCosto += 1;
+    }else{
+      acc.sinCosto += 1;
+    }
+    if(r.qtyHoy > 0){
+      acc.productosHoy += 1;
+      acc.piezasHoy = planR2(acc.piezasHoy + r.qtyHoy);
+      acc.costoHoy = planR2(acc.costoHoy + r.costoHoy);
+      acc.ventaHoy = planR2(acc.ventaHoy + r.ventaHoy);
+      acc.utilidadHoy = planR2(acc.utilidadHoy + r.utilidadHoy);
+    }
+    if(r.qtySemana > 0){
+      acc.productosSemana += 1;
+      acc.costoSemana = planR2(acc.costoSemana + r.costoSemanaAut);
+    }
+    if(r.qtyBuenas > 0){
+      acc.productosBuenas += 1;
+      acc.costoBuenas = planR2(acc.costoBuenas + r.costoBuenas);
+    }
+    if(r.tramo === 'cotizar') acc.cotizar += 1;
+    if(r.tramo === 'pausar') acc.pausar += 1;
+    if(r.prioridad === 'alta') acc.alta += 1;
+    if(r.prioridad === 'media') acc.media += 1;
+    return acc;
+  }, {
+    productos:0,piezas:0,costoPlan:0,conCosto:0,sinCosto:0,
+    productosHoy:0,piezasHoy:0,costoHoy:0,ventaHoy:0,utilidadHoy:0,
+    productosSemana:0,costoSemana:0,productosBuenas:0,costoBuenas:0,
+    cotizar:0,pausar:0,alta:0,media:0,
+  });
+  const porKey = new Map(records.map(r => [r.key, r]));
+  return { flujo, records, porKey, totales };
 }
 
 function productosPedidoPlan(){
@@ -2087,15 +2415,32 @@ function planResumenCard(k, v, s){
   return '<div class="plan-kpi"><div class="k">' + esc(k) + '</div><div class="v">' + esc(v) + '</div><div class="s">' + esc(s) + '</div></div>';
 }
 
+function renderPlanFlujoStatus(plan){
+  sincronizarFlujoInputs();
+  const box = $('plan-flujo-status');
+  if(!box) return;
+  const t = plan.totales || {};
+  const f = plan.flujo || {};
+  const pctPlan = f.ventaSemanal > 0 ? ((t.costoPlan || 0) / f.ventaSemanal * 100) : 0;
+  const pctHoy = f.ventaSemanal > 0 ? ((t.costoHoy || 0) / f.ventaSemanal * 100) : 0;
+  const restante = Math.max(0, planR2((f.disponibleCompras || 0) - (t.costoHoy || 0)));
+  box.textContent = 'Plan completo: ' + planNum(pctPlan, 1) + '% de venta semanal. Compra hoy: ' + planNum(pctHoy, 1) + '%; queda ' + mxn(restante) + ' para semana si se cubre reserva.';
+}
+
 function renderPlanResumen(){
   const box = $('plan-compras-summary');
   if(!box) return;
-  const p = resumenPedidoPlan();
+  const plan = calcularPlanFlujo();
+  renderPlanFlujoStatus(plan);
+  const p = plan.totales;
+  const f = plan.flujo;
   box.innerHTML =
-    planResumenCard('Pedido', planNum(p.productos), 'productos seleccionados') +
-    planResumenCard('Piezas', planNum(p.piezas, 0), 'compra semanal editable') +
-    planResumenCard('Costo semanal', mxn(p.costo), p.sinCosto ? (p.sinCosto + ' sin costo') : 'costos completos') +
-    planResumenCard('Alta / media', planNum(p.alta) + ' / ' + planNum(p.media), 'prioridad incluida');
+    planResumenCard('Plan completo', mxn(p.costoPlan), planNum(p.productos) + ' productos | ' + planNum(p.sinCosto) + ' sin costo') +
+    planResumenCard('Venta semana', mxn(f.ventaSemanal), planNum(f.diasNormal + f.diasBueno, 0) + ' dias estimados') +
+    planResumenCard('Reserva', mxn(f.reserva), 'nomina, luz y gastos') +
+    planResumenCard('Disponible compras', mxn(f.disponibleCompras), f.disponibleCompras >= p.costoPlan ? 'cubre plan completo' : 'hay que comprar por tramos') +
+    planResumenCard('Comprar hoy', mxn(p.costoHoy), planNum(p.productosHoy) + ' productos | ' + planNum(p.piezasHoy) + ' piezas') +
+    planResumenCard('Utilidad hoy', mxn(p.utilidadHoy), mxn(p.ventaHoy) + ' venta potencial');
 }
 
 function actualizarCategoriasPlan(){
@@ -2223,19 +2568,21 @@ function renderPlanCompras(){
     cont.innerHTML = '<div class="empty-state">Ningun producto coincide con los filtros.</div>';
     return;
   }
+  const planFlujo = calcularPlanFlujo();
 
   const maxRows = 700;
   const visibles = filas.slice(0, maxRows);
   planVisibleKeys = visibles.map(planKey);
   let html = '';
   if(filas.length > maxRows){
-    html += '<p class="plan-note">Mostrando ' + maxRows + ' de ' + filas.length + ' productos. El Excel exporta el pedido seleccionado, en el orden que armes.</p>';
+    html += '<p class="plan-note">Mostrando ' + maxRows + ' de ' + filas.length + ' productos. El Excel exporta el pedido seleccionado con tramos de flujo de caja.</p>';
   }else{
-    html += '<p class="plan-note">Marca productos, ajusta piezas y mueve el orden con flechas. El costo semanal usa el ultimo costo unitario disponible; si falta, queda como sin costo.</p>';
+    html += '<p class="plan-note">Rojo compra hoy; amarillo esta semana; naranja solo con ventas buenas; morado cotizar costo; gris pausar.</p>';
   }
   html += '<div class="tbl-wrap"><table class="purchase-plan-table"><thead><tr>' +
-    '<th>Usar</th><th>Producto</th><th style="text-align:right">Vend/sem</th><th style="text-align:right">Pedir</th>' +
-    '<th style="text-align:right">Costo unit</th><th style="text-align:right">Costo sem</th><th>Confianza</th><th style="text-align:right">Venta prom</th>' +
+    '<th>Usar</th><th>Tramo</th><th>Producto</th><th style="text-align:right">Vend/sem</th><th style="text-align:right">Pedir</th>' +
+    '<th style="text-align:right">Hoy</th><th style="text-align:right">Costo unit</th><th style="text-align:right">Costo sem</th><th style="text-align:right">Importe hoy</th>' +
+    '<th>Confianza</th><th style="text-align:right">Venta prom</th><th style="text-align:right">Utilidad hoy</th>' +
     '<th style="text-align:right">Semanas</th><th>Prioridad</th><th>Orden</th>' +
     '</tr></thead><tbody>';
 
@@ -2246,20 +2593,29 @@ function renderPlanCompras(){
       const catRows = filas.filter(x => x.categoria === catActual);
       const catComprar = catRows.reduce((sum, x) => sum + (planIncluido(x) ? planQty(x) : 0), 0);
       const catCosto = catRows.reduce((sum, x) => sum + (planIncluido(x) && planCostoSemanaEditado(x) !== null ? planCostoSemanaEditado(x) : 0), 0);
-      html += '<tr class="plan-cat-row"><td colspan="11">' + esc(catActual) + ' | ' + catRows.length + ' productos | pedir ' + planNum(catComprar) + ' pzas/sem | costo ' + mxn(catCosto) + '</td></tr>';
+      const catHoy = catRows.reduce((sum, x) => {
+        const r = planFlujo.porKey.get(planKey(x));
+        return planR2(sum + (r ? r.costoHoy : 0));
+      }, 0);
+      html += '<tr class="plan-cat-row"><td colspan="15">' + esc(catActual) + ' | ' + catRows.length + ' productos | pedir ' + planNum(catComprar) + ' pzas/sem | costo ' + mxn(catCosto) + ' | hoy ' + mxn(catHoy) + '</td></tr>';
     }
     const k = planKey(p);
     const incluido = planIncluido(p);
     const costoSemana = planCostoSemanaEditado(p);
-    html += '<tr class="purchase-plan-row ' + (incluido ? 'is-in' : 'is-out') + '">' +
+    const flujoItem = planFlujo.porKey.get(k) || { tramo:'pausar', qtyHoy:0, costoHoy:0, utilidadHoy:0 };
+    html += '<tr class="purchase-plan-row ' + (incluido ? 'is-in' : 'is-out') + ' stage-' + esc(flujoItem.tramo || 'pausar') + '">' +
       '<td><input class="plan-check" type="checkbox" ' + (incluido ? 'checked' : '') + ' onchange="setPlanIncluido(' + jsArg(k) + ',this.checked)"></td>' +
+      '<td>' + planStageHtml(incluido ? flujoItem.tramo : 'pausar') + '</td>' +
       '<td><div class="plan-product"><strong>' + esc(p.producto) + '</strong><span>' + (p.clave ? 'Clave ' + esc(p.clave) + ' | ' : '') + esc(p.tickets || 0) + ' tickets</span></div></td>' +
       '<td class="td-num">' + planNum(p.piezas_semana, 2) + '</td>' +
       '<td class="td-num"><input class="inp plan-qty" type="number" min="0" step="1" value="' + esc(planQty(p)) + '" onchange="setPlanCantidad(' + jsArg(k) + ',this.value)"></td>' +
+      '<td class="td-num">' + (flujoItem.qtyHoy > 0 ? planNum(flujoItem.qtyHoy, 0) : '-') + '</td>' +
       '<td class="td-num">' + (p.costo_unitario !== null ? mxn(p.costo_unitario) : '<span class="plan-cost-missing">Sin costo</span>') + '</td>' +
       '<td class="td-num">' + (costoSemana !== null ? mxn(costoSemana) : '<span class="plan-cost-missing">Pendiente</span>') + '</td>' +
+      '<td class="td-num">' + (flujoItem.costoHoy > 0 ? mxn(flujoItem.costoHoy) : '-') + '</td>' +
       '<td><span class="chip chip-info">' + esc(p.costo_confianza || 'sin_costo') + '</span></td>' +
       '<td class="td-num">' + mxn(p.precio_promedio) + '</td>' +
+      '<td class="td-num">' + (flujoItem.qtyHoy > 0 ? mxn(flujoItem.utilidadHoy) : '-') + '</td>' +
       '<td class="td-num">' + planNum(p.semanas_con_venta) + '</td>' +
       '<td><span class="plan-priority ' + esc(p.prioridad) + '">' + esc(prioridadLabel(p.prioridad)) + '</span></td>' +
       '<td><button class="btn btn-sm btn-ghost plan-move" title="Subir" onclick="moverPlan(' + jsArg(k) + ',-1)">↑</button><button class="btn btn-sm btn-ghost plan-move" title="Bajar" onclick="moverPlan(' + jsArg(k) + ',1)">↓</button></td>' +
@@ -3649,8 +4005,8 @@ function exportarXlsFallback(nombre, secciones){
 }
 
 function costoUnitarioPlanExport(p){
-  const costo = Number(p.costo_unitario);
-  return isFinite(costo) && costo > 0 ? Math.round(costo * 100) / 100 : 'Sin costo registrado';
+  const costo = planCostoUnitarioNum(p);
+  return costo === null ? 'Sin costo registrado' : costo;
 }
 
 function costoSemanalPlanExport(p){
@@ -3661,8 +4017,16 @@ function costoSemanalPlanExport(p){
 function aplicarFormatoPlanExcel(ws, headers){
   if(!ws || !ws['!ref'] || typeof XLSX === 'undefined') return;
   const range = XLSX.utils.decode_range(ws['!ref']);
-  const moneda = new Set(['Costo unitario', 'Importe compra semanal', 'Precio venta promedio', 'Importe vendido anio']);
-  const numero = new Set(['Piezas vendidas semana', 'Compra sugerida original', 'Piezas a comprar', 'Colchon piezas', 'Unidades vendidas anio', 'Semanas con venta', 'Dias con venta', 'Tickets']);
+  const moneda = new Set([
+    'Costo unitario','Importe compra semanal','Importe autorizado hoy','Venta potencial hoy','Utilidad bruta hoy',
+    'Importe esta semana','Importe ventas buenas','Precio venta promedio','Importe vendido anio','Valor'
+  ]);
+  const numero = new Set([
+    'Piezas vendidas semana','Compra sugerida original','Piezas a comprar','Piezas autorizadas hoy',
+    'Piezas esta semana','Piezas ventas buenas','Colchon piezas','Unidades vendidas anio',
+    'Semanas con venta','Dias con venta','Tickets'
+  ]);
+  const porcentaje = new Set(['Margen bruto plan']);
   for(let c = range.s.c; c <= range.e.c; c++){
     const header = headers[c] || '';
     for(let r = range.s.r + 1; r <= range.e.r; r++){
@@ -3671,31 +4035,109 @@ function aplicarFormatoPlanExcel(ws, headers){
       if(!cell || typeof cell.v !== 'number') continue;
       if(moneda.has(header)) cell.z = '$#,##0.00';
       else if(numero.has(header)) cell.z = '#,##0.00';
+      else if(porcentaje.has(header)) cell.z = '0.0%';
     }
   }
   ws['!cols'] = headers.map(h => {
     if(h === 'Producto') return { wch: 42 };
     if(h === 'Categoria') return { wch: 22 };
+    if(h === 'Concepto') return { wch: 34 };
+    if(h === 'Tramo compra') return { wch: 18 };
     if(h.includes('Costo') || h.includes('Importe') || h.includes('Precio')) return { wch: 18 };
     if(h.includes('Proveedor')) return { wch: 26 };
     return { wch: Math.min(Math.max(String(h).length + 3, 12), 24) };
   });
 }
 
+function filaPlanExcel(r){
+  const p = r.producto || {};
+  const margen = r.costoPlan > 0 ? (r.utilidadPlan || 0) / r.costoPlan : '';
+  return {
+    Categoria: p.categoria || '',
+    Producto: p.producto || '',
+    Clave: p.clave || '',
+    'Tramo compra': planTramoLabel(r.tramo),
+    'Costo unitario': r.costoUnitario === null ? 'Sin costo registrado' : r.costoUnitario,
+    'Piezas a comprar': Number(r.qtyPlan || 0),
+    'Importe compra semanal': r.costoPlan === null ? 'Pendiente por costo' : Number(r.costoPlan || 0),
+    'Piezas autorizadas hoy': Number(r.qtyHoy || 0),
+    'Importe autorizado hoy': r.qtyHoy > 0 ? Number(r.costoHoy || 0) : '',
+    'Venta potencial hoy': r.qtyHoy > 0 ? Number(r.ventaHoy || 0) : '',
+    'Utilidad bruta hoy': r.qtyHoy > 0 ? Number(r.utilidadHoy || 0) : '',
+    'Piezas esta semana': Number(r.qtySemana || 0),
+    'Importe esta semana': r.qtySemana > 0 ? Number(r.costoSemanaAut || 0) : '',
+    'Piezas ventas buenas': Number(r.qtyBuenas || 0),
+    'Importe ventas buenas': r.qtyBuenas > 0 ? Number(r.costoBuenas || 0) : '',
+    'Piezas vendidas semana': Number(p.piezas_semana || 0),
+    'Compra sugerida original': Number(p.compra_sugerida_semana || 0),
+    'Colchon piezas': Number(p.colchon_piezas || 0),
+    'Precio venta promedio': Number(p.precio_promedio || 0),
+    'Margen bruto plan': margen,
+    'Unidades vendidas anio': Number(p.unidades_anio || 0),
+    'Importe vendido anio': Number(p.importe_anio || 0),
+    'Semanas con venta': Number(p.semanas_con_venta || 0),
+    'Dias con venta': Number(p.dias_con_venta || 0),
+    Tickets: Number(p.tickets || 0),
+    Prioridad: prioridadLabel(p.prioridad),
+    'Confianza del costo': p.costo_confianza || '',
+    'Proveedor del costo': p.costo_proveedor || '',
+    'Fecha del costo': p.costo_fecha || '',
+    'Origen del costo': p.costo_origen || '',
+    'Metodo del costo': p.costo_metodo || '',
+  };
+}
+
+function flujoCajaPlanExcelRows(plan){
+  const f = plan.flujo || {};
+  const t = plan.totales || {};
+  const pctPlan = f.ventaSemanal > 0 ? (t.costoPlan || 0) / f.ventaSemanal : 0;
+  const pctHoy = f.ventaSemanal > 0 ? (t.costoHoy || 0) / f.ventaSemanal : 0;
+  return [
+    { Concepto:'Venta diaria normal', Valor:f.ventaNormal || 0 },
+    { Concepto:'Dias normales', Valor:f.diasNormal || 0 },
+    { Concepto:'Venta dia bueno', Valor:f.ventaBuena || 0 },
+    { Concepto:'Dias buenos', Valor:f.diasBueno || 0 },
+    { Concepto:'Venta semanal estimada', Valor:f.ventaSemanal || 0 },
+    { Concepto:'Reserva nomina/luz/gastos', Valor:f.reserva || 0 },
+    { Concepto:'Disponible para compras', Valor:f.disponibleCompras || 0 },
+    { Concepto:'Tope compra hoy', Valor:f.topeHoy || 0 },
+    { Concepto:'Compra autorizada hoy', Valor:t.costoHoy || 0 },
+    { Concepto:'Venta potencial compra hoy', Valor:t.ventaHoy || 0 },
+    { Concepto:'Utilidad bruta compra hoy', Valor:t.utilidadHoy || 0 },
+    { Concepto:'Costo plan completo', Valor:t.costoPlan || 0 },
+    { Concepto:'Plan completo / venta semanal', Valor:pctPlan },
+    { Concepto:'Compra hoy / venta semanal', Valor:pctHoy },
+    { Concepto:'Productos compra hoy', Valor:t.productosHoy || 0 },
+    { Concepto:'Piezas compra hoy', Valor:t.piezasHoy || 0 },
+    { Concepto:'Productos sin costo', Valor:t.sinCosto || 0 },
+  ];
+}
+
 function exportarPlanComprasExcel(){
-  const filas = productosPedidoPlan();
+  const plan = calcularPlanFlujo();
+  const filas = plan.records || [];
   if(!filas.length){ alert('No hay productos seleccionados para exportar.'); return; }
   const planHeaders = [
     'Categoria',
     'Producto',
     'Clave',
+    'Tramo compra',
     'Costo unitario',
     'Piezas a comprar',
     'Importe compra semanal',
+    'Piezas autorizadas hoy',
+    'Importe autorizado hoy',
+    'Venta potencial hoy',
+    'Utilidad bruta hoy',
+    'Piezas esta semana',
+    'Importe esta semana',
+    'Piezas ventas buenas',
+    'Importe ventas buenas',
     'Piezas vendidas semana',
     'Compra sugerida original',
     'Colchon piezas',
     'Precio venta promedio',
+    'Margen bruto plan',
     'Unidades vendidas anio',
     'Importe vendido anio',
     'Semanas con venta',
@@ -3708,50 +4150,61 @@ function exportarPlanComprasExcel(){
     'Origen del costo',
     'Metodo del costo',
   ];
-  const datos = filas.map(p => ({
-    Categoria: p.categoria || '',
-    Producto: p.producto || '',
-    Clave: p.clave || '',
-    'Costo unitario': costoUnitarioPlanExport(p),
-    'Piezas a comprar': Number(planQty(p) || 0),
-    'Importe compra semanal': costoSemanalPlanExport(p),
-    'Piezas vendidas semana': Number(p.piezas_semana || 0),
-    'Compra sugerida original': Number(p.compra_sugerida_semana || 0),
-    'Colchon piezas': Number(p.colchon_piezas || 0),
-    'Precio venta promedio': Number(p.precio_promedio || 0),
-    'Unidades vendidas anio': Number(p.unidades_anio || 0),
-    'Importe vendido anio': Number(p.importe_anio || 0),
-    'Semanas con venta': Number(p.semanas_con_venta || 0),
-    'Dias con venta': Number(p.dias_con_venta || 0),
-    Tickets: Number(p.tickets || 0),
-    Prioridad: prioridadLabel(p.prioridad),
-    'Confianza del costo': p.costo_confianza || '',
-    'Proveedor del costo': p.costo_proveedor || '',
-    'Fecha del costo': p.costo_fecha || '',
-    'Origen del costo': p.costo_origen || '',
-    'Metodo del costo': p.costo_metodo || '',
-  }));
-  const resumen = resumenPedidoPlan();
+  const datos = filas.map(filaPlanExcel);
+  const t = plan.totales || {};
+  const f = plan.flujo || {};
   const resumenDatos = [{
     Desde: (planComprasCache.filtros || {}).desde || '',
     Hasta: (planComprasCache.filtros || {}).hasta || '',
     SemanasPeriodo: (planComprasCache.resumen || {}).semanas_periodo || 0,
-    ProductosSeleccionados: resumen.productos || 0,
-    PiezasPedidoSemana: resumen.piezas || 0,
-    CostoSemanalEstimado: resumen.costo || 0,
-    ProductosConCosto: resumen.conCosto || 0,
-    ProductosSinCosto: resumen.sinCosto || 0,
-    Regla: 'Pedido editable desde plan semanal; costos segun ultimo costo unitario disponible',
+    VentaSemanalEstimada: f.ventaSemanal || 0,
+    ReservaGastos: f.reserva || 0,
+    DisponibleCompras: f.disponibleCompras || 0,
+    TopeCompraHoy: f.topeHoy || 0,
+    CompraAutorizadaHoy: t.costoHoy || 0,
+    VentaPotencialHoy: t.ventaHoy || 0,
+    UtilidadBrutaHoy: t.utilidadHoy || 0,
+    ProductosHoy: t.productosHoy || 0,
+    PiezasHoy: t.piezasHoy || 0,
+    CostoPlanCompleto: t.costoPlan || 0,
+    ProductosSeleccionados: t.productos || 0,
+    PiezasPedidoSemana: t.piezas || 0,
+    ProductosConCosto: t.conCosto || 0,
+    ProductosSinCosto: t.sinCosto || 0,
+    Regla: 'Plan ideal separado por flujo de caja; no autoriza comprar todo de golpe',
   }];
   const pendientesCosto = datos.filter(row => row['Costo unitario'] === 'Sin costo registrado');
+  const comprarHoy = datos.filter(row => Number(row['Piezas autorizadas hoy'] || 0) > 0);
+  const comprarSemana = datos.filter(row => Number(row['Piezas esta semana'] || 0) > 0);
+  const ventasBuenas = datos.filter(row => Number(row['Piezas ventas buenas'] || 0) > 0);
+  const flujoDatos = flujoCajaPlanExcelRows(plan);
+  const flujoHeaders = ['Concepto','Valor'];
   const nombreXlsx = 'super-cheap-plan-compras-semanal-' + hoyISO() + '.xlsx';
   if(typeof XLSX !== 'undefined'){
     try{
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumenDatos), 'Resumen');
+      const wsFlujo = XLSX.utils.json_to_sheet(flujoDatos, { header: flujoHeaders });
+      aplicarFormatoPlanExcel(wsFlujo, flujoHeaders);
+      XLSX.utils.book_append_sheet(wb, wsFlujo, 'Flujo de caja');
       const wsPlan = XLSX.utils.json_to_sheet(datos, { header: planHeaders });
       aplicarFormatoPlanExcel(wsPlan, planHeaders);
       XLSX.utils.book_append_sheet(wb, wsPlan, 'Plan semanal');
+      if(comprarHoy.length){
+        const wsHoy = XLSX.utils.json_to_sheet(comprarHoy, { header: planHeaders });
+        aplicarFormatoPlanExcel(wsHoy, planHeaders);
+        XLSX.utils.book_append_sheet(wb, wsHoy, 'Comprar hoy');
+      }
+      if(comprarSemana.length){
+        const wsSemana = XLSX.utils.json_to_sheet(comprarSemana, { header: planHeaders });
+        aplicarFormatoPlanExcel(wsSemana, planHeaders);
+        XLSX.utils.book_append_sheet(wb, wsSemana, 'Esta semana');
+      }
+      if(ventasBuenas.length){
+        const wsBuenas = XLSX.utils.json_to_sheet(ventasBuenas, { header: planHeaders });
+        aplicarFormatoPlanExcel(wsBuenas, planHeaders);
+        XLSX.utils.book_append_sheet(wb, wsBuenas, 'Ventas buenas');
+      }
       if(pendientesCosto.length){
         const wsPendientes = XLSX.utils.json_to_sheet(pendientesCosto, { header: planHeaders });
         aplicarFormatoPlanExcel(wsPendientes, planHeaders);
@@ -3765,7 +4218,11 @@ function exportarPlanComprasExcel(){
   }
   exportarXlsFallback(nombreXlsx.replace(/\.xlsx$/i, '.xls'), [
     { nombre:'Resumen', filas:resumenDatos },
+    { nombre:'Flujo de caja', filas:flujoDatos },
     { nombre:'Plan semanal', filas:datos },
+    ...(comprarHoy.length ? [{ nombre:'Comprar hoy', filas:comprarHoy }] : []),
+    ...(comprarSemana.length ? [{ nombre:'Esta semana', filas:comprarSemana }] : []),
+    ...(ventasBuenas.length ? [{ nombre:'Ventas buenas', filas:ventasBuenas }] : []),
     ...(pendientesCosto.length ? [{ nombre:'Pendientes costo', filas:pendientesCosto }] : []),
   ]);
 }
