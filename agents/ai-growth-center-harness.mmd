@@ -1,0 +1,32 @@
+flowchart TD
+  subgraph UI["ai-growth-center.html"]
+    A[Brief: negocio + tarea + instrucción + contexto JSON] --> B[POST /api/ai-growth-agent stream:true]
+    B --> P[Pipeline en vivo NDJSON]
+    P --> R[Resultado por secciones:\nCopy · Estrategia · Variantes · Riesgos · Acciones · KPIs · A/B]
+    R --> H[(Historial localStorage)]
+    R --> X[Copiar / .txt / .md / WhatsApp]
+  end
+
+  subgraph FN["netlify/functions/ai-growth-agent.js"]
+    B --> F1[1. INTAKE\nvalidación + normalización de contexto]
+    F1 --> F2[2. KNOWLEDGE\nKB auditada del sitio real:\ncontacto · productos · claims seguros\nguardrails · hallazgos de auditoría]
+    F2 --> F3[3. STRATEGY\nobjetivo · público · ángulo · conversión]
+    F3 --> F4{4. GENERATION\n¿motor disponible?}
+    F4 -- ANTHROPIC_API_KEY --> C[Claude streaming\njson_schema estructurado]
+    F4 -- OPENAI_API_KEY --> O[OpenAI gpt-4o-mini\njson_schema]
+    F4 -- sin API key --> D[Motor determinista v2\nplantillas por tarea con datos reales]
+    C -- error / timeout 80s --> D
+    O -- error / timeout 80s --> D
+    C --> F5
+    O --> F5
+    D --> F5[5. QA determinista\nmarcas · rangos de oferta · precios\nnúmero de WhatsApp correcto]
+    F5 --> F6[6. PACKAGE\nresultado + diagnostics + fases]
+    F6 --> P
+  end
+
+  subgraph KB["Base de conocimiento (KNOWLEDGE_VERSION)"]
+    K1[AsturVent\nKömmerling · hasta 47dB · MSI\nWA +52 722 421 5439]
+    K2[SGM Mobil Metepec\nDiesel UBA 48 cetanos · 10–30¢/L\nWA 729 266 1287]
+    K3[Super Cheap Market\n+500 productos · 5AM\nprecios siempre editables]
+  end
+  KB --> F2

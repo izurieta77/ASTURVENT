@@ -5,6 +5,21 @@
 [functions]
   node_bundler = "esbuild"
 
+# Nota: la ruta pública /api/ai-growth-agent la define la propia función
+# (export const config.path). El agente responde en streaming NDJSON para
+# no chocar con el timeout de funciones síncronas.
+
+# No servir documentación interna ni scripts como estáticos
+[[redirects]]
+  from   = "/agents/*"
+  to     = "/404"
+  status = 404
+
+[[redirects]]
+  from   = "/scripts/*"
+  to     = "/404"
+  status = 404
+
 [[headers]]
   for = "/*"
   [headers.values]

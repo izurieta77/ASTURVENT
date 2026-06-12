@@ -1,0 +1,78 @@
+{
+  "version": 2,
+  "endpoint": "/api/ai-growth-agent",
+  "examples": [
+    {
+      "id": "asturvent_google_ads",
+      "payload": {
+        "business": "asturvent",
+        "task_type": "google_ads",
+        "user_instruction": "Campaña de búsqueda para ventanas PVC Kömmerling y cotizaciones premium en Toluca, Metepec y CDMX.",
+        "optional_context": { "presupuesto_mxn_dia": 350, "conversiones": ["WhatsApp", "llamada", "formulario"] }
+      }
+    },
+    {
+      "id": "asturvent_landing_acustica",
+      "payload": {
+        "business": "asturvent",
+        "task_type": "landing",
+        "user_instruction": "Landing para personas con problema de ruido: ventanas acústicas Kömmerling hasta 47 dB, con diagnóstico sin costo.",
+        "optional_context": { "dolor": "ruido exterior", "cta": "diagnóstico y cotización" }
+      }
+    },
+    {
+      "id": "asturvent_quote_followup",
+      "payload": {
+        "business": "asturvent",
+        "task_type": "quote_followup",
+        "user_instruction": "Seguimiento para cliente que recibió cotización de 6 ventanas hace 5 días y no ha respondido.",
+        "optional_context": { "nombre_cliente": "Arq. López", "piezas": 6 }
+      }
+    },
+    {
+      "id": "sgm_google_ads_diesel",
+      "payload": {
+        "business": "sgm",
+        "task_type": "google_ads",
+        "user_instruction": "Campaña de búsqueda para diesel UBA y descuento por volumen para flotillas en Metepec y Toluca.",
+        "optional_context": { "presupuesto_mxn_dia": 300 }
+      }
+    },
+    {
+      "id": "sgm_landing_flotillas",
+      "payload": {
+        "business": "sgm",
+        "task_type": "landing",
+        "user_instruction": "Landing del programa de flotillas: descuento 10–30¢ por litro, prepago, monitoreo y facturación inmediata, con el Reto 2 Semanas como gancho.",
+        "optional_context": { "conversion": "WhatsApp" }
+      }
+    },
+    {
+      "id": "sgm_audit",
+      "payload": {
+        "business": "sgm",
+        "task_type": "audit",
+        "user_instruction": "Auditoría comercial del sitio morgangasolineros.com.mx con plan de 30 días enfocado a flotillas.",
+        "optional_context": {}
+      }
+    },
+    {
+      "id": "supercheap_promo",
+      "payload": {
+        "business": "supercheap",
+        "task_type": "promotion",
+        "user_instruction": "Promoción de hoy para café chiapaneco y cuernito de jamón y queso: texto para pantalla 1:1 y estado de WhatsApp.",
+        "optional_context": { "formato": "pantalla 1:1", "precio": "editable", "cuidar_margen": true }
+      }
+    },
+    {
+      "id": "supercheap_calendar",
+      "payload": {
+        "business": "supercheap",
+        "task_type": "calendar",
+        "user_instruction": "Calendario semanal de promos con café, cuernitos, agua Member's Mark, Vuala, Hershey's y New Mix para subir ticket promedio.",
+        "optional_context": { "objetivo": "ticket promedio" }
+      }
+    }
+  ]
+}
