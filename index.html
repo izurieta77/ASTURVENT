@@ -6,6 +6,86 @@
 <title>AsturVent · Tecnología alemana Kömmerling · Fabricantes de Puertas y Ventanas PVC</title>
 <meta name="description" content="AsturVent fabrica, instala y da mantenimiento a ventanas PVC Kömmerling en México. Tecnología alemana, 15 años de experiencia, fábrica en Toluca.">
 
+<!-- SEO / compartir (quick wins auditoría 2026-06-12) -->
+<link rel="canonical" href="https://asturvent-web.netlify.app/">
+<link rel="icon" type="image/jpeg" href="/assets/asturvent-logo.jpg">
+<link rel="apple-touch-icon" href="/assets/asturvent-logo.jpg">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="es_MX">
+<meta property="og:site_name" content="AsturVent">
+<meta property="og:title" content="AsturVent · Ventanas PVC Kömmerling con tecnología alemana">
+<meta property="og:description" content="Hasta 47 dB de aislamiento acústico, fabricación propia en Toluca y 15+ años de experiencia. Cotización sin costo. MSI 3, 6 y 12.">
+<meta property="og:url" content="https://asturvent-web.netlify.app/">
+<meta property="og:image" content="https://asturvent-web.netlify.app/assets/asturvent-logo.jpg">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="AsturVent · Ventanas PVC Kömmerling">
+<meta name="twitter:description" content="Hasta 47 dB de aislamiento acústico. Fabricación propia en Toluca. Cotización sin costo.">
+<meta name="twitter:image" content="https://asturvent-web.netlify.app/assets/asturvent-logo.jpg">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "LocalBusiness",
+  "name": "AsturVent",
+  "legalName": "Puertas y Ventanas de Asturias, S.A. de C.V.",
+  "description": "Fabricante y distribuidor oficial Kömmerling en México: ventanas y puertas de PVC con aislamiento acústico de hasta 47 dB.",
+  "image": "https://asturvent-web.netlify.app/assets/asturvent-logo.jpg",
+  "url": "https://asturvent-web.netlify.app/",
+  "telephone": "+527221983004",
+  "email": "asturvent02@gmail.com",
+  "address": {
+    "@type": "PostalAddress",
+    "streetAddress": "Km 1 Capultitlán–San Felipe",
+    "addressLocality": "Toluca",
+    "addressRegion": "Estado de México",
+    "postalCode": "50260",
+    "addressCountry": "MX"
+  },
+  "areaServed": ["Estado de México", "Morelos", "Michoacán", "Hidalgo", "Querétaro", "Puebla", "Veracruz", "Guerrero", "Tlaxcala"],
+  "brand": { "@type": "Brand", "name": "Kömmerling" },
+  "sameAs": ["https://www.kommerling.mx/red-oficial/estado-de-mexico/asturvent"]
+}
+</script>
+
+<!-- Medición (auditoría: el sitio no medía nada). Pegar los IDs para activar:
+     GA4: G-XXXXXXXXXX · Meta Pixel: 15-16 dígitos. Sin IDs, no carga nada. -->
+<script>
+window.AV_ANALYTICS = { ga4: "", metaPixel: "" };
+(function () {
+  var cfg = window.AV_ANALYTICS;
+  if (cfg.ga4) {
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=" + cfg.ga4;
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = function () { dataLayer.push(arguments); };
+    gtag("js", new Date());
+    gtag("config", cfg.ga4);
+  }
+  if (cfg.metaPixel) {
+    !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+    n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
+    n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
+    t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
+    document,'script','https://connect.facebook.net/en_US/fbevents.js');
+    fbq("init", cfg.metaPixel);
+    fbq("track", "PageView");
+  }
+  // Eventos en todos los CTAs de contacto (16 enlaces de WhatsApp, tel y mailto)
+  document.addEventListener("click", function (ev) {
+    var a = ev.target && ev.target.closest ? ev.target.closest("a[href]") : null;
+    if (!a) return;
+    var href = a.getAttribute("href") || "";
+    var kind = href.indexOf("wa.me") !== -1 ? "whatsapp_click"
+             : href.indexOf("tel:") === 0 ? "phone_click"
+             : href.indexOf("mailto:") === 0 ? "email_click" : null;
+    if (!kind) return;
+    if (window.gtag && cfg.ga4) gtag("event", kind, { link_text: (a.textContent || "").trim().slice(0, 60) });
+    if (window.fbq && cfg.metaPixel) fbq("track", "Contact", { kind: kind });
+  }, true);
+})();
+</script>
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -5432,6 +5512,18 @@ a { color: inherit; text-decoration: none; }
     </div>
 </section>
 
+<!-- Captura de lead en Netlify Forms (la auditoría detectó que el lead se
+     perdía si el usuario no completaba el envío por WhatsApp) -->
+<form name="asesoria" netlify netlify-honeypot="bot-field" hidden>
+    <input type="text" name="nombre">
+    <input type="text" name="telefono">
+    <input type="text" name="ciudad">
+    <input type="text" name="perfil">
+    <input type="text" name="proyecto">
+    <textarea name="detalle"></textarea>
+    <input type="text" name="bot-field">
+</form>
+
 <script>
 (function(){
     var btn = document.getElementById('cf-submit');
@@ -5448,6 +5540,27 @@ a { color: inherit; text-decoration: none; }
         var proyecto = v('cf-proyecto');
         var detalle  = v('cf-detalle');
 
+        // 1) Guardar el lead en Netlify Forms (no bloquea el flujo de WhatsApp)
+        if (nombre || tel || detalle) {
+            var data = new URLSearchParams({
+                'form-name': 'asesoria',
+                nombre: nombre, telefono: tel, ciudad: ciudad,
+                perfil: perfil, proyecto: proyecto, detalle: detalle
+            });
+            fetch('/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: data.toString()
+            }).catch(function(){ /* sin red: el flujo de WhatsApp sigue */ });
+            if (window.gtag && window.AV_ANALYTICS && window.AV_ANALYTICS.ga4) {
+                gtag('event', 'generate_lead', { method: 'form_asesoria' });
+            }
+            if (window.fbq && window.AV_ANALYTICS && window.AV_ANALYTICS.metaPixel) {
+                fbq('track', 'Lead');
+            }
+        }
+
+        // 2) Abrir WhatsApp con el mensaje compuesto (flujo original)
         var lines = ['Hola AsturVent, quiero agendar una asesoría.'];
         if (nombre)   lines.push('• Nombre: ' + nombre);
         if (tel)      lines.push('• Teléfono: ' + tel);
