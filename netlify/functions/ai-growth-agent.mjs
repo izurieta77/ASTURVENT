@@ -912,10 +912,45 @@ function runQA(result, payload, kb) {
  * PIPELINE
  * ──────────────────────────────────────────────────────────────────────── */
 
-function detectEngine() {
-  if (process.env.ANTHROPIC_API_KEY) return "claude";
-  if (process.env.OPENAI_API_KEY) return "openai";
-  return "deterministic";
+function availableEngines() {
+  const list = [];
+  if (process.env.ANTHROPIC_API_KEY) list.push("claude");
+  if (process.env.OPENAI_API_KEY) list.push("openai");
+  return list;
+}
+
+// Verifica que las claves configuradas realmente funcionen: una key inválida
+// (p. ej. compartida a nivel team) no debe romper el agente ni mentir en el
+// health check. Resultado cacheado 5 minutos por instancia caliente.
+let engineProbe = { at: 0, value: null };
+async function probeEngine() {
+  if (engineProbe.value && Date.now() - engineProbe.at < 5 * 60 * 1000) return engineProbe.value;
+  let value = { engine: "deterministic", model: null };
+  if (process.env.ANTHROPIC_API_KEY) {
+    try {
+      const model = process.env.AI_GROWTH_MODEL || AI_MODEL_DEFAULT;
+      const r = await fetch("https://api.anthropic.com/v1/messages/count_tokens", {
+        method: "POST",
+        headers: {
+          "x-api-key": process.env.ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ model, messages: [{ role: "user", content: "ping" }] }),
+      });
+      if (r.ok) value = { engine: "claude", model };
+    } catch { /* sin red: probar siguiente */ }
+  }
+  if (value.engine === "deterministic" && process.env.OPENAI_API_KEY) {
+    try {
+      const r = await fetch("https://api.openai.com/v1/models/" + OPENAI_MODEL, {
+        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+      });
+      if (r.ok) value = { engine: "openai", model: OPENAI_MODEL };
+    } catch { /* siguiente */ }
+  }
+  engineProbe = { at: Date.now(), value };
+  return value;
 }
 
 async function runPipeline(payload, emit) {
@@ -941,16 +976,17 @@ async function runPipeline(payload, emit) {
 
   // 3 · STRATEGY + GENERATION
   let result = null;
-  let engine = detectEngine();
+  let engine = "deterministic";
   let model = null;
   let usage = null;
-  let fallbackNote = null;
+  const fallbackNotes = [];
+  const candidates = availableEngines();
 
-  phase("strategy", "Estrategia", "running", engine === "deterministic" ? "Motor local (sin API key configurada)." : `Motor ${engine}.`);
+  phase("strategy", "Estrategia", "running", candidates.length ? `Motores disponibles: ${candidates.join(" → ")} → local.` : "Motor local (sin API key configurada).");
   phase("strategy", "Estrategia", "done", "Objetivo, público, ángulo y conversión definidos.");
   phase("generation", "Generación de la pieza", "running");
 
-  if (engine !== "deterministic") {
+  for (const candidate of candidates) {
     const budget = Number(process.env.AI_TIME_BUDGET_MS) || 80000;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), budget);
@@ -962,14 +998,15 @@ async function runPipeline(payload, emit) {
       }
     };
     try {
-      const call = engine === "claude" ? callClaude : callOpenAI;
+      const call = candidate === "claude" ? callClaude : callOpenAI;
       const out = await call(payload, kb, task, controller.signal, onProgress);
       result = parseLLMJson(out.text);
       model = out.model;
       usage = out.usage;
+      engine = candidate;
+      break;
     } catch (e) {
-      fallbackNote = `El motor ${engine} no respondió (${String(e.message || e).slice(0, 160)}); se usó el motor local de respaldo.`;
-      engine = "deterministic";
+      fallbackNotes.push(`El motor ${candidate} no respondió (${String(e.message || e).slice(0, 160)}).`);
       result = null;
     } finally {
       clearTimeout(timer);
@@ -978,7 +1015,7 @@ async function runPipeline(payload, emit) {
 
   if (!result) {
     result = deterministicGenerate(payload, kb, task);
-    if (fallbackNote) result.risks = [fallbackNote, ...result.risks];
+    if (fallbackNotes.length) result.risks = [...fallbackNotes.map((n) => n + " Se usó el motor local de respaldo."), ...result.risks];
   }
   phase("generation", "Generación de la pieza", "done", model ? `Modelo ${model}.` : "Motor determinista con base de conocimiento real.");
 
@@ -1026,12 +1063,14 @@ export default async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204 });
 
   if (req.method === "GET") {
+    const probed = await probeEngine();
     return json({
       ok: true,
       service: "ai-growth-agent",
       version: 2,
-      engine: detectEngine(),
-      model: detectEngine() === "claude" ? process.env.AI_GROWTH_MODEL || AI_MODEL_DEFAULT : detectEngine() === "openai" ? OPENAI_MODEL : null,
+      engine: probed.engine,
+      model: probed.model,
+      keys_present: availableEngines(),
       knowledge_version: KNOWLEDGE_VERSION,
       businesses: Object.keys(KB),
       tasks: Object.keys(TASKS),
