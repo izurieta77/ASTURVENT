@@ -642,7 +642,9 @@
         $("kbPill").innerHTML = `<span class="status-dot"></span><span>KB ${info.knowledge_version}</span>`;
         $("kbPill").classList.add("on");
         if (info.engine === "deterministic") {
-          showNotice("Sin API key configurada: el agente usa el motor local (plantillas inteligentes con datos reales). Para activar IA generativa agrega ANTHROPIC_API_KEY u OPENAI_API_KEY en Netlify → Environment variables.");
+          showNotice(info.keys_present && info.keys_present.length
+            ? "Hay API keys configuradas pero no son válidas (" + info.keys_present.join(", ") + "): el agente usa el motor local. Reemplaza ANTHROPIC_API_KEY en Netlify → Site configuration → Environment variables con una clave válida para activar la IA generativa."
+            : "Sin API key configurada: el agente usa el motor local (plantillas inteligentes con datos reales del negocio). Para activar IA generativa agrega ANTHROPIC_API_KEY en Netlify → Environment variables.");
         }
       } catch {
         label.textContent = "Función no disponible";
