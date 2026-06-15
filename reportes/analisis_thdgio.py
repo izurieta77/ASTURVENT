@@ -118,7 +118,7 @@ def main():
     nombres = [p[0] for p in PERIODOS]
     _charts(chofer, placa, tot, nombres)
     _markdown(chofer, placa, tot, nombres)
-    _variacion(chofer, placa, nombres)
+    _variacion(chofer, placa, tot, nombres)
     print("OK. Archivos en", HERE)
 
 
@@ -127,13 +127,16 @@ def _periodos_con_datos(tot_like):
     return [n for n in tot_like if any(v[0] for v in tot_like[n].values())]
 
 
-def _deltas(data, na, nb):
-    """Lista (clave, lit_a, lit_b, delta, pct) ordenada por delta desc."""
+def _deltas(data, na, nb, solo_ambos=False):
+    """Lista (clave, lit_a, lit_b, delta, pct) ordenada por delta desc.
+    solo_ambos=True -> solo claves con carga en AMBOS periodos (sin rotación)."""
     claves = set(data.get(na, {})) | set(data.get(nb, {}))
     out = []
     for k in claves:
         a = data.get(na, {}).get(k, [0, 0, 0])[0]
         b = data.get(nb, {}).get(k, [0, 0, 0])[0]
+        if solo_ambos and (a <= 0 or b <= 0):
+            continue
         delta = b - a
         pct = (delta / a * 100) if a else (float("inf") if b else 0.0)
         out.append((k, a, b, delta, pct))
@@ -166,7 +169,7 @@ def _diverging(deltas, na, nb, titulo, archivo):
             etq += "  (sin carga)"
         ax.text(d + (max(abs(v) for v in vals) * 0.01) * (1 if d >= 0 else -1),
                 i, etq, va="center", ha="left" if d >= 0 else "right", fontsize=7.5)
-    ax.set_title(titulo, fontsize=13, fontweight="bold")
+    ax.set_title(titulo, fontsize=11.5, fontweight="bold")
     ax.set_xlabel(f"Δ litros  ·  {na}  →  {nb}   (verde = subió, rojo = bajó)")
     ax.grid(axis="x", alpha=0.25)
     ax.spines[["top", "right"]].set_visible(False)
@@ -192,22 +195,63 @@ def _tabla_var(deltas, encab):
     return "\n".join(out)
 
 
-def _variacion(chofer, placa, nombres):
+def _comparativo_semanas(tot, na, nb):
+    """Dos barras: semana previa vs semana reciente, resaltando la baja."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    la, lb = tot[na][0], tot[nb][0]
+    pct = (lb - la) / la * 100 if la else 0
+    fig, ax = plt.subplots(figsize=(7.5, 5.4))
+    bars = ax.bar([f"Semana antepasada\n{na.split('·')[-1].strip()}\n(la que fue MÁS)",
+                   f"Semana pasada\n{nb.split('·')[-1].strip()}\n(BAJÓ)"],
+                  [la, lb], width=0.55, color=["#0057B8", "#D7263D"])
+    for b, v, cargas in zip(bars, [la, lb], [tot[na][2], tot[nb][2]]):
+        ax.text(b.get_x() + b.get_width() / 2, v,
+                f"{v:,.0f} L\n{cargas} cargas",
+                ha="center", va="bottom", fontsize=12, fontweight="bold")
+    ax.annotate(f"▼ {pct:.0f}%  ({lb-la:,.0f} L)",
+                xy=(1, lb), xytext=(0.5, max(la, lb) * 1.06),
+                ha="center", fontsize=16, fontweight="bold", color="#D7263D")
+    ax.set_title("THD GIO · La semana pasada (8–13 jun) BAJÓ el consumo\n"
+                 "vs. la antepasada (1–6 jun)",
+                 fontsize=13, fontweight="bold")
+    ax.set_ylabel("Litros de diésel")
+    ax.set_ylim(0, max(la, lb) * 1.18)
+    ax.grid(axis="y", alpha=0.25)
+    ax.spines[["top", "right"]].set_visible(False)
+    fig.tight_layout()
+    fig.savefig(os.path.join(HERE, "comparativo_semanas.png"), dpi=150)
+    plt.close(fig)
+
+
+def _variacion(chofer, placa, tot, nombres):
     con_datos = _periodos_con_datos(chofer)
     if len(con_datos) < 2:
         return
-    na, nb = con_datos[-2], con_datos[-1]  # los dos periodos con datos más recientes
-    dch = _deltas(chofer, na, nb)
-    dpl = _deltas(placa, na, nb)
+    na, nb = con_datos[-2], con_datos[-1]  # previa -> reciente (los 2 con datos)
+    # Solo quienes operaron en AMBAS semanas (sin rotación / sin cargas en cero)
+    dch = _deltas(chofer, na, nb, solo_ambos=True)
+    dpl = _deltas(placa, na, nb, solo_ambos=True)
+    sub = (f"Solo quienes operaron ambas semanas  ·  flota {tot[na][0]:,.0f}→"
+           f"{tot[nb][0]:,.0f} L ({(tot[nb][0]-tot[na][0])/tot[na][0]*100:+.0f}%)")
+    _comparativo_semanas(tot, na, nb)
     _diverging(dch, na, nb,
-               "THD GIO · ¿Subió o bajó el consumo por CHOFER?",
+               "THD GIO · ¿Subió o bajó el consumo por CHOFER?\n" + sub,
                "variacion_por_chofer.png")
     _diverging(dpl, na, nb,
-               "THD GIO · ¿Subió o bajó el consumo por PLACA?",
+               "THD GIO · ¿Subió o bajó el consumo por PLACA?\n" + sub,
                "variacion_por_placa.png")
+    netch = sum(r[3] for r in dch)
     L = [f"# THD GIO — Variación de consumo {na} → {nb}\n",
-         f"_Generado: {datetime.date.today():%d/%m/%Y}. "
-         f"P3 (15 jun+) aún sin cargas, por eso se comparan los dos periodos con datos._\n",
+         f"_Generado: {datetime.date.today():%d/%m/%Y}. Solo se incluyen choferes/placas "
+         f"con carga en **ambas** semanas (se excluye rotación y unidades sin carga). "
+         f"P3 (15 jun+) aún sin cargas._\n",
+         f"**Total de la flota:** semana previa {tot[na][0]:,.0f} L → "
+         f"semana reciente {tot[nb][0]:,.0f} L "
+         f"(**{(tot[nb][0]-tot[na][0])/tot[na][0]*100:+.0f}%**, bajó). "
+         f"Entre quienes operaron ambas semanas el neto fue **{netch:+,.0f} L**.\n",
          "## Variación por CHOFER (litros)\n", _tabla_var(dch, "Chofer"),
          "\n## Variación por PLACA (litros)\n", _tabla_var(dpl, "Placa")]
     with open(os.path.join(HERE, "variacion_thdgio.md"), "w") as f:
