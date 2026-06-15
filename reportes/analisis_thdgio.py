@@ -1,0 +1,252 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Análisis de cargas (consumo de combustible) de THD GIO por placa y por chofer,
+en tres periodos semanales (lunes a sábado). Fuente: Google Sheet del cliente
+TGIO, pestaña 'Despachos_SGM_APP' (la misma que alimenta la app appsgm).
+
+Genera:
+  - reportes/resumen_thdgio.md        (tablas por periodo)
+  - reportes/consumo_por_chofer.png   (litros por chofer por periodo)
+  - reportes/consumo_por_placa.png    (litros por placa por periodo)
+  - reportes/totales_por_periodo.png  (litros / monto / despachos por periodo)
+"""
+import json, os, re, datetime, unicodedata, urllib.request
+from collections import defaultdict
+
+API_KEY = "AIzaSyATotw-cM7Y7J8IXH59m89xzaksKwgaABY"
+SHEET_ID = "1xLF7C5A6p7dxlXDx7EiuQiR1MtEnwGeWRargX0tL5qE"
+TAB = "Despachos_SGM_APP"
+REFERER = "https://appsgm.netlify.app"
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+# Periodos lunes a sábado (definición acordada con el usuario, 15-jun-2026)
+PERIODOS = [
+    ("P1 · 1–6 jun",  datetime.date(2026, 6, 1),  datetime.date(2026, 6, 6)),
+    ("P2 · 8–13 jun", datetime.date(2026, 6, 8),  datetime.date(2026, 6, 13)),
+    ("P3 · 15 jun+",  datetime.date(2026, 6, 15), datetime.date(2026, 6, 21)),
+]
+
+# Consolidación de variantes de nombre de chofer (typos / abreviaturas)
+ALIAS_CHOFER = {
+    "GIO": "GIOVANNI",
+    "DANIEL JIMENEZ FLORES": "DANIEL JIMENEZ",
+    "ALFREDO NASARIO": "ALFREDO NAZARIO",
+    "EMANUEL MORENO": "EMMANUEL MORENO",
+    "PEDRO GIMENEZ": "PEDRO JIMENEZ",
+    "JOSE EDUARDO CORONA": "JOSE EDUARDO",
+    "JHONATAN GUZMAN MALDONADO": "JHONATAN GUZMAN",
+    "JONATHAN GUZMAN MALDONADO": "JHONATAN GUZMAN",
+    "ENRIQUE DELGADO": "ENRIQUE DEGOLLADO",
+    "SR MIGUEL": "MIGUEL APOLINAR",
+}
+
+
+def fetch():
+    url = (f"https://sheets.googleapis.com/v4/spreadsheets/{SHEET_ID}"
+           f"/values/{TAB}!A1:M999?key={API_KEY}&valueRenderOption=UNFORMATTED_VALUE")
+    req = urllib.request.Request(url, headers={"Referer": REFERER})
+    with urllib.request.urlopen(req) as r:
+        return json.load(r)["values"]
+
+
+def serial_to_date(n):
+    return datetime.date(1899, 12, 30) + datetime.timedelta(days=int(n))
+
+
+def strip_accents(s):
+    s = (s or "").strip().upper()
+    s = "".join(c for c in unicodedata.normalize("NFD", s)
+                if unicodedata.category(c) != "Mn")
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def norm_chofer(s):
+    s = strip_accents(s)
+    return ALIAS_CHOFER.get(s, s)
+
+
+def norm_placa(s):
+    return re.sub(r"[^A-Z0-9]", "", strip_accents(s))
+
+
+def to_float(x):
+    if isinstance(x, (int, float)):
+        return float(x)
+    s = str(x).strip().replace(" ", "")
+    if "," in s and "." in s:
+        s = s.replace(",", "")
+    elif "," in s:
+        s = s.replace(",", ".")
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
+
+
+def periodo_de(d):
+    for nombre, ini, fin in PERIODOS:
+        if ini <= d <= fin:
+            return nombre
+    return None
+
+
+def main():
+    rows = fetch()[1:]
+    # acumuladores: {periodo: {clave: [litros, monto, despachos]}}
+    chofer = defaultdict(lambda: defaultdict(lambda: [0.0, 0.0, 0]))
+    placa = defaultdict(lambda: defaultdict(lambda: [0.0, 0.0, 0]))
+    tot = defaultdict(lambda: [0.0, 0.0, 0])
+
+    for r in rows:
+        if not r or not isinstance(r[0], (int, float)):
+            continue
+        d = serial_to_date(r[0])
+        p = periodo_de(d)
+        if not p:
+            continue
+        ch = norm_chofer(r[8]) if len(r) > 8 else ""
+        pl = norm_placa(r[9]) if len(r) > 9 else ""
+        lit = to_float(r[11]) if len(r) > 11 else 0.0
+        mon = to_float(r[12]) if len(r) > 12 else 0.0
+        if ch:
+            a = chofer[p][ch]; a[0] += lit; a[1] += mon; a[2] += 1
+        if pl:
+            a = placa[p][pl]; a[0] += lit; a[1] += mon; a[2] += 1
+        t = tot[p]; t[0] += lit; t[1] += mon; t[2] += 1
+
+    nombres = [p[0] for p in PERIODOS]
+    _charts(chofer, placa, tot, nombres)
+    _markdown(chofer, placa, tot, nombres)
+    print("OK. Archivos en", HERE)
+
+
+def _topkeys(dicts, n=12):
+    """Top-N claves por litros totales sumando todos los periodos; resto -> OTROS."""
+    tot = defaultdict(float)
+    for per in dicts.values():
+        for k, v in per.items():
+            tot[k] += v[0]
+    ordenadas = [k for k, _ in sorted(tot.items(), key=lambda kv: -kv[1])]
+    return ordenadas[:n], ordenadas[n:]
+
+
+def _grouped_bar(data, nombres, titulo, archivo, n=12):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    top, resto = _topkeys(data, n)
+    labels = list(top) + (["OTROS"] if resto else [])
+    x = np.arange(len(labels))
+    w = 0.26
+    colores = ["#0057B8", "#00A86B", "#F2A900"]  # azul / verde / ámbar
+    fig, ax = plt.subplots(figsize=(max(11, len(labels) * 0.95), 6.2))
+    for i, per in enumerate(nombres):
+        vals = []
+        for k in top:
+            vals.append(data.get(per, {}).get(k, [0, 0, 0])[0])
+        if resto:
+            vals.append(sum(data.get(per, {}).get(k, [0, 0, 0])[0] for k in resto))
+        bars = ax.bar(x + (i - 1) * w, vals, w, label=per, color=colores[i])
+        for b, val in zip(bars, vals):
+            if val > 0:
+                ax.text(b.get_x() + b.get_width() / 2, val, f"{val:,.0f}",
+                        ha="center", va="bottom", fontsize=7, rotation=90)
+    ax.set_title(titulo, fontsize=14, fontweight="bold")
+    ax.set_ylabel("Litros")
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, rotation=40, ha="right", fontsize=9)
+    ax.legend(title="Periodo (lun–sáb)")
+    ax.grid(axis="y", alpha=0.25)
+    ax.spines[["top", "right"]].set_visible(False)
+    fig.tight_layout()
+    fig.savefig(os.path.join(HERE, archivo), dpi=150)
+    plt.close(fig)
+
+
+def _charts(chofer, placa, tot, nombres):
+    _grouped_bar(chofer, nombres,
+                 "THD GIO · Consumo de diésel por CHOFER por periodo",
+                 "consumo_por_chofer.png")
+    _grouped_bar(placa, nombres,
+                 "THD GIO · Consumo de diésel por PLACA por periodo",
+                 "consumo_por_placa.png")
+
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+    x = np.arange(len(nombres))
+    litros = [tot[p][0] for p in nombres]
+    monto = [tot[p][1] for p in nombres]
+    desp = [tot[p][2] for p in nombres]
+    fig, axes = plt.subplots(1, 3, figsize=(13, 4.4))
+    for ax, vals, tit, fmt, col in zip(
+            axes, [litros, monto, desp],
+            ["Litros totales", "Monto total ($)", "N.º de cargas"],
+            ["{:,.0f}", "${:,.0f}", "{:,.0f}"],
+            ["#0057B8", "#00A86B", "#F2A900"]):
+        b = ax.bar(x, vals, color=col, width=0.6)
+        ax.set_title(tit, fontweight="bold")
+        ax.set_xticks(x); ax.set_xticklabels(nombres, fontsize=8)
+        ax.grid(axis="y", alpha=0.25)
+        ax.spines[["top", "right"]].set_visible(False)
+        for bb, v in zip(b, vals):
+            ax.text(bb.get_x() + bb.get_width() / 2, v, fmt.format(v),
+                    ha="center", va="bottom", fontsize=9, fontweight="bold")
+    fig.suptitle("THD GIO · Totales por periodo (lun–sáb)", fontsize=14, fontweight="bold")
+    fig.tight_layout(rect=[0, 0, 1, 0.94])
+    fig.savefig(os.path.join(HERE, "totales_por_periodo.png"), dpi=150)
+    plt.close(fig)
+
+
+def _tabla(data, nombres, encab):
+    keys_tot = defaultdict(float)
+    for per in data.values():
+        for k, v in per.items():
+            keys_tot[k] += v[0]
+    orden = [k for k, _ in sorted(keys_tot.items(), key=lambda kv: -kv[1])]
+    out = ["| " + encab + " | " + " | ".join(f"{n} (L)" for n in nombres) +
+           " | Total L | Total $ | Cargas |",
+           "|" + "---|" * (len(nombres) + 4)]
+    for k in orden:
+        celdas, tl, tm, tc = [], 0.0, 0.0, 0
+        for n in nombres:
+            v = data.get(n, {}).get(k, [0, 0, 0])
+            celdas.append(f"{v[0]:,.0f}" if v[0] else "—")
+            tl += v[0]; tm += v[1]; tc += v[2]
+        out.append(f"| {k} | " + " | ".join(celdas) +
+                   f" | {tl:,.0f} | ${tm:,.0f} | {tc} |")
+    return "\n".join(out)
+
+
+def _markdown(chofer, placa, tot, nombres):
+    L = []
+    L.append("# THD GIO — Análisis de cargas de diésel (3 periodos)\n")
+    L.append(f"_Generado: {datetime.date.today():%d/%m/%Y} · "
+             f"Fuente: Google Sheet TGIO › `Despachos_SGM_APP` (app appsgm)._\n")
+    L.append("**Periodos (lunes a sábado):** "
+             "P1 = 1–6 jun · P2 = 8–13 jun · P3 = 15–21 jun (en curso).")
+    L.append("> Nota: al ser semanas lun–sáb, los domingos (7 y 14 jun) quedan fuera. "
+             "Los datos más recientes en la hoja llegan al **sáb 13 jun**, por lo que "
+             "**P3 aún no tiene cargas registradas**.\n")
+    L.append("## Totales por periodo\n")
+    L.append("| Métrica | " + " | ".join(nombres) + " |")
+    L.append("|---|" + "---|" * len(nombres))
+    L.append("| Litros | " + " | ".join(f"{tot[p][0]:,.0f}" for p in nombres) + " |")
+    L.append("| Monto $ | " + " | ".join(f"${tot[p][1]:,.0f}" for p in nombres) + " |")
+    L.append("| Cargas | " + " | ".join(f"{tot[p][2]}" for p in nombres) + " |")
+    L.append("| L/carga | " + " | ".join(
+        f"{(tot[p][0]/tot[p][2]) if tot[p][2] else 0:,.0f}" for p in nombres) + " |")
+    L.append("\n## Consumo por CHOFER (litros)\n")
+    L.append(_tabla(chofer, nombres, "Chofer"))
+    L.append("\n## Consumo por PLACA (litros)\n")
+    L.append(_tabla(placa, nombres, "Placa"))
+    with open(os.path.join(HERE, "resumen_thdgio.md"), "w") as f:
+        f.write("\n".join(L) + "\n")
+
+
+if __name__ == "__main__":
+    main()
