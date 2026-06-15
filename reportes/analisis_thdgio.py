@@ -118,7 +118,100 @@ def main():
     nombres = [p[0] for p in PERIODOS]
     _charts(chofer, placa, tot, nombres)
     _markdown(chofer, placa, tot, nombres)
+    _variacion(chofer, placa, nombres)
     print("OK. Archivos en", HERE)
+
+
+# --- Variación: ¿subió o bajó el consumo? (compara los 2 periodos con datos) ---
+def _periodos_con_datos(tot_like):
+    return [n for n in tot_like if any(v[0] for v in tot_like[n].values())]
+
+
+def _deltas(data, na, nb):
+    """Lista (clave, lit_a, lit_b, delta, pct) ordenada por delta desc."""
+    claves = set(data.get(na, {})) | set(data.get(nb, {}))
+    out = []
+    for k in claves:
+        a = data.get(na, {}).get(k, [0, 0, 0])[0]
+        b = data.get(nb, {}).get(k, [0, 0, 0])[0]
+        delta = b - a
+        pct = (delta / a * 100) if a else (float("inf") if b else 0.0)
+        out.append((k, a, b, delta, pct))
+    return sorted(out, key=lambda r: r[3], reverse=True)
+
+
+def _diverging(deltas, na, nb, titulo, archivo):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    rows = [r for r in deltas if r[3] != 0] or deltas
+    rows = sorted(rows, key=lambda r: r[3])  # de menor (baja) a mayor (sube)
+    labels = [r[0] for r in rows]
+    vals = [r[3] for r in rows]
+    colors = ["#D7263D" if v < 0 else "#00A86B" for v in vals]
+    fig, ax = plt.subplots(figsize=(10, max(4.5, len(rows) * 0.42)))
+    y = range(len(rows))
+    ax.barh(list(y), vals, color=colors)
+    ax.axvline(0, color="#333", lw=1)
+    ax.set_yticks(list(y))
+    ax.set_yticklabels(labels, fontsize=9)
+    for i, (k, a, b, d, pct) in enumerate(rows):
+        etq = f"{d:+,.0f} L"
+        if a and b:
+            etq += f"  ({pct:+.0f}%)"
+        elif not a and b:
+            etq += "  (nuevo)"
+        elif a and not b:
+            etq += "  (sin carga)"
+        ax.text(d + (max(abs(v) for v in vals) * 0.01) * (1 if d >= 0 else -1),
+                i, etq, va="center", ha="left" if d >= 0 else "right", fontsize=7.5)
+    ax.set_title(titulo, fontsize=13, fontweight="bold")
+    ax.set_xlabel(f"Δ litros  ·  {na}  →  {nb}   (verde = subió, rojo = bajó)")
+    ax.grid(axis="x", alpha=0.25)
+    ax.spines[["top", "right"]].set_visible(False)
+    mx = max(abs(v) for v in vals) * 1.35
+    ax.set_xlim(-mx, mx)
+    fig.tight_layout()
+    fig.savefig(os.path.join(HERE, archivo), dpi=150)
+    plt.close(fig)
+
+
+def _tabla_var(deltas, encab):
+    out = [f"| {encab} | P1 (L) | P2 (L) | Δ L | Δ % | Tendencia |",
+           "|---|---|---|---|---|---|"]
+    for k, a, b, d, pct in deltas:
+        if not a and b:
+            pcts, tend = "nuevo", "🆕 subió"
+        elif a and not b:
+            pcts, tend = "-100%", "🔻 sin carga"
+        else:
+            pcts = f"{pct:+.0f}%"
+            tend = "🟢 subió" if d > 0 else ("🔴 bajó" if d < 0 else "➖ igual")
+        out.append(f"| {k} | {a:,.0f} | {b:,.0f} | {d:+,.0f} | {pcts} | {tend} |")
+    return "\n".join(out)
+
+
+def _variacion(chofer, placa, nombres):
+    con_datos = _periodos_con_datos(chofer)
+    if len(con_datos) < 2:
+        return
+    na, nb = con_datos[-2], con_datos[-1]  # los dos periodos con datos más recientes
+    dch = _deltas(chofer, na, nb)
+    dpl = _deltas(placa, na, nb)
+    _diverging(dch, na, nb,
+               "THD GIO · ¿Subió o bajó el consumo por CHOFER?",
+               "variacion_por_chofer.png")
+    _diverging(dpl, na, nb,
+               "THD GIO · ¿Subió o bajó el consumo por PLACA?",
+               "variacion_por_placa.png")
+    L = [f"# THD GIO — Variación de consumo {na} → {nb}\n",
+         f"_Generado: {datetime.date.today():%d/%m/%Y}. "
+         f"P3 (15 jun+) aún sin cargas, por eso se comparan los dos periodos con datos._\n",
+         "## Variación por CHOFER (litros)\n", _tabla_var(dch, "Chofer"),
+         "\n## Variación por PLACA (litros)\n", _tabla_var(dpl, "Placa")]
+    with open(os.path.join(HERE, "variacion_thdgio.md"), "w") as f:
+        f.write("\n".join(L) + "\n")
 
 
 def _topkeys(dicts, n=12):
