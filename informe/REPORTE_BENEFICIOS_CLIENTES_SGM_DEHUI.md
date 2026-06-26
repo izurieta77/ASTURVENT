@@ -32,8 +32,8 @@
 
 Pantalla principal. De un vistazo ves **cuánto has cargado, cuánto has gastado y
 cuántos despachos** llevas en el período. En la cuenta de DEHUI se observa una
-operación intensa: **48 despachos** y **$543,376.59 facturados** en el período
-consultado, con una flotilla amplia de unidades y choferes.
+operación intensa: **20,650 litros**, **$555,958.86 facturados** y **49 despachos**
+en el período consultado, con una flotilla amplia de unidades y choferes.
 
 ![Pestaña Consumos](capturas-dehui/01-consumos.png)
 
@@ -52,10 +52,6 @@ consultado, con una flotilla amplia de unidades y choferes.
 - Sabes **al instante** cuánto llevas gastado sin esperar al corte.
 - Con una flotilla grande, detectas **quién o qué unidad se sale del patrón**.
 - **Respaldo fotográfico** de cada despacho: control antifraude total.
-
-> 💡 **Recomendación para DEHUI:** revisa que la columna de **litros** en tu hoja de
-> registros tenga capturas consistentes; algunos despachos muestran valores muy
-> elevados que conviene depurar para que el cálculo de litros y km/L sea exacto.
 
 ---
 
@@ -178,10 +174,11 @@ costo por unidad y tendencia mensual. También le escribes cualquier pregunta.
 ### La IA en acción
 
 Al pedir *"Resumen de mi consumo"*, la IA de DEHUI entregó rankings concretos:
-identificó a los **choferes y unidades de mayor consumo** (entre ellos **Raúl
-Martínez Delgado**, **Ricardo Delgado** y **Ulises**, y las unidades **50BHSD**,
-**50BK5M** y **96BD6K**) y **detectó anomalías** —choferes con consumos atípicos en un
-solo despacho— recomendando revisarlos para descartar irregularidades o ineficiencias.
+identificó a los **choferes de mayor consumo** (**Neftalí Torres** ~1,765 L,
+**Cristian Carmona Ruiz** ~1,777 L y **Jonathan Castillo** ~1,717 L) y las **unidades
+más demandantes** (**50BK5M** ~2,582 L, **50BH5D** ~2,160 L y **38BK1C** ~1,736 L),
+señalando además un **desbalance en litros por despacho** entre operadores y
+recomendando revisarlo para mejorar la eficiencia.
 
 ![IA respondiendo](capturas-dehui/08-ia-respuesta.png)
 
