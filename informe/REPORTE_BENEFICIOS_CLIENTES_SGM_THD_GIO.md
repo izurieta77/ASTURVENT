@@ -30,9 +30,9 @@
 ## 1) 📊 Consumos — Tu panorama completo
 
 Pantalla principal. De un vistazo ves **cuánto has cargado, cuánto has gastado y
-cuántos despachos** llevas en el período. En la cuenta de THD GIO se observa un
-volumen alto de operación: **alrededor de 245,500 litros en 72 despachos**, con
-decenas de choferes y unidades activas.
+cuántos despachos** llevas en el período. En la cuenta de THD GIO se observa una
+operación de alto movimiento: **18,592.9 litros**, **$501,972.08 facturados** y
+**72 despachos** en el período consultado, con decenas de choferes y unidades activas.
 
 ![Pestaña Consumos](capturas-tgio/01-consumos.png)
 
@@ -172,11 +172,12 @@ costo por unidad y tendencia mensual. También le escribes cualquier pregunta.
 
 ### La IA en acción
 
-Al pedir *"Resumen de mi consumo"*, la IA de THD GIO entregó cifras concretas:
-**promedio de ~3,413 L por despacho**, **~245,535 L** repartidos en sus principales
-choferes y unidades, identificó al **chofer y la unidad de mayor consumo** (Bryan
-Enríquez Delgado y la unidad **LH19666**) y **recomendó revisarlos** para descartar
-irregularidades en el despacho.
+Al pedir *"Resumen de mi consumo"*, la IA de THD GIO entregó rankings concretos:
+identificó a los **choferes de mayor consumo** (**Zenón de la Cruz** ~1,233 L,
+**Daniel Jiménez Flores** ~1,221 L y **Armando Ledesma** ~1,179 L) y las **unidades
+más demandantes** (**70AZ9H** ~2,211 L, **31AZ3J** ~1,482 L y **11BB5W** ~1,002 L),
+detectando además **variaciones en la escritura de algunas placas** y un **desbalance
+de litros por despacho** entre operadores, con recomendaciones para revisarlos.
 
 ![IA respondiendo](capturas-tgio/08-ia-respuesta.png)
 
