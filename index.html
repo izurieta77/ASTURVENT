@@ -8916,6 +8916,186 @@ function mostrarInfoUnidad() {
     rendEl.textContent = ref.rendimiento ? (Number(ref.rendimiento).toFixed(1) + ' km/L') : '—';
   }
 }
+
+// ── CIERRES OPERATIVOS (PORTAL CLIENTE) ───────────────────
+// Litros y monto de una placa dentro de un rango de fechas, tomados de
+// los despachos reales del cliente (STATE.registros del prefijo en sesión).
+function cierreLitrosMonto_(placas, fechaIni, fechaFin) {
+  const prefix = STATE.session?.prefijo;
+  const pl = (placas || '').trim().toUpperCase();
+  if(!prefix || !pl) return { litros:0, monto:0 };
+
+  let st = -Infinity, en = Infinity;
+  if(fechaIni) { const [y,m,d] = fechaIni.split('-').map(Number); st = new Date(y, m-1, d, 0,0,0).getTime(); }
+  if(fechaFin) { const [y,m,d] = fechaFin.split('-').map(Number); en = new Date(y, m-1, d, 23,59,59).getTime(); }
+
+  return (STATE.registros || [])
+    .filter(r => r.prefix === prefix && (r.placas||r.unidad||'').toUpperCase() === pl)
+    .filter(r => { const ts = r.timestamp || parseDateToTs(r.fecha) || 0; return ts >= st && ts <= en; })
+    .reduce((a, r) => ({ litros: a.litros + (r.litros||0), monto: a.monto + (r.monto||0) }), { litros:0, monto:0 });
+}
+
+// Si hay km total y km cargado, deriva el km vacío automáticamente.
+function autoKmVacioDesdeTotal() {
+  const total   = parseFloat($('cierre-km-total')?.value)   || 0;
+  const cargado = parseFloat($('cierre-km-cargado')?.value) || 0;
+  const vacioEl = $('cierre-km-vacio');
+  if(vacioEl && total > 0 && cargado > 0 && cargado <= total) {
+    vacioEl.value = Math.max(0, Math.round(total - cargado));
+  }
+}
+
+// Si hay odómetro inicial y final, calcula el km total recorrido.
+function autoKmDesdeOdometro() {
+  const ini = parseFloat($('cierre-odo-ini')?.value);
+  const fin = parseFloat($('cierre-odo-fin')?.value);
+  const totalEl = $('cierre-km-total');
+  if(totalEl && Number.isFinite(ini) && Number.isFinite(fin) && fin > ini) {
+    totalEl.value = Math.round(fin - ini);
+    autoKmVacioDesdeTotal();
+  }
+}
+
+// Resumen en vivo del cierre: km/L, $/km, % vacío y litros del período.
+function calcularResumenCierre() {
+  const box = $('cierre-resumen');
+  if(!box) return;
+
+  const placas  = $('cierre-placas')?.value;
+  const kmTotal = parseFloat($('cierre-km-total')?.value) || 0;
+  const kmVacio = parseFloat($('cierre-km-vacio')?.value) || 0;
+  const fIni    = $('cierre-fecha-ini')?.value;
+  const fFin    = $('cierre-fecha-fin')?.value;
+
+  if(!placas || kmTotal <= 0) { box.style.display = 'none'; return; }
+
+  const { litros, monto } = cierreLitrosMonto_(placas, fIni, fFin);
+  const kmL     = litros > 0 ? kmTotal / litros : null;
+  const costoKm = kmTotal > 0 && monto > 0 ? monto / kmTotal : null;
+  const pctVacio = kmTotal > 0 ? (kmVacio / kmTotal * 100) : 0;
+
+  box.style.display = 'block';
+  const kmLEl = $('cierre-res-kmL');
+  if(kmLEl) kmLEl.textContent = kmL ? kmL.toFixed(2) : '—';
+
+  // Comparación vs rendimiento objetivo del catálogo
+  const vsEl = $('cierre-res-vs-ref');
+  const ref  = getUnidadRef(placas);
+  if(vsEl) {
+    if(kmL && ref?.rendimiento) {
+      const diff = (kmL - ref.rendimiento) / ref.rendimiento * 100;
+      const col  = diff < -15 ? 'var(--red)' : diff < -5 ? 'var(--yellow)' : 'var(--green)';
+      vsEl.innerHTML = `<span style="color:${col};">${diff>=0?'+':''}${diff.toFixed(0)}% vs ${ref.rendimiento} objetivo</span>`;
+    } else if(!litros) {
+      vsEl.innerHTML = `<span style="color:var(--fg-4);">Sin litros en el período seleccionado</span>`;
+    } else { vsEl.textContent = ''; }
+  }
+
+  const costoEl = $('cierre-res-costo');
+  if(costoEl) costoEl.textContent = costoKm ? '$' + fmt(costoKm) : '—';
+  const vacioEl = $('cierre-res-vacio');
+  if(vacioEl) vacioEl.textContent = kmVacio > 0 ? pctVacio.toFixed(0) + '%' : '—';
+  const litrosEl = $('cierre-res-litros');
+  if(litrosEl) litrosEl.textContent = litros > 0 ? fmtL(litros) + ' L' : '—';
+}
+
+// Guardar el cierre operativo del período.
+function guardarCierre() {
+  const prefix = STATE.session?.prefijo;
+  const errEl  = $('cierre-err');
+  errEl?.classList.add('hidden');
+
+  const placas  = ($('cierre-placas')?.value || '').trim().toUpperCase();
+  const kmTotal = parseFloat($('cierre-km-total')?.value) || 0;
+  const fIni    = $('cierre-fecha-ini')?.value || '';
+  const fFin    = $('cierre-fecha-fin')?.value || '';
+
+  if(!prefix)      { showMsg('cierre-err','⚠️ Sesión no válida. Vuelve a iniciar sesión.','err'); return; }
+  if(!placas)      { showMsg('cierre-err','⚠️ Selecciona la unidad (placas).','err'); return; }
+  if(kmTotal <= 0) { showMsg('cierre-err','⚠️ Captura los km recorridos del período.','err'); return; }
+  if(!fIni || !fFin) { showMsg('cierre-err','⚠️ Indica el período (fecha inicio y fin).','err'); return; }
+  if(fFin < fIni)  { showMsg('cierre-err','⚠️ La fecha fin no puede ser anterior a la inicial.','err'); return; }
+
+  const { litros, monto } = cierreLitrosMonto_(placas, fIni, fFin);
+  const kmCargado = parseFloat($('cierre-km-cargado')?.value) || 0;
+  const kmVacio   = parseFloat($('cierre-km-vacio')?.value)   || 0;
+  const kmL       = litros > 0 ? kmTotal / litros : null;
+  const costoKm   = kmTotal > 0 && monto > 0 ? monto / kmTotal : null;
+
+  const cierre = {
+    id:           'CIE-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2,5).toUpperCase(),
+    prefix, placas,
+    fechaIni:     fIni,
+    fechaFin:     fFin,
+    kmRecorridos: kmTotal,
+    kmCargado, kmVacio,
+    odoIni:       parseFloat($('cierre-odo-ini')?.value) || null,
+    odoFin:       parseFloat($('cierre-odo-fin')?.value) || null,
+    ruta:         $('cierre-ruta')?.value || '',
+    operacion:    $('cierre-operacion')?.value || '',
+    carga:        $('cierre-carga')?.value || '',
+    obs:          ($('cierre-obs')?.value || '').trim(),
+    litros, monto, kmL, costoKm,
+    ts:           Date.now(),
+  };
+
+  const todos = getCierres();
+  todos.push(cierre);
+  saveCierres(todos);
+
+  // Limpiar campos de captura (conservar unidad y período)
+  ['cierre-km-total','cierre-km-cargado','cierre-km-vacio','cierre-odo-ini','cierre-odo-fin','cierre-obs']
+    .forEach(id => { const el = $(id); if(el) el.value = ''; });
+  ['cierre-ruta','cierre-operacion','cierre-carga'].forEach(id => { const el = $(id); if(el) el.value = ''; });
+  const box = $('cierre-resumen'); if(box) box.style.display = 'none';
+
+  showMsg('cierre-err', `✅ Cierre guardado: ${placas} · ${kmTotal.toLocaleString('es-MX')} km${kmL ? ' · ' + kmL.toFixed(2) + ' km/L' : ''}`, 'ok');
+
+  // Refrescar KPIs, tabla por unidad e historial
+  renderCliRendimiento();
+}
+
+// Tabla de historial de cierres operativos del cliente.
+function renderTablaCierres() {
+  const tbody = $('tbody-cierres');
+  if(!tbody) return;
+
+  const cierres = getCierresCliente().slice().sort((a,b) => (b.ts||0) - (a.ts||0));
+
+  if(!cierres.length) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--fg-4);">
+      Aún no registras cierres operativos.<br>
+      <span style="font-size:12px;">Captura los km del período arriba para empezar a medir tu rendimiento.</span>
+    </td></tr>`;
+    return;
+  }
+
+  const periodoTxt = c => {
+    const f = s => (s || '').slice(8,10) + '/' + (s || '').slice(5,7);
+    return c.fechaIni && c.fechaFin ? `${f(c.fechaIni)} – ${f(c.fechaFin)}` : '—';
+  };
+
+  tbody.innerHTML = cierres.map(c => {
+    const ref  = getUnidadRef(c.placas);
+    const kmL  = c.kmL != null ? c.kmL : (c.litros > 0 ? c.kmRecorridos / c.litros : null);
+    let kmLCell = kmL ? kmL.toFixed(2) : '<span style="color:var(--fg-4);">—</span>';
+    if(kmL && ref?.rendimiento) {
+      const diff = (kmL - ref.rendimiento) / ref.rendimiento * 100;
+      const col  = diff < -15 ? 'var(--red)' : diff < -5 ? 'var(--yellow)' : 'var(--green)';
+      kmLCell = `<strong>${kmL.toFixed(2)}</strong> <span style="font-size:10px;color:${col};">${diff>=0?'+':''}${diff.toFixed(0)}%</span>`;
+    }
+    const costoKm = c.costoKm != null ? c.costoKm : (c.kmRecorridos > 0 && c.monto > 0 ? c.monto / c.kmRecorridos : null);
+    return `<tr>
+      <td class="td-name" style="font-family:monospace;">${c.placas}</td>
+      <td style="font-size:12px;">${periodoTxt(c)}</td>
+      <td class="td-num">${(c.kmRecorridos||0).toLocaleString('es-MX')}</td>
+      <td style="text-align:center;color:var(--green);">${kmLCell}</td>
+      <td style="text-align:center;color:var(--yellow);">${costoKm ? '$'+fmt(costoKm) : '—'}</td>
+      <td style="font-size:11px;color:var(--fg-3);">${c.ruta || '—'}</td>
+      <td class="td-num" style="color:var(--fg-3);">${c.litros > 0 ? fmtL(c.litros)+' L' : '—'}</td>
+    </tr>`;
+  }).join('');
+}
 </script>
 </body>
 </html>
