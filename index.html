@@ -4403,23 +4403,30 @@ function getCellDate(val) {
 
 function parseNum(val) {
   if(val === undefined || val === null || val === '') return 0;
-  let s = String(val).trim();
-  // Quitar signo de pesos y espacios
-  s = s.replace(/[$\s]/g, '');
+  let s = String(val).trim().replace(/[$\s]/g, ''); // quitar $ y espacios
   if(!s) return 0;
 
-  // Detectar formato mirando el ÚLTIMO separador (es el decimal)
-  // Caso: termina en .XX → punto es decimal (formato americano: $4,200.00)
-  if(/\.\d{1,2}$/.test(s)) {
-    s = s.replace(/,/g, '');           // quitar comas de miles
-  }
-  // Caso: termina en ,XX → coma es decimal (formato mexicano: 974,07)
-  else if(/,\d{1,2}$/.test(s)) {
-    s = s.replace(/\./g, '').replace(',', '.'); // quitar puntos de miles, coma→punto
-  }
-  // Caso: número entero o con más de 2 decimales → quitar todos los separadores
-  else {
-    s = s.replace(/[,\.]/g, '');
+  // Formato US/MX: el PUNTO es decimal y la COMA es separador de miles.
+  // (Los valores vienen de Sheets con FORMATTED_VALUE en locale es-MX.)
+  const hasDot = s.includes('.'), hasComma = s.includes(',');
+
+  if(hasDot && hasComma) {
+    // Ambos separadores: el ÚLTIMO es el decimal.
+    if(s.lastIndexOf(',') > s.lastIndexOf('.')) {
+      s = s.replace(/\./g, '').replace(/,/g, '.'); // europeo: 1.234,56 → 1234.56
+    } else {
+      s = s.replace(/,/g, '');                     // US/MX: 1,234.56 → 1234.56
+    }
+  } else if(hasComma) {
+    // Solo comas: una coma con 1-2 decimales es decimal (974,07);
+    // cualquier otro caso son miles (4,200 → 4200).
+    if(/^\d+,\d{1,2}$/.test(s)) s = s.replace(',', '.');
+    else s = s.replace(/,/g, '');
+  } else if(hasDot) {
+    // Solo puntos: el punto es decimal, INCLUSO con 3 decimales (283.530 → 283.53).
+    // Antes, los valores con 3 decimales se inflaban ×1000 al tratar el punto
+    // como separador de miles. Varios puntos (1.234.567) sí son miles → quitarlos.
+    if((s.match(/\./g) || []).length > 1) s = s.replace(/\./g, '');
   }
   return parseFloat(s) || 0;
 }
