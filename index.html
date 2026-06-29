@@ -1688,6 +1688,7 @@ window.SGM_CONFIG = {
         <button class="tab" data-tab="ia"           onclick="adminTab('ia')">🤖 IA</button>
         <button class="tab" data-tab="cortes"       onclick="adminTab('cortes')">✂️ Cortes</button>
         <button class="tab" data-tab="importar"     onclick="adminTab('importar')">📤 Importar</button>
+        <button class="tab" data-tab="duplicados"   onclick="adminTab('duplicados')">🔁 Duplicados</button>
         <button class="tab" data-tab="config"       onclick="adminTab('config')">⚙️ Config</button>
       </div>
 
@@ -2510,6 +2511,45 @@ window.SGM_CONFIG = {
             <div class="msg msg-warn mt-16">
               💡 Con solo API Key puedes LEER datos. Para ESCRIBIR (guardar despachos) necesitas Apps Script o un backend propio.
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── DUPLICADOS ── -->
+      <div id="admin-duplicados" class="view">
+        <div class="sec-header mb-16">
+          <div>
+            <div class="label">Auditoría de Cargas</div>
+            <div class="h2 mt-4">🔁 Detector de Duplicados</div>
+          </div>
+          <button class="btn btn-red btn-sm" onclick="refreshData().then(renderDuplicados)">🔄 Re-escanear</button>
+        </div>
+
+        <div class="msg msg-info mb-12">
+          ℹ️ Detecta despachos registrados <b>dos o más veces</b>. Criterio: mismo <b>ID_REGISTRO</b> (señal principal) o, si falta, misma combinación de <b>ticket EGAS + monto + chofer + placas + fecha</b>.
+          Revisa todos los clientes cargados en este momento. <b>No borra nada</b>: te muestra cuáles eliminar en la hoja <i>Despachos_SGM_APP</i>.
+        </div>
+
+        <div class="kpi-grid mb-16" id="dup-kpis"></div>
+
+        <div class="card mb-12">
+          <div class="label mb-8" style="font-size:9px;">BUSCAR</div>
+          <input id="dup-search" class="inp inp-sm" placeholder="Filtrar por cliente, ticket, chofer, placas..." oninput="renderDuplicados()">
+        </div>
+
+        <div class="card">
+          <div class="sec-header">
+            <div class="h3">Grupos duplicados</div>
+            <button class="btn btn-ghost btn-sm" onclick="exportDuplicadosCSV()">⬇️ CSV</button>
+          </div>
+          <div class="tbl-wrap">
+            <table id="tabla-duplicados">
+              <thead><tr>
+                <th>Cliente</th><th>Fecha</th><th>Hora</th><th>Ticket EGAS</th><th>Monto</th>
+                <th>Chofer</th><th>Placas</th><th>Veces</th><th>ID_REGISTRO</th><th>Criterio</th>
+              </tr></thead>
+              <tbody id="tbody-duplicados"></tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -4989,9 +5029,10 @@ function adminTab(tab) {
     // data-tab es más robusto que índice — no se rompe si cambia el orden
     t.classList.toggle('active', (t.dataset.tab || '') === tab);
   });
-  ['resumen','bitacora','graficas','rendimiento','catalogo','vales','autorizaciones','ia','cortes','importar','config'].forEach(v => {
+  ['resumen','bitacora','graficas','rendimiento','catalogo','vales','autorizaciones','ia','cortes','importar','duplicados','config'].forEach(v => {
     $(`admin-${v}`)?.classList.toggle('active', v === tab);
   });
+  if(tab === 'duplicados')     renderDuplicados();
   if(tab === 'graficas')       renderGraficas();
   if(tab === 'config')         { renderSaldos(); renderClavesConfig(); renderPinesConfig(); }
   if(tab === 'cortes')         renderCortesView();
@@ -5000,6 +5041,113 @@ function adminTab(tab) {
   if(tab === 'ia')             initIATab();
   if(tab === 'rendimiento')    renderRendimiento();
   if(tab === 'catalogo')       renderCatalogo();
+}
+
+// ══════════════════════════════════════════════════════════
+// DETECTOR DE DUPLICADOS (ADMIN)
+// Un mismo despacho puede quedar registrado 2+ veces (reintento de
+// envío). Señal principal: mismo ID_REGISTRO. Respaldo cuando falta el
+// id: ticket EGAS + monto + chofer + placas + fecha.
+// ══════════════════════════════════════════════════════════
+function getDuplicados_() {
+  const data = Array.isArray(STATE.registros) ? STATE.registros : [];
+  const groups = new Map();
+
+  data.forEach(r => {
+    const id     = String(r.id_registro || r.id || '').trim().toUpperCase();
+    const ticket = String(r.ticket || r.ticket_egas || '').trim().toUpperCase();
+    const monto  = String(r.monto ?? '').trim();
+    const chofer = String(r.chofer || '').trim().toUpperCase();
+    const placas = String(r.placas || r.unidad || '').trim().toUpperCase();
+    const fecha  = String(r.fecha || '').trim();
+
+    let key, criterio;
+    if(id) { key = 'ID|' + id; criterio = 'ID_REGISTRO'; }
+    else if(ticket) { key = 'TMC|' + [ticket, monto, chofer, placas, fecha].join('·'); criterio = 'ticket+monto+chofer+placas+fecha'; }
+    else return; // sin id ni ticket: no se puede evaluar de forma confiable
+
+    if(!groups.has(key)) groups.set(key, { criterio, registros: [] });
+    groups.get(key).registros.push(r);
+  });
+
+  // Solo grupos con 2+ registros = duplicados
+  return [...groups.values()]
+    .filter(g => g.registros.length > 1)
+    .map(g => {
+      const r = g.registros[0];
+      return {
+        criterio:  g.criterio,
+        veces:     g.registros.length,
+        cliente:   C.CLIENTES[r.prefix] || r.prefix || r.cliente || '—',
+        prefix:    r.prefix || '',
+        fecha:     r.fecha || '—',
+        hora:      r.hora || '—',
+        ticket:    r.ticket || r.ticket_egas || '—',
+        monto:     Number(r.monto) || 0,
+        chofer:    r.chofer || '—',
+        placas:    r.placas || r.unidad || '—',
+        idreg:     r.id_registro || r.id || '—',
+      };
+    })
+    .sort((a, b) => (a.cliente || '').localeCompare(b.cliente || '') || (a.fecha || '').localeCompare(b.fecha || ''));
+}
+
+function renderDuplicados() {
+  if(!$('tbody-duplicados')) return;
+  const dups = getDuplicados_();
+
+  const grupos = dups.length;
+  const extra  = dups.reduce((a, d) => a + (d.veces - 1), 0);
+  const clientes = new Set(dups.map(d => d.prefix)).size;
+
+  const kpisEl = $('dup-kpis');
+  if(kpisEl) kpisEl.innerHTML = `
+    <div class="kpi-card" style="--accent:var(--red)"><div class="kpi-label">Grupos duplicados</div><div class="kpi-val color-red">${grupos}</div><div class="kpi-sub">despachos repetidos</div></div>
+    <div class="kpi-card" style="--accent:var(--yellow)"><div class="kpi-label">Registros de más</div><div class="kpi-val color-yellow">${extra}</div><div class="kpi-sub">filas a eliminar</div></div>
+    <div class="kpi-card" style="--accent:var(--green)"><div class="kpi-label">Clientes afectados</div><div class="kpi-val color-green">${clientes}</div><div class="kpi-sub">de ${new Set((STATE.registros||[]).map(r=>r.prefix)).size} cargados</div></div>
+  `;
+
+  const q = ($('dup-search')?.value || '').trim().toLowerCase();
+  const filtered = q
+    ? dups.filter(d => [d.cliente, d.ticket, d.chofer, d.placas, d.idreg].join(' ').toLowerCase().includes(q))
+    : dups;
+
+  const tbody = $('tbody-duplicados');
+  if(!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--green);font-weight:700;">
+      ✅ Sin duplicados ${q ? 'que coincidan con la búsqueda' : 'en los datos cargados'}.
+    </td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(d => `
+    <tr>
+      <td class="td-name">${d.cliente}</td>
+      <td class="td-mono">${d.fecha}</td>
+      <td class="td-mono" style="font-size:11px;color:var(--steel-5);">${d.hora}</td>
+      <td class="td-mono">${d.ticket}</td>
+      <td class="td-num td-green">$${fmt(d.monto)}</td>
+      <td>${d.chofer}</td>
+      <td class="td-mono">${d.placas}</td>
+      <td style="text-align:center;"><span style="background:var(--red);color:#fff;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:800;">${d.veces}×</span></td>
+      <td class="td-mono" style="font-size:10px;">${d.idreg}</td>
+      <td style="font-size:10px;color:var(--fg-4);">${d.criterio}</td>
+    </tr>`).join('');
+}
+
+function exportDuplicadosCSV() {
+  const dups = getDuplicados_();
+  if(!dups.length) { alert('No hay duplicados que exportar.'); return; }
+  const head = ['Cliente','Prefijo','Fecha','Hora','TicketEGAS','Monto','Chofer','Placas','Veces','ID_REGISTRO','Criterio'];
+  const rows = dups.map(d => [d.cliente, d.prefix, d.fecha, d.hora, d.ticket, d.monto, d.chofer, d.placas, d.veces, d.idreg, d.criterio]);
+  const csv = [head, ...rows]
+    .map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'duplicados_sgm.csv';
+  a.click();
 }
 
 // Agrupa registros por campo, suma litros, devuelve { label: totalLitros }
