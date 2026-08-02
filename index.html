@@ -18,6 +18,7 @@
 
 <!-- Fonts: Inter + Montserrat -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300..700,0..1,-25..0" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Montserrat:ital,wght@0,400;0,600;0,700;0,800;0,900;1,700;1,800;1,900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet">
 
 <!-- SheetJS for Excel import -->
@@ -1088,6 +1089,7 @@ tr:hover td {
   .no-print{display:none!important;}
 }
 </style>
+<link rel="stylesheet" href="stitch-redesign.css">
 </head>
 <body>
 <div id="print-area" style="display:none;"></div>
@@ -1243,7 +1245,7 @@ window.SGM_CONFIG = {
     </div>
 
     <!-- Tagline de marca -->
-    <div style="margin-bottom:20px;padding:10px 14px;background:linear-gradient(135deg,var(--synergy-green-bg),rgba(0,87,184,0.08));border:1px solid var(--synergy-green-border);border-radius:var(--radius-xs);">
+    <div class="login-tagline" style="margin-bottom:20px;padding:10px 14px;background:linear-gradient(135deg,var(--synergy-green-bg),rgba(0,87,184,0.08));border:1px solid var(--synergy-green-border);border-radius:var(--radius-xs);">
       <div style="font-size:10px;font-weight:800;letter-spacing:1.5px;color:var(--synergy-green);text-transform:uppercase;margin-bottom:2px;">Ingeniería de Precisión</div>
       <div style="font-size:11px;color:var(--text-secondary);font-weight:500;line-height:1.4;">Ecosistema de Protección Total · Combustibles Synergy™ + Lubricantes Mobil 1™</div>
     </div>
@@ -1260,7 +1262,7 @@ window.SGM_CONFIG = {
     <!-- Agente: nombre + isla -->
     <div id="login-agente-msg" class="mb-16">
       <div style="position:relative;margin-bottom:12px;">
-        <div style="position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--text-tertiary);font-size:16px;">👤</div>
+        <span class="material-symbols-rounded field-leading-icon">person</span>
         <select id="login-agente-select" class="inp inp-icon-left fw-600">
           <option value="">— Selecciona tu nombre —</option>
           <option>RIGO</option><option>RAFAEL</option><option>ANGÉLICA</option>
@@ -1271,7 +1273,7 @@ window.SGM_CONFIG = {
       </div>
       <!-- PIN del agente -->
       <div style="position:relative;margin-bottom:16px;">
-        <div style="position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--text-tertiary);font-size:16px;">🔐</div>
+        <span class="material-symbols-rounded field-leading-icon">lock</span>
         <input id="agente-pin" class="inp inp-icon-left-lg inp-pin" type="password" maxlength="3"
           placeholder="PIN (3 dígitos)"
           oninput="this.value=this.value.replace(/[^0-9]/g,'')"
@@ -1300,7 +1302,7 @@ window.SGM_CONFIG = {
         <option value="">— Selecciona tu empresa —</option>
       </select>
       <div style="position:relative;">
-        <div style="position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--text-tertiary);font-size:16px;">🔑</div>
+        <span class="material-symbols-rounded field-leading-icon">key</span>
         <input id="cliente-clave" class="inp inp-icon-left-lg fw-600" type="password"
           placeholder="Clave de acceso"
           onkeydown="if(event.key==='Enter')doLogin()">
@@ -1678,18 +1680,18 @@ window.SGM_CONFIG = {
 
       <!-- Sub-tabs admin -->
       <div class="tabs" style="flex-wrap:wrap;">
-        <button class="tab active" data-tab="resumen"      onclick="adminTab('resumen')">📊 Resumen</button>
-        <button class="tab" data-tab="bitacora"     onclick="adminTab('bitacora')">📋 Bitácora</button>
-        <button class="tab" data-tab="graficas"     onclick="adminTab('graficas')">📈 Gráficas</button>
-        <button class="tab" data-tab="rendimiento"  onclick="adminTab('rendimiento')">🚛 Rendimiento</button>
-        <button class="tab" data-tab="catalogo"     onclick="adminTab('catalogo')">📋 Catálogo</button>
-        <button class="tab" data-tab="vales"        onclick="adminTab('vales')">🎫 Vales</button>
-        <button class="tab" data-tab="autorizaciones" onclick="adminTab('autorizaciones')">🔐 Autz</button>
-        <button class="tab" data-tab="ia"           onclick="adminTab('ia')">🤖 IA</button>
-        <button class="tab" data-tab="cortes"       onclick="adminTab('cortes')">✂️ Cortes</button>
-        <button class="tab" data-tab="importar"     onclick="adminTab('importar')">📤 Importar</button>
-        <button class="tab" data-tab="duplicados"   onclick="adminTab('duplicados')">🔁 Duplicados</button>
-        <button class="tab" data-tab="config"       onclick="adminTab('config')">⚙️ Config</button>
+        <button class="tab active" data-tab="resumen"      onclick="adminTab('resumen')"><span class="material-symbols-rounded">dashboard</span>Resumen</button>
+        <button class="tab" data-tab="bitacora"     onclick="adminTab('bitacora')"><span class="material-symbols-rounded">format_list_bulleted</span>Bitácora</button>
+        <button class="tab" data-tab="graficas"     onclick="adminTab('graficas')"><span class="material-symbols-rounded">monitoring</span>Gráficas</button>
+        <button class="tab" data-tab="rendimiento"  onclick="adminTab('rendimiento')"><span class="material-symbols-rounded">local_shipping</span>Rendimiento</button>
+        <button class="tab" data-tab="catalogo"     onclick="adminTab('catalogo')"><span class="material-symbols-rounded">grid_view</span>Catálogo</button>
+        <button class="tab" data-tab="vales"        onclick="adminTab('vales')"><span class="material-symbols-rounded">confirmation_number</span>Vales</button>
+        <button class="tab" data-tab="autorizaciones" onclick="adminTab('autorizaciones')"><span class="material-symbols-rounded">verified_user</span>Autz</button>
+        <button class="tab" data-tab="ia"           onclick="adminTab('ia')"><span class="material-symbols-rounded">smart_toy</span>IA</button>
+        <button class="tab" data-tab="cortes"       onclick="adminTab('cortes')"><span class="material-symbols-rounded">content_cut</span>Cortes</button>
+        <button class="tab" data-tab="importar"     onclick="adminTab('importar')"><span class="material-symbols-rounded">upload_file</span>Importar</button>
+        <button class="tab" data-tab="duplicados"   onclick="adminTab('duplicados')"><span class="material-symbols-rounded">content_copy</span>Duplicados</button>
+        <button class="tab" data-tab="config"       onclick="adminTab('config')"><span class="material-symbols-rounded">settings</span>Config</button>
       </div>
 
       <!-- ── RESUMEN ── -->
@@ -1890,9 +1892,9 @@ window.SGM_CONFIG = {
 
         <!-- Sub-tabs vales -->
         <div class="tabs mb-16" style="margin-bottom:16px;">
-          <button class="tab active" onclick="valesTab('individual')">🎫 Individual</button>
-          <button class="tab" onclick="valesTab('masivo')">📦 Masivo</button>
-          <button class="tab" onclick="valesTab('historial')">📋 Historial</button>
+          <button class="tab active" onclick="valesTab('individual')"><span class="material-symbols-rounded">confirmation_number</span>Individual</button>
+          <button class="tab" onclick="valesTab('masivo')"><span class="material-symbols-rounded">inventory_2</span>Masivo</button>
+          <button class="tab" onclick="valesTab('historial')"><span class="material-symbols-rounded">history</span>Historial</button>
         </div>
 
         <!-- ── INDIVIDUAL ── -->
@@ -2143,9 +2145,9 @@ window.SGM_CONFIG = {
 
         <!-- Tabs rendimiento -->
         <div class="tabs mb-16">
-          <button class="tab active" onclick="rendTab('unidades')">🚗 Por Unidad</button>
-          <button class="tab" onclick="rendTab('choferes')">👤 Por Chofer</button>
-          <button class="tab" onclick="rendTab('alertas')">🚨 Alertas</button>
+          <button class="tab active" onclick="rendTab('unidades')"><span class="material-symbols-rounded">directions_car</span>Por Unidad</button>
+          <button class="tab" onclick="rendTab('choferes')"><span class="material-symbols-rounded">person</span>Por Chofer</button>
+          <button class="tab" onclick="rendTab('alertas')"><span class="material-symbols-rounded">warning</span>Alertas</button>
         </div>
 
         <!-- Por Unidad -->
@@ -2209,7 +2211,7 @@ window.SGM_CONFIG = {
         <div class="sec-header mb-16">
           <div>
             <div class="label">Inteligencia Artificial</div>
-            <div class="h2 mt-4">🤖 Analista de Flotillas SGM</div>
+            <div class="h2 mt-4 ia-title"><span class="material-symbols-rounded" aria-hidden="true">smart_toy</span>Analista de Flotillas SGM</div>
           </div>
           <div id="ia-status" style="font-size:11px;color:var(--fg-4);">Listo</div>
         </div>
@@ -2656,13 +2658,13 @@ window.SGM_CONFIG = {
 
       <!-- Sub-tabs cliente -->
       <div class="tabs mb-16">
-        <button class="tab active" onclick="clienteTab('consumos')" data-tab="consumos">📊 Consumos</button>
-        <button class="tab" onclick="clienteTab('graficas')" data-tab="graficas">📈 Gráficas</button>
-        <button class="tab" onclick="clienteTab('autorizaciones')" data-tab="autorizaciones">🔐 Autorizaciones</button>
-        <button class="tab" onclick="clienteTab('rendimiento')" data-tab="rendimiento">🚛 Rendimiento</button>
-        <button class="tab" onclick="clienteTab('misunidades')" data-tab="misunidades">📋 Mis Unidades</button>
-        <button class="tab" onclick="clienteTab('bitacora')" data-tab="bitacora">📋 Bitácora</button>
-        <button class="tab" onclick="clienteTab('ia')" data-tab="ia">🤖 IA</button>
+        <button class="tab active" onclick="clienteTab('consumos')" data-tab="consumos"><span class="material-symbols-rounded">dashboard</span>Consumos</button>
+        <button class="tab" onclick="clienteTab('graficas')" data-tab="graficas"><span class="material-symbols-rounded">monitoring</span>Gráficas</button>
+        <button class="tab" onclick="clienteTab('autorizaciones')" data-tab="autorizaciones"><span class="material-symbols-rounded">verified_user</span>Autorizaciones</button>
+        <button class="tab" onclick="clienteTab('rendimiento')" data-tab="rendimiento"><span class="material-symbols-rounded">local_shipping</span>Rendimiento</button>
+        <button class="tab" onclick="clienteTab('misunidades')" data-tab="misunidades"><span class="material-symbols-rounded">grid_view</span>Mis Unidades</button>
+        <button class="tab" onclick="clienteTab('bitacora')" data-tab="bitacora"><span class="material-symbols-rounded">format_list_bulleted</span>Bitácora</button>
+        <button class="tab" onclick="clienteTab('ia')" data-tab="ia"><span class="material-symbols-rounded">smart_toy</span>IA</button>
       </div>
 
       <!-- ── CONSUMOS ── -->
