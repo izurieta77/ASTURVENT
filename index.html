@@ -4658,6 +4658,43 @@ function sleep_(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+async function postDispatchViaNetlify_(data) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60000);
+
+  try {
+    const response = await fetch('/.netlify/functions/sgm-write', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        endpoint: C.APPS_SCRIPT_URL,
+        payload: {
+          action: 'append',
+          sheet: C.HOJA_BITACORA,
+          row: data
+        }
+      }),
+      signal: controller.signal
+    });
+
+    const text = await response.text();
+    let result = {};
+    try { result = JSON.parse(text || '{}'); } catch(_) {}
+
+    if(!response.ok || !result.ok || !result.confirmed) {
+      throw new Error(result.error || result.upstream?.error || `sgm-write HTTP ${response.status}`);
+    }
+    return result;
+  } catch(error) {
+    if(error?.name === 'AbortError') {
+      throw new Error('Timeout esperando confirmación del servidor');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function postDispatchOpaque_(data) {
   await fetch(C.APPS_SCRIPT_URL, {
     method: 'POST',
@@ -4836,6 +4873,17 @@ async function writeToSheet(data, options = {}) {
   }
 
   let lastError = null;
+
+  // Primary path: browser -> same-origin Netlify Function -> Apps Script.
+  // It returns the real backend acknowledgement and avoids false failures.
+  try {
+    const proxyResult = await postDispatchViaNetlify_(data);
+    localStorage.removeItem(backupKey);
+    return { ok: true, confirmed: true, via: 'netlify-function', upstream: proxyResult.upstream };
+  } catch(error) {
+    lastError = error;
+    if(!silent) console.warn('[SGM] sgm-write no confirmó, usando respaldo:', error?.message || error);
+  }
 
   // 1er intento: POST + polling extendido (20s).
   // Cubre casos típicos en que Apps Script tarda 5-12s en procesar (subidas a

@@ -22,6 +22,7 @@ const paths = {
   appsScript: path.join(ROOT, 'apps_script', 'Codigo.gs'),
   authFn: path.join(ROOT, 'netlify', 'functions', 'auth.js'),
   iaFn: path.join(ROOT, 'netlify', 'functions', 'ia.js'),
+  sgmWriteFn: path.join(ROOT, 'netlify', 'functions', 'sgm-write.js'),
   valesCsv: path.join(ROOT, 'Vales', 'DHAR_Junio_2026', 'Vales_Don_Harina_Junio_2026.csv'),
   valesPdf: path.join(ROOT, 'Vales', 'DHAR_Junio_2026', 'Vales_Don_Harina_Junio_2026.pdf'),
 };
@@ -149,6 +150,8 @@ extractInlineScripts(index).forEach((script, i) => {
 compileJavaScript(appsScript, 'apps_script/Codigo.gs');
 compileJavaScript(read(paths.authFn), 'netlify/functions/auth.js');
 compileJavaScript(read(paths.iaFn), 'netlify/functions/ia.js');
+const sgmWriteFn = read(paths.sgmWriteFn);
+compileJavaScript(sgmWriteFn, 'netlify/functions/sgm-write.js');
 
 assert(/const\s+APP_WRITE_TAB\s*=\s*['"]Despachos_SGM_APP['"]/.test(index),
   'Frontend writes to Despachos_SGM_APP');
@@ -160,6 +163,12 @@ assert(/usarHistoricoConsolidado[\s\S]{0,260}tabs\s*=\s*tabs\.filter\(t\s*=>\s*t
   'When historical consolidated is active, frontend reads only APP tab from client sheets');
 assert(/async\s+function\s+writeToSheet/.test(index) && /mode:\s*['"]no-cors['"]/.test(index),
   'Mobile write path remains no-cors simple POST');
+assert(/async\s+function\s+postDispatchViaNetlify_/.test(index) && /\/\.netlify\/functions\/sgm-write/.test(index),
+  'Frontend uses same-origin sgm-write proxy');
+assert(/postDispatchViaNetlify_\(data\)[\s\S]{0,800}postDispatchOpaque_\(data\)/.test(index),
+  'Frontend attempts sgm-write before no-cors fallback');
+assert(/validateAppsScriptUrl_/.test(sgmWriteFn) && /script\.google\.com/.test(sgmWriteFn) && /macros\\\/s/.test(sgmWriteFn),
+  'sgm-write only proxies Apps Script web app URLs');
 assert(/confirmWriteViaBackendDiag_/.test(index) && /lastAppend/.test(index),
   'Frontend can use backend diag lastAppend confirmation');
 assert(/if\s*\(\s*writeResult\?\.\s*confirmed\s*\)[\s\S]{0,500}marcarValeUsado_/.test(index),
