@@ -55,7 +55,13 @@ var TDC_CFG = {
   torreSheetId: '',
 
   // Pestaña destino del consolidado. ⚠ AJUSTA al nombre real.
+  // (Verificado 5/oct/2026: la pestaña vive en la hoja "THD GIO" y se llama
+  //  exactamente TORRE_DE_CONTROL; su última carga real es del 17/04/2026.)
   torreTab: 'TORRE_DE_CONTROL',
+
+  // Solo se consolida desde esta fecha (cubre el hueco abril→hoy sin
+  // releer años de historia). Formato AAAA-MM-DD.
+  desdeFecha: '2026-04-01',
 
   // Pestaña fuente en cada sheet de cliente (igual que en index.html).
   hojaCliente: 'Despachos_SGM_APP',
@@ -178,9 +184,13 @@ function consolidarTorreDeControlCliente_(prefix) {
   if (lastRow <= 1 || lastCol === 0) return 0;       // vacío
   if (ultimaLeida >= lastRow) return 0;              // sin filas nuevas
 
-  var headers = hoja.getRange(1, 1, 1, lastCol).getValues()[0];
-  var nuevas = hoja.getRange(ultimaLeida + 1, 1,
-                             lastRow - ultimaLeida, lastCol).getValues();
+  var headers = tdcConReintento_(function () {
+    return hoja.getRange(1, 1, 1, lastCol).getValues()[0];
+  });
+  var nuevas = tdcConReintento_(function () {
+    return hoja.getRange(ultimaLeida + 1, 1,
+                         lastRow - ultimaLeida, lastCol).getValues();
+  });
 
   var torre = tdcHojaTorre_();
   var escritas = tdcAppendPorHeader_(torre, headers, nuevas, prefix);
@@ -188,6 +198,21 @@ function consolidarTorreDeControlCliente_(prefix) {
   filasIdx[prefix] = lastRow;
   props.setProperty(TDC_CFG.filasKey, JSON.stringify(filasIdx));
   return escritas;
+}
+
+// Reintenta una operación de Sheets ante errores transitorios de Google
+// ("server error occurred", "Error code INTERNAL", "Service Spreadsheets
+// failed"): 2s, 4s, 8s y relanza el último si persiste.
+function tdcConReintento_(fn) {
+  var ultimoError;
+  for (var i = 0; i < TDC_CFG.maxReintentos; i++) {
+    try { return fn(); }
+    catch (err) {
+      ultimoError = err;
+      Utilities.sleep(2000 * Math.pow(2, i));
+    }
+  }
+  throw ultimoError;
 }
 
 // Apertura con reintentos: cubre el error transitorio
@@ -217,8 +242,66 @@ function tdcHojaTorre_() {
   return sheet;
 }
 
-// Escribe filas mapeando por NOMBRE de header (case/espacios-insensible),
-// igual que el backend v4: los campos sin columna destino se ignoran.
+// Alias: columna de la Torre (normalizada) → columnas posibles del origen.
+// La Torre usa TICKET / FOTO_SELLO_1 / PRECINTO_1_ENTRADA; las hojas de
+// cliente (Despachos_SGM_APP) usan TICKET_EGAS / FOTO_SELLO_E1 / NUM_SELLO_E1.
+var TDC_ALIAS = {
+  cliente:           ['prefix', 'prefijo'],
+  ticket:            ['ticketegas', 'numerodeticket', 'ticket'],
+  placas:            ['placas', 'placa'],
+  cantidad:          ['cantidad', 'litros'],
+  fotoplaca:         ['fotoplaca'],
+  fototicket:        ['fototicket'],
+  precinto1entrada:  ['numselloe1'],
+  precinto2entrada:  ['numselloe2'],
+  precinto1salida:   ['numselloS1'.toLowerCase()],
+  precinto2salida:   ['numselloS2'.toLowerCase()],
+  fotosello1:        ['fotoselloe1'],
+  fotosello2:        ['fotoselloe2'],
+  fotosello3:        ['fotoselloS1'.toLowerCase()],
+  fotosello4:        ['fotoselloS2'.toLowerCase()]
+};
+
+function tdcNorm_(k) {
+  return String(k || '').toLowerCase().replace(/[\s_\-]/g, '');
+}
+
+// "5/4/2026" | "05/04/2026" | Date → Date (o null)
+function tdcParseFecha_(v) {
+  if (v instanceof Date && !isNaN(v)) return v;
+  var m = String(v || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (!m) return null;
+  var d = new Date(+m[3], +m[2] - 1, +m[1]);
+  return isNaN(d) ? null : d;
+}
+
+function tdcClave_(cliente, fecha, ticket, extra) {
+  var d = tdcParseFecha_(fecha);
+  var f = d ? (d.getDate() + '/' + (d.getMonth() + 1) + '/' + d.getFullYear()) : String(fecha);
+  var t = String(ticket || '').trim();
+  return String(cliente).toUpperCase() + '|' + f + '|' + (t || extra);
+}
+
+// Claves ya presentes en la Torre (cliente|fecha|ticket), una vez por ejecución.
+var _tdcClavesCache = null;
+function tdcClavesTorre_(torre, headersTorre) {
+  if (_tdcClavesCache) return _tdcClavesCache;
+  var n = headersTorre.map(tdcNorm_);
+  var iC = n.indexOf('cliente'), iF = n.indexOf('fecha'), iT = n.indexOf('ticket');
+  var set = {};
+  var last = torre.getLastRow();
+  if (last > 1 && iC >= 0 && iF >= 0 && iT >= 0) {
+    var datos = tdcConReintento_(function () {
+      return torre.getRange(2, 1, last - 1, Math.max(iC, iF, iT) + 1).getValues();
+    });
+    datos.forEach(function (r) { set[tdcClave_(r[iC], r[iF], r[iT], '')] = true; });
+  }
+  _tdcClavesCache = set;
+  return set;
+}
+
+// Escribe filas mapeando por NOMBRE de header (con alias), solo desde
+// TDC_CFG.desdeFecha y sin duplicar lo que la Torre ya tiene.
 function tdcAppendPorHeader_(torre, headersOrigen, filas, prefix) {
   var lastCol = torre.getLastColumn();
   if (lastCol === 0) {
@@ -227,28 +310,42 @@ function tdcAppendPorHeader_(torre, headersOrigen, filas, prefix) {
   }
   var headersTorre = torre.getRange(1, 1, 1, lastCol).getValues()[0];
 
-  var norm = function (k) {
-    return String(k || '').toLowerCase().replace(/[\s_\-]/g, '');
-  };
   var idxOrigen = {};
-  headersOrigen.forEach(function (h, i) { idxOrigen[norm(h)] = i; });
+  headersOrigen.forEach(function (h, i) { idxOrigen[tdcNorm_(h)] = i; });
+  var valor = function (fila, nombres) {
+    for (var k = 0; k < nombres.length; k++) {
+      var ix = idxOrigen[nombres[k]];
+      if (ix !== undefined && fila[ix] !== '' && fila[ix] !== null) return fila[ix];
+    }
+    return '';
+  };
 
-  var out = filas.map(function (fila) {
-    return headersTorre.map(function (h) {
-      var nh = norm(h);
-      if (nh === 'prefix' || nh === 'prefijo') {
-        var i = idxOrigen[nh];
-        var v = (i !== undefined) ? fila[i] : '';
-        return v || prefix;
-      }
-      var ix = idxOrigen[nh];
-      return (ix !== undefined) ? fila[ix] : '';
-    });
+  var piso = tdcParseFecha_(TDC_CFG.desdeFecha.split('-').reverse().join('/'));
+  var vistas = tdcClavesTorre_(torre, headersTorre);
+  var out = [];
+
+  filas.forEach(function (fila) {
+    var fecha = valor(fila, ['fecha']);
+    var fd = tdcParseFecha_(fecha);
+    if (!fd || (piso && fd < piso)) return;                 // sin fecha válida / anterior al piso
+    var cliente = valor(fila, TDC_ALIAS.cliente) || prefix;
+    var ticket = valor(fila, TDC_ALIAS.ticket);
+    var clave = tdcClave_(cliente, fecha, ticket,
+      valor(fila, ['hora']) + '#' + valor(fila, TDC_ALIAS.placas) + '#' + valor(fila, TDC_ALIAS.cantidad));
+    if (vistas[clave]) return;                              // ya está en la Torre
+    vistas[clave] = true;
+
+    out.push(headersTorre.map(function (h) {
+      var nh = tdcNorm_(h);
+      return valor(fila, (TDC_ALIAS[nh] || []).concat([nh]));
+    }));
   });
 
   if (!out.length) return 0;
-  torre.getRange(torre.getLastRow() + 1, 1, out.length, headersTorre.length)
-       .setValues(out);
+  var destino = torre.getLastRow() + 1;
+  tdcConReintento_(function () {
+    torre.getRange(destino, 1, out.length, headersTorre.length).setValues(out);
+  });
   return out.length;
 }
 
