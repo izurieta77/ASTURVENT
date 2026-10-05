@@ -1187,49 +1187,6 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;bac
 
 <script>
 
-  /* ---- GALLERY ---- */
-  const PHOTOS = [
-    "https://lh3.googleusercontent.com/d/1DGl7NX2zje-2v5qwa2SuQA-gObdMxkBO=w1200",
-    "https://lh3.googleusercontent.com/d/1qlUNRyg54u_URNme_OwyPsDeyqvMSJu0=w1200",
-    "https://lh3.googleusercontent.com/d/1QNxj5qu_ju9gJK4z4GTFWGGXoQUNDTKv=w1200",
-    "https://lh3.googleusercontent.com/d/1WABtb0IRvUF46SylHLg_wKH12Bp6ofLy=w1200",
-    "https://lh3.googleusercontent.com/d/1DQZ6ELbxAto8V2t3oeHzOd6kJYFDkM83=w1200",
-    "https://lh3.googleusercontent.com/d/1t1y1n1SxHAOd0LYdjmfvuPZ34Al7DlKy=w1200",
-    "https://lh3.googleusercontent.com/d/1GyrppElVBJerGTzX3vUYVJLqvn1zBVtk=w1200",
-    "https://lh3.googleusercontent.com/d/1DhUFtU57bpewesxc9cqtl7y0r9IGWPN0=w1200",
-    "https://lh3.googleusercontent.com/d/1kBpckyGFQiPLK-pL8BrTzOLZn3Z2Z6PI=w1200",
-    "https://lh3.googleusercontent.com/d/1BV7IG56p5FtaUbouJVOMXiooTI5MvLIK=w1200",
-    "https://lh3.googleusercontent.com/d/1rFP4WjqafsOP7AC1p0UaOUImZHg2qDvr=w1200",
-    "https://lh3.googleusercontent.com/d/1ahMVfGy_qnnTeKxeAeU3o9tQ0oTpzzLh=w1200",
-    "https://lh3.googleusercontent.com/d/1XoIA1uxcZwmEvpSWcmPQGW8qXzWS7oxV=w1200",
-    "https://lh3.googleusercontent.com/d/15ZHgC_0trjr7EdNr2ctpVXVXJOv8qhHZ=w1200",
-    "https://lh3.googleusercontent.com/d/1Lwqkhbv8MZOIBhdtlCKzwWb-bXtHWTHw=w1200",
-    "https://lh3.googleusercontent.com/d/1-7_pDE8gQ7wzQVkWVyNyVZPfkF3HBFEv=w1200",
-    "https://lh3.googleusercontent.com/d/1gstQqqSuf591zLOROeShni4O5Co_JGDj=w1200",
-    "https://lh3.googleusercontent.com/d/1zrzC9Xs0z3Y-iCqzSSjVt59GAPiUaUQx=w1200",
-    "https://lh3.googleusercontent.com/d/1qrILFoRC9iGun01TE7llAe5qCUMpTQpf=w1200",
-    "https://lh3.googleusercontent.com/d/1A3djA2eF3K-MXIpG5EDVhI26arPYor7b=w1200",
-    "https://lh3.googleusercontent.com/d/1p4545wtwrVyJ2ufwHdSbkc1M86qdklqM=w1200",
-    "https://lh3.googleusercontent.com/d/1GLu2cRZBbigX5RA7YDcNzpc6921OK88h=w1200",
-    "https://lh3.googleusercontent.com/d/15IXW7lhLgOmy_vl9V2S-jSXIL525eJ6w=w1200",
-    "https://lh3.googleusercontent.com/d/1Qr2aTQnE8v8F6SWG_7PyYMLzAYPNmbLs=w1200",
-    "https://lh3.googleusercontent.com/d/127lz9lRkwt8qJ2GUGC8aDg384dVdy5Lo=w1200",
-    "https://lh3.googleusercontent.com/d/1Ccfh-2O-e0A3AcVu8yktJODB_goc06pH=w1200",
-    "https://lh3.googleusercontent.com/d/1HjMtNzvNEPj52QYFJzhj0MkoFdoXw1GT=w1200",
-    "https://lh3.googleusercontent.com/d/1nRRh1UPA0k_PqqlTO8cNLVvz576MPrtx=w1200",
-    "https://lh3.googleusercontent.com/d/1n7FXxuXRe-JprBabKPR4nVtdCVQ7jCC2=w1200",
-    "https://lh3.googleusercontent.com/d/1FkhWbrBTAaKQU7_UPi2GHJvmF7NR89TZ=w1200",
-    "https://lh3.googleusercontent.com/d/1N_wbmJr0ZN3AQCXAWJhzJj5KrIzhaH1y=w1200",
-    "https://lh3.googleusercontent.com/d/1Yg1X_Bm5MxLBRT_emFJ16owIdZGLUHl0=w1200",
-    "https://lh3.googleusercontent.com/d/1Emf9vhAb-clx5s7atDLHFteWyOhj7FyO=w1200",
-    "https://lh3.googleusercontent.com/d/1QkjI5u4hXVZz-GYFPLLjOyV5Gaqj6Hov=w1200",
-    "https://lh3.googleusercontent.com/d/1gXqRzWqhw4E0lj3I1C7QbkN8cw_ZZZA_=w1200",
-    "https://lh3.googleusercontent.com/d/1Mjdibge6Asd4iKrsnLJJwh1qduHyrBsu=w1200",
-    "https://lh3.googleusercontent.com/d/1H04HqKQOQTvyMkqPNhc-vdVaWhodHdFO=w1200",
-    "https://lh3.googleusercontent.com/d/1R5BWE-rvbK-LSaYPf9tgdCSYR8YTUw71=w1200",
-    "https://lh3.googleusercontent.com/d/1pDgnMbwIb16p_lQUsjahWgl3gfC_wx9o=w1200",
-    "https://lh3.googleusercontent.com/d/1cs-hYydTNCmFKq4LGO7XVg1Z-9f1COYI=w1200"
-  ];
 
   /* ---- HELPERS ---- */
   // Extract Google Drive file ID from any Drive URL format:
@@ -1237,13 +1194,6 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;bac
   // - thumbnail?id=FILE_ID
   // - file/d/FILE_ID/...
   // - lh3.googleusercontent.com/d/FILE_ID=w1200  ← strip =wNNN suffix
-  function getDriveId(url) {
-    let m = url.match(/[?&]id=([^&"]+)/);
-    if (m) return m[1];
-    // Stop at = to strip size suffix (=w1200) from lh3 URLs
-    m = url.match(/\/d\/([^/?&"=]+)/);
-    return m ? m[1] : null;
-  }
 
 /* ── VIDEO METADATA ───────────────────────────────────────────
      Confirmed Drive video IDs (probed: fail as images → are videos).
@@ -1325,178 +1275,95 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;bac
     el.appendChild(hint);
   }
 
-  /* ── CATEGORY MAP ─────────────────────────────────────────────
-     Asigna cada Drive ID a una categoría:
-       synergy   = Tecnología Synergy / combustibles / lubricantes
-       flotillas = Beneficios flotillas / agentes / app Morgan
-       tienda    = Promociones tienda / snacks / Super Cheap
-       gasolineria = Fotos de la estación / general
-     Puedes añadir más IDs aquí conforme identificas el contenido.
-  ──────────────────────────────────────────────────────────────── */
-  const PHOTO_CATS = {
-    // ── SYNERGY ──────────────────────────────────────────────────
-    '1WABtb0IRvUF46SylHLg_wKH12Bp6ofLy': 'synergy',   // motor/pistones
-    '1XoIA1uxcZwmEvpSWcmPQGW8qXzWS7oxV': 'synergy',   // diesel 45 vs 48 cetanos
-    '1kBpckyGFQiPLK-pL8BrTzOLZn3Z2Z6PI': 'synergy',   // synergy tech
-    '1-7_pDE8gQ7wzQVkWVyNyVZPfkF3HBFEv': 'synergy',   // lubricación
-    '1DhUFtU57bpewesxc9cqtl7y0r9IGWPN0': 'synergy',   // tecnología
-    '1GyrppElVBJerGTzX3vUYVJLqvn1zBVtk': 'synergy',   // synergy
-    '1Ccfh-2O-e0A3AcVu8yktJODB_goc06pH': 'synergy',   // ExxonMobil Synergy+Delvac station
-    '1HjMtNzvNEPj52QYFJzhj0MkoFdoXw1GT': 'synergy',   // motor molecular Synergy
-    // ── FLOTILLAS ─────────────────────────────────────────────────
-    '1t1y1n1SxHAOd0LYdjmfvuPZ34Al7DlKy': 'flotillas', // app/control
-    '1BV7IG56p5FtaUbouJVOMXiooTI5MvLIK': 'flotillas', // despachadores guide
-    '1ahMVfGy_qnnTeKxeAeU3o9tQ0oTpzzLh': 'flotillas', // agentes SGM
-    '1gstQqqSuf591zLOROeShni4O5Co_JGDj': 'flotillas', // beneficios flota
-    '1Lwqkhbv8MZOIBhdtlCKzwWb-bXtHWTHw': 'flotillas', // control flota
-    '15ZHgC_0trjr7EdNr2ctpVXVXJOv8qhHZ': 'flotillas', // flotillas
-    // ── TIENDA ────────────────────────────────────────────────────
-    '1QNxj5qu_ju9gJK4z4GTFWGGXoQUNDTKv': 'tienda',    // donuts/alimentos
-    '1DQZ6ELbxAto8V2t3oeHzOd6kJYFDkM83': 'tienda',    // snacks/bebidas
-    '1rFP4WjqafsOP7AC1p0UaOUImZHg2qDvr': 'tienda',    // Super Cheap promo
-    '1QkjI5u4hXVZz-GYFPLLjOyV5Gaqj6Hov': 'tienda',   // Super Cheap Market logo
-    // ── GASOLINERÍA (default, todos los demás) ────────────────────
-  };
 
-  /* ── CONTENIDO FUERA DE LA GALERÍA PÚBLICA ───────────────────
-     Estos archivos estaban en la galería del sitio pero no son
-     fotos de las instalaciones. Para volver a mostrar alguno,
-     basta con borrar su línea de esta lista.
-       · material interno de capacitación de despachadores
-       · láminas de trabajo (NotebookLM) y logos sueltos
-       · tomas de dron de terreno sin contenido
-       · piezas publicitarias de bebidas alcohólicas
+  /* ── GALERÍA ─────────────────────────────────────────────────
+     Las fotos viven en este mismo servidor (img/galeria/), ya no en
+     Google Drive: no dependen de permisos externos y cargan más rápido.
+     Cada entrada es una foto { s: archivo, c: categoría, a: texto
+     alternativo } o un video de Drive { v: id }, que sigue allá porque
+     alojar video en el hosting saldría caro.
+
+     Lo que quedó fuera de la galería pública al rehacer el sitio:
+     dos láminas de capacitación interna de despachadores, una lámina de
+     trabajo, los logos de Morgan y Super Cheap (ahora en el encabezado y
+     en la sección de tienda), dos tomas de dron sobre un terreno y tres
+     piezas publicitarias de bebidas alcohólicas.
   ──────────────────────────────────────────────────────────── */
-  const EXCLUIR_DE_GALERIA = new Set([
-    '1Yg1X_Bm5MxLBRT_emFJ16owIdZGLUHl0', // guía interna para despachadores
-    '1gXqRzWqhw4E0lj3I1C7QbkN8cw_ZZZA_', // guía interna de atención (SGM)
-    '1rFP4WjqafsOP7AC1p0UaOUImZHg2qDvr', // lámina NotebookLM
-    '1ahMVfGy_qnnTeKxeAeU3o9tQ0oTpzzLh', // logo Gasolineros Morgan (va en el encabezado)
-    '1QkjI5u4hXVZz-GYFPLLjOyV5Gaqj6Hov', // logo Super Cheap Market (va en la sección tienda)
-    '1BV7IG56p5FtaUbouJVOMXiooTI5MvLIK', // dron sobre terreno
-    '1XoIA1uxcZwmEvpSWcmPQGW8qXzWS7oxV', // dron sobre terreno
-    '15IXW7lhLgOmy_vl9V2S-jSXIL525eJ6w', // publicidad de bebidas alcohólicas
-    '1Qr2aTQnE8v8F6SWG_7PyYMLzAYPNmbLs', // publicidad de bebidas alcohólicas
-    '127lz9lRkwt8qJ2GUGC8aDg384dVdy5Lo'  // publicidad de bebidas alcohólicas
-  ]);
-  const visible = src => !EXCLUIR_DE_GALERIA.has(getDriveId(src) || '');
-
-  /* ---- BUILD GALLERY ---- */
-  const grid = document.getElementById('galleryGrid');
-  PHOTOS.filter(visible).forEach((src, i) => {
-    const fileId = getDriveId(src);
-    const videoMeta = fileId ? VIDEO_META[fileId] : null;
-    const cat = videoMeta ? videoMeta.cat
-              : (fileId ? (PHOTO_CATS[fileId] || 'gasolineria') : 'gasolineria');
-    const el = document.createElement('div');
-    el.className = 'g-item';
-    el.dataset.fileId = fileId || '';
-    el.dataset.thumbSrc = src;
-    el.dataset.cat = cat;
-    el.dataset.idx = i;
-
-    if (videoMeta && fileId) {
-      // ── VIDEO ──────────────────────────────────────────────────
-      buildVideoCard(el, fileId, videoMeta);
-    } else {
-      // ── PHOTO ──────────────────────────────────────────────────
-      const img = document.createElement('img');
-      img.src = src;
-      img.alt = `SGM Mobil Metepec ${i+1}`;
-      img.loading = 'lazy';
-      img.onerror = function() { el.remove(); updateFilterCounts(); };
-      el.appendChild(img);
-    }
-
-    el.addEventListener('click', () => {
-      if (fileId) openLB(src, fileId, !!videoMeta);
-    });
-
-    grid.appendChild(el);
-  });
-
-  /* ---- BUILD SHOP GALLERY (Super Cheap Market) ---- */
-  const SHOP_PHOTOS = [
-    "https://lh3.googleusercontent.com/d/1uFeDlpTcwZ8TVZoZEf7HyfhfC8EuaHU4=w1200",
-    "https://lh3.googleusercontent.com/d/1T-876W3c6LIdqLOx6zoT-I-MThGxSFmo=w1200",
-    "https://lh3.googleusercontent.com/d/1OFimzkCjd7OmblDsst3F1qDWFRpFgPhj=w1200",
-    "https://lh3.googleusercontent.com/d/134aaFthY1CMDbj3HOKa0VBxZdoJKhkzU=w1200",
-    "https://lh3.googleusercontent.com/d/1kg2CYtKVpFiX2J-1hnRLb_GQkMUYz4uY=w1200",
-    "https://lh3.googleusercontent.com/d/19M2F1I_OrolVGgzXNxPsDI-iEyY46g4d=w1200",
-    "https://lh3.googleusercontent.com/d/1CNZ7Qfs6tEWS9qp3MaLWMKBh_y81OZrZ=w1200",
-    "https://lh3.googleusercontent.com/d/119UhkdR2FwQP2ta-icVGG2DHKGCD4COE=w1200",
-    "https://lh3.googleusercontent.com/d/1ZFd-uxjPi7rGoVAbVcaivQ3ZmzNcOq4v=w1200",
-    "https://lh3.googleusercontent.com/d/1eu2dUnC7z7tk3uK7fU9ASQZ9PLvQ-Hb4=w1200",
-    "https://lh3.googleusercontent.com/d/14PbZYp_LKTZKQRiUqXKa4Nf0zQIAJKZU=w1200",
-    "https://lh3.googleusercontent.com/d/1Iyl8QfBk2cS1srQffl5S9Zs_0eWcBlaa=w1200",
-    "https://lh3.googleusercontent.com/d/1XtDQGP0NxMFvGYWI6VPtOr7tyu7HLpJL=w1200",
-    "https://lh3.googleusercontent.com/d/1OjIHoyL7pV18NOs0stYTGX7u8RibnVQ0=w1200",
-    "https://lh3.googleusercontent.com/d/1fD7ab1AmVp-25QO__TRbhmEZVRybrnLy=w1200",
-    "https://lh3.googleusercontent.com/d/1NBl2je7YV5-ve1-LZYEneiWcIaC9b3EX=w1200",
-    "https://lh3.googleusercontent.com/d/17mXBhZMHtHqWUkqShBIUuJU90Y1rEIh4=w1200",
-    "https://lh3.googleusercontent.com/d/1KwP7Nf2ryWmlMLMvXmnLAKQ1OXmVe3qU=w1200",
-    "https://lh3.googleusercontent.com/d/1MdovbBIrUZpUHUMaBt8q7JK3Wxf26h5G=w1200",
-    "https://lh3.googleusercontent.com/d/1FmoC-4TFPH2Qn04ctzj2C4H8VkpQUK3L=w1200",
-    "https://lh3.googleusercontent.com/d/18SD29cEkKPEG5jbbshI8XLQxUs22EwpM=w1200",
-    "https://lh3.googleusercontent.com/d/1QhC9j3leb_gsM_lAZGbofKVNgHs2yldF=w1200",
-    "https://lh3.googleusercontent.com/d/1ElZLF0jX499EeF2VfhRkk7ZxRER2BahO=w1200",
-    "https://lh3.googleusercontent.com/d/1IWQaAG8jLEXBuyHT1Agr03oG1zbPAtLV=w1200",
-    "https://lh3.googleusercontent.com/d/1iFLTzE56bKgFGu0NIs-9L8xzSpNy2wvG=w1200",
-    "https://lh3.googleusercontent.com/d/1ZSWpDL1VzA85o4f-BHzfvn8HWCYMPy_6=w1200",
-    "https://lh3.googleusercontent.com/d/1a6aHTtfEIjCaHPYaTw06XasYqWo8rNF3=w1200",
-    "https://lh3.googleusercontent.com/d/1RzbmCOVzRZmgmMJ_w4N_e1gePtgDNsQ2=w1200",
-    "https://lh3.googleusercontent.com/d/1FH-I__KYUThyfjiDSOQKi3m7oFGiwEMT=w1200",
-    "https://lh3.googleusercontent.com/d/1_WFtaRzxHB2m7_4rP5sLqiDuFB9_rOVM=w1200",
-    "https://lh3.googleusercontent.com/d/19YqFf9y5ZxMg9yLUtjMWT-mlcmPmu-qQ=w1200",
-    "https://lh3.googleusercontent.com/d/1oj83GhkPbVhvLMhzdqLJEXOJv9u1m_eH=w1200",
-    "https://lh3.googleusercontent.com/d/1IaWWMerbxgMyx4iV-M43MudZcIZ73Ipb=w1200",
-    "https://lh3.googleusercontent.com/d/1I1aot6Egr0VV142POezPUjC-VyfT7FRp=w1200",
-    "https://lh3.googleusercontent.com/d/1HRAubnHaBOA7i1_EFOsYfvhQM4VySjLS=w1200",
-    "https://lh3.googleusercontent.com/d/1HMhK5HsXMgEfQTrF7V3lrsidz7VakFWV=w1200",
-    "https://lh3.googleusercontent.com/d/1Bx_3IjGynwoxSib95btlzjQmBC85Cq9J=w1200",
-    "https://lh3.googleusercontent.com/d/1l79tyMuU3Om6DEOvig2yX5fvbNbi7m_Y=w1200"
+  const GALERIA = [
+    { s: 'estacion-frente-dia', c: 'gasolineria', a: 'Frente de la estación SGM Mobil Metepec con las islas de carga' },
+    { s: 'patio-camion-techado', c: 'gasolineria', a: 'Patio techado de la estación con un tráiler y un auto cargando' },
+    { s: 'despachador-isla', c: 'tienda', a: 'Agente de servicio atendiendo en la isla de carga' },
+    { s: 'patio-banderines', c: 'synergy', a: 'Patio de maniobras de la estación visto desde la entrada' },
+    { s: 'estacion-atardecer', c: 'tienda', a: 'La estación SGM Mobil Metepec al atardecer' },
+    { s: 'islas-carga-lateral', c: 'flotillas', a: 'Vista lateral de las islas de carga bajo el techo de la estación' },
+    { s: 'agente-cargando-synergy', c: 'synergy', a: 'Agente de servicio cargando combustible Synergy a una unidad' },
+    { s: 'estacion-panoramica', c: 'synergy', a: 'Vista panorámica del techo y las islas de la estación' },
+    { s: 'patio-camioneta-carga', c: 'synergy', a: 'Camioneta de reparto cargando en la estación' },
+    { v: '15ZHgC_0trjr7EdNr2ctpVXVXJOv8qhHZ' },
+    { v: '1Lwqkhbv8MZOIBhdtlCKzwWb-bXtHWTHw' },
+    { v: '1-7_pDE8gQ7wzQVkWVyNyVZPfkF3HBFEv' },
+    { v: '1gstQqqSuf591zLOROeShni4O5Co_JGDj' },
+    { v: '1zrzC9Xs0z3Y-iCqzSSjVt59GAPiUaUQx' },
+    { v: '1qrILFoRC9iGun01TE7llAe5qCUMpTQpf' },
+    { v: '1A3djA2eF3K-MXIpG5EDVhI26arPYor7b' },
+    { v: '1p4545wtwrVyJ2ufwHdSbkc1M86qdklqM' },
+    { v: '1GLu2cRZBbigX5RA7YDcNzpc6921OK88h' },
+    { v: '1Ccfh-2O-e0A3AcVu8yktJODB_goc06pH' },
+    { v: '1HjMtNzvNEPj52QYFJzhj0MkoFdoXw1GT' },
+    { v: '1nRRh1UPA0k_PqqlTO8cNLVvz576MPrtx' },
+    { v: '1n7FXxuXRe-JprBabKPR4nVtdCVQ7jCC2' },
+    { v: '1FkhWbrBTAaKQU7_UPi2GHJvmF7NR89TZ' },
+    { v: '1N_wbmJr0ZN3AQCXAWJhzJj5KrIzhaH1y' },
+    { s: 'diagrama-operacion', c: 'gasolineria', a: 'Esquema de la operación de la estación de servicio' },
+    { s: 'diesel-45-vs-48-cetanos', c: 'gasolineria', a: 'Comparativa entre diésel estándar de 45 cetanos y Mobil ultra bajo azufre de 48' },
+    { s: 'diagrama-servicios', c: 'gasolineria', a: 'Esquema de los servicios disponibles en la estación' },
+    { v: '1R5BWE-rvbK-LSaYPf9tgdCSYR8YTUw71' },
+    { s: 'promocion-flotillas-delvac', c: 'gasolineria', a: 'Promoción del programa de flotillas con descuento de 10 a 30 centavos por litro' },
+    { v: '1cs-hYydTNCmFKq4LGO7XVg1Z-9f1COYI' }
   ];
 
-  /* Se comprueba cada foto antes de ponerla en la página: así la tienda
-     nunca muestra recuadros vacíos cuando un archivo deja de servirse. */
-  const shopGrid = document.getElementById('shopGrid');
-  SHOP_PHOTOS.filter(visible).forEach((src, i) => {
-    const fileId = getDriveId(src);
-    const videoMeta = fileId ? VIDEO_META[fileId] : null;
+  const GALERIA_TIENDA = [
+    { v: '1uFeDlpTcwZ8TVZoZEf7HyfhfC8EuaHU4' },
+    { v: '1T-876W3c6LIdqLOx6zoT-I-MThGxSFmo' },
+    { s: 'lubricantes-mobil-anaquel', c: 'tienda', a: 'Anaquel con lubricantes Mobil en la tienda Super Cheap Market' },
+    { v: '1oj83GhkPbVhvLMhzdqLJEXOJv9u1m_eH' }
+  ];
 
-    const crearTarjeta = () => {
+  /* ---- CONSTRUCCIÓN DE LAS GALERÍAS ---- */
+  function construirGaleria(contenedor, items) {
+    if (!contenedor) return;
+    items.forEach(item => {
       const el = document.createElement('div');
       el.className = 'g-item';
-      el.dataset.fileId = fileId || '';
-      el.dataset.thumbSrc = src;
-      el.dataset.orden = i;
 
-      if (videoMeta && fileId) {
-        buildVideoCard(el, fileId, videoMeta);
+      if (item.v) {
+        // video alojado en Drive
+        const meta = VIDEO_META[item.v] || { tagline: 'SGM Mobil Metepec', cat: 'gasolineria' };
+        el.dataset.fileId = item.v;
+        el.dataset.cat = meta.cat || 'gasolineria';
+        buildVideoCard(el, item.v, meta);
+        el.addEventListener('click', () => openLB(null, item.v, true));
       } else {
+        // foto de este servidor
         const img = document.createElement('img');
-        img.alt = `Interior de Super Cheap Market en SGM Mobil Metepec`;
+        img.src = 'img/galeria/' + item.s + '-640.webp';
+        img.alt = item.a;
         img.loading = 'lazy';
         img.decoding = 'async';
-        img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
-        img.src = src;
+        img.width = 640; img.height = 480;
+        img.onerror = function() { el.remove(); updateFilterCounts(); };
+        el.dataset.cat = item.c;
         el.appendChild(img);
+        el.addEventListener('click', () => openLB('img/galeria/' + item.s + '.webp', null, false));
       }
 
-      el.addEventListener('click', () => { if (fileId) openLB(src, fileId, !!videoMeta); });
+      contenedor.appendChild(el);
+    });
+  }
 
-      // se inserta respetando el orden original de la lista
-      const siguiente = [...shopGrid.children].find(c => Number(c.dataset.orden) > i);
-      shopGrid.insertBefore(el, siguiente || null);
-    };
-
-    if (videoMeta && fileId) { crearTarjeta(); return; }
-
-    const prueba = new Image();
-    prueba.onload  = crearTarjeta;
-    prueba.onerror = () => {};   // la foto no está disponible: no se muestra
-    prueba.src = src;
-  });
+  const grid = document.getElementById('galleryGrid');
+  construirGaleria(grid, GALERIA);
+  construirGaleria(document.getElementById('shopGrid'), GALERIA_TIENDA);
 
   /* ---- GALLERY CATEGORY FILTER ---- */
   function updateFilterCounts() {
@@ -1552,7 +1419,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;bac
       // Use the thumbnail src but request larger size
       lbImg.src = fileId
         ? `https://lh3.googleusercontent.com/d/${fileId}=w1920`
-        : thumbSrc;
+        : thumbSrc;   // las fotos propias ya llegan en tamaño grande
     }
 
     lb.classList.add('open');

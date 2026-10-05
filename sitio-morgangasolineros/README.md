@@ -14,7 +14,7 @@ Sube el contenido de esta carpeta a la raíz pública del dominio
 index.html
 robots.txt
 sitemap.xml
-img/            (carpeta completa — 8 archivos)
+img/            (carpeta completa, incluye img/galeria/)
 ```
 
 ### No borrar del servidor
@@ -59,6 +59,7 @@ Estos archivos ya están en el hosting, no se tocan y **no** deben eliminarse:
 - Formulario de cotización que arma el mensaje de WhatsApp con los datos de la
   flota. No guarda nada en el sitio.
 - La iconografía con emojis se reemplazó por un juego de íconos SVG.
+- Las fotos de la galería se alojan aquí mismo en lugar de Google Drive.
 - Enlace a la app de flotillas apuntando a `appsgm.netlify.app` en lugar de la
   dirección genérica de Netlify.
 
@@ -84,14 +85,22 @@ alguno, basta con borrar su línea de esa lista.
 - Dos tomas de dron sobre un terreno.
 - Tres piezas publicitarias de bebidas alcohólicas.
 
-### Fotos que ya no cargan
+### Las fotos ya viven en este servidor
 
-**34 de las 38 imágenes de la galería de la tienda dejaron de servirse desde
-Google Drive**: devuelven una página HTML en vez de la imagen, así que en el
-sitio anterior aparecían como recuadros grises. El código ahora comprueba cada
-foto antes de ponerla en la página, y el bloque "Dentro de la tienda" se oculta
-solo si quedan menos de tres.
+Las 14 fotos de la galería pasaron de Google Drive a `img/galeria/`, en WebP y en
+dos tamaños: `-640.webp` para la cuadrícula y la versión sin sufijo (1500 px)
+para el visor. Ya no dependen de permisos externos y cargan bastante más rápido.
 
-Para recuperarlas hay que volver a compartir esos archivos en Drive con permiso
-de lectura pública. A mediano plazo conviene alojar las fotos en el propio
-hosting (`img/`) en vez de depender de Drive.
+Los **17 videos siguen en Google Drive**, servidos por iframe: alojar video en el
+hosting consumiría mucho espacio y ancho de banda.
+
+### Fotos que se perdieron
+
+**34 de las 38 imágenes de la galería de la tienda habían dejado de servirse
+desde Google Drive** —devolvían una página HTML en vez de la imagen, así que en
+el sitio anterior aparecían como recuadros grises— y por eso no se pudieron
+migrar. Si quieres recuperarlas, hay que volver a compartir esos archivos en
+Drive con permiso de lectura pública y se agregan a `img/galeria/`.
+
+De la tienda sobrevivió una sola foto (el anaquel de lubricantes Mobil) más tres
+videos.
