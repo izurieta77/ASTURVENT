@@ -6895,11 +6895,12 @@ El despacho quedó guardado localmente y se sincronizará automáticamente cuand
       foto_sello_s2: record.foto_sello_s2 || record.FOTO_SELLO_S2 || ''
     };
     STATE.registros.unshift(localUiRecord);
-    descontarSaldo(record.prefix, record.monto);
+    try { descontarSaldo(record.prefix, record.monto); } catch(e) { console.warn('[SGM] saldo:', e.message); }
     if(STATE.currFolio?.esAutz) {
-      marcarAutorizacionUsada(record.codigo_autz || record.folio, record.agente);
+      try { marcarAutorizacionUsada(record.codigo_autz || record.folio, record.agente); }
+      catch(e) { console.warn('[SGM] autz:', e.message); }
     }
-    applyFilters();
+    try { applyFilters(); } catch(e) { console.warn('[SGM] filtros:', e.message); }
 
     const baseFotos = [firmaUrl, fotoPlacaUrl, fotoTicketUrl];
     const selloFotos = isDEH ? [fotoSE1Url, fotoSE2Url, fotoSS1Url, fotoSS2Url] : [];
@@ -6910,7 +6911,8 @@ El despacho quedó guardado localmente y se sincronizará automáticamente cuand
 
     if(writeResult?.confirmed) {
       if(STATE.currFolio?.valeRef) {
-        marcarValeUsado_(record.folio_vale || record.folio, record.agente, record.id);
+        try { marcarValeUsado_(record.folio_vale || record.folio, record.agente, record.id); }
+        catch(e) { console.warn('[SGM] vale:', e.message); }
       }
       updateProgress(100, 'Guardado confirmado en nube ✅');
       setTimeout(() => {
@@ -6934,9 +6936,12 @@ El despacho quedó guardado localmente y seguirá intentando sincronizarse autom
     }
   } catch(e) {
     record._pending = true;
-    STATE.registros.unshift(record);
-    descontarSaldo(record.prefix, record.monto);
-    applyFilters();
+    const ridErr = String(record.id || record.ID_REGISTRO || '');
+    if(!STATE.registros.some(r => String(r.id || r.ID_REGISTRO || '') === ridErr)) {
+      STATE.registros.unshift(record);
+      try { descontarSaldo(record.prefix, record.monto); } catch(_) {}
+    }
+    try { applyFilters(); } catch(_) {}
     updateProgress(100, 'Error — quedó pendiente local ⚠️');
     showMsg('save-err',
       `⚠️ Error real de envío (${e.message}).
@@ -7657,7 +7662,7 @@ function getSaldoCliente(prefix) {
 function setSaldoCliente(prefix, monto) {
   const saldos = getSaldos();
   saldos[prefix] = parseFloat(monto) || 0;
-  localStorage.setItem('sgm_saldos', JSON.stringify(saldos));
+  storageSetSafe_('sgm_saldos', JSON.stringify(saldos));
   // Sincronizar saldos al Apps Script para persistencia en la nube
   sincronizarSaldos(saldos);
 }
@@ -7848,12 +7853,58 @@ function mergeValesPrecargados_(localVales) {
   return Array.from(byFolio.values());
 }
 
+// ── STORAGE SEGURO (fix "Error real de envío" por quota) ───
+// Cuando localStorage se llena (pendientes viejos con fotos base64),
+// cualquier setItem lanza QuotaExceededError. Eso reventaba el flujo de
+// guardado DESPUÉS de confirmar la escritura en Sheets y el operador veía
+// un falso "Error real de envío". Estos helpers liberan espacio quitando
+// SOLO las fotos embebidas de pendientes viejos (los datos del despacho
+// nunca se tocan) y nunca lanzan.
+function liberarEspacioStorage_() {
+  let freed = 0;
+  try {
+    const items = [];
+    Object.keys(localStorage).forEach(k => {
+      if(!k.startsWith('sgm_pending_')) return;
+      try {
+        const raw = localStorage.getItem(k) || '';
+        const v = JSON.parse(raw || 'null');
+        if(v) items.push({ k, v, size: raw.length, ts: Number(v.TIMESTAMP_MS || v.timestamp || 0) });
+      } catch(_) { try { localStorage.removeItem(k); } catch(__) {} }
+    });
+    items.sort((a, b) => a.ts - b.ts);
+    for(const it of items) {
+      if(freed > 900 * 1024) break;
+      if(it.v && it.v._rawEvidence) {
+        it.v._rawEvidence = null;
+        it.v._evidenciaPurgada = true;
+        try {
+          const nuevo = JSON.stringify(it.v);
+          localStorage.setItem(it.k, nuevo);
+          freed += Math.max(0, it.size - nuevo.length);
+        } catch(_) {}
+      }
+    }
+  } catch(_) {}
+  if(freed) console.warn('[SGM] Storage compactado:', Math.round(freed/1024) + 'KB liberados');
+  return freed;
+}
+
+function storageSetSafe_(key, val) {
+  try { localStorage.setItem(key, val); return true; }
+  catch(e) {
+    liberarEspacioStorage_();
+    try { localStorage.setItem(key, val); return true; }
+    catch(e2) { console.warn('[SGM] Storage lleno; no se guardó', key, '-', e2.message); return false; }
+  }
+}
+
 function getVales() {
   try { return mergeValesPrecargados_(JSON.parse(localStorage.getItem('sgm_vales_v1') || '[]')); }
   catch { return mergeValesPrecargados_([]); }
 }
 function saveVales(vales) {
-  localStorage.setItem('sgm_vales_v1', JSON.stringify(vales));
+  storageSetSafe_('sgm_vales_v1', JSON.stringify(vales));
 }
 
 function selectValeProducto(btn) {
@@ -8303,7 +8354,7 @@ function getAutorizaciones() {
   catch { return []; }
 }
 function saveAutorizaciones(autz) {
-  localStorage.setItem('sgm_autz_v1', JSON.stringify(autz));
+  storageSetSafe_('sgm_autz_v1', JSON.stringify(autz));
 }
 
 function generarCodigoAutz() {
