@@ -3589,6 +3589,10 @@ async function syncPendingRecords() {
         continue;
       }
 
+      // Respaldo de rescate de un guardado en curso: darle 15 min antes de reintentar
+      if(record._draftAt && Date.now() - Number(record._draftAt) < 15 * 60 * 1000) continue;
+      delete record._draftAt;
+
       const isDEH = (record.prefix === 'DEH') || !!record._rawEvidence?.se1 || !!record._rawEvidence?.se2 || !!record._rawEvidence?.ss1 || !!record._rawEvidence?.ss2;
 
       // 1) Si aún trae evidencias crudas, intentar subirlas primero
@@ -3612,14 +3616,17 @@ async function syncPendingRecords() {
         record.FOTO_SELLO_S2 = record.foto_sello_s2 = urls.ss2 || record.FOTO_SELLO_S2 || record.foto_sello_s2 || '';
 
         const complete = evidenceMissingLabels_(urls, isDEH, pendingPref).length === 0;
-        if(!complete) {
-          localStorage.setItem(key, JSON.stringify(record));
+        record._evidenceTries = Number(record._evidenceTries || 0) + 1;
+        if(!complete && record._evidenceTries < 3) {
+          storageSetSafe_(key, JSON.stringify(record));
           console.warn('[SGM] syncPendingRecords: evidencias aún incompletas para', record.id || record.ID_REGISTRO);
           continue;
         }
+        // Tras 3 intentos se envía el despacho de todos modos (foto faltante = "SIN FOTO")
+        if(!complete) markMissingEvidence_(record, urls, isDEH, pendingPref);
 
         delete record._rawEvidence;
-        localStorage.setItem(key, JSON.stringify(record));
+        storageSetSafe_(key, JSON.stringify(record));
       }
 
       // 2) Ya con evidencias preparadas, intentar escritura real
@@ -3628,7 +3635,7 @@ async function syncPendingRecords() {
         localStorage.removeItem(key);
         console.log(`[SGM] Pendiente sincronizado y confirmado: ${record.id || record.ID_REGISTRO}`);
       } else {
-        localStorage.setItem(key, JSON.stringify(record));
+        storageSetSafe_(key, JSON.stringify(record));
       }
     } catch(e) {
       console.warn('[SGM] syncPendingRecords:', e.message);
@@ -4525,6 +4532,21 @@ function evidenceMissingLabels_(bundle, isDEH, prefix = '') {
   return evidenceFieldsRequired_(isDEH, prefix).filter(k => !(bundle && bundle[k])).map(k => labels[k]);
 }
 
+const EVIDENCE_FIELD_MAP_ = {
+  firma: ['FIRMA_CHOFER','firma'], placa: ['FOTO_PLACA','foto_placa'], ticket: ['FOTO_TICKET','foto_ticket'],
+  se1: ['FOTO_SELLO_E1','foto_sello_e1'], se2: ['FOTO_SELLO_E2','foto_sello_e2'],
+  ss1: ['FOTO_SELLO_S1','foto_sello_s1'], ss2: ['FOTO_SELLO_S2','foto_sello_s2']
+};
+function markMissingEvidence_(record, bundle, isDEH, prefix) {
+  evidenceFieldsRequired_(isDEH, prefix).forEach(k => {
+    if(bundle && bundle[k]) return;
+    // Ambos nombres (MAYÚS y minús): el backend los empata a la misma columna
+    // y el último gana, así que deben llevar el mismo valor.
+    (EVIDENCE_FIELD_MAP_[k] || []).forEach(f => { record[f] = 'SIN FOTO'; });
+  });
+  return record;
+}
+
 async function uploadEvidenceBundle_(rid, rawEvidence, isDEH, existingUrls = {}) {
   const out = {
     firma:  existingUrls.firma  || '',
@@ -4848,10 +4870,13 @@ async function writeToSheet(data, options = {}) {
   const skipBackup = !!options.skipBackup;
 
   if(!skipBackup) {
-    try {
-      localStorage.setItem(backupKey, JSON.stringify(data));
-    } catch(e) {
-      console.warn('[SGM] No se pudo guardar backup local:', e.message);
+    if(!storageSetSafe_(backupKey, JSON.stringify(data))) {
+      const lite = {};
+      Object.keys(data).forEach(k => {
+        const v = data[k];
+        lite[k] = (typeof v === 'string' && v.startsWith('data:image/')) ? 'SIN FOTO (memoria llena)' : v;
+      });
+      storageSetSafe_(backupKey, JSON.stringify(lite));
     }
   }
 
@@ -6387,20 +6412,44 @@ function revokePhotoPreview_(tipo) {
   if(STATE.photoPreviewUrls) delete STATE.photoPreviewUrls[tipo];
 }
 
-async function compressImageLowMemoryBlob(file, tipo = 'placa') {
-  const cfg = getPhotoProfile_(tipo);
+// Decodifica la foto YA reducida (createImageBitmap con resize) para no cargar
+// en memoria la imagen completa de 8-48 MP: en Android viejo con poca RAM eso
+// fallaba ("No se pudo leer la imagen") o tumbaba la pestaña al guardar.
+async function decodePhotoLowMemory_(file, maxPx) {
+  if(typeof createImageBitmap === 'function') {
+    try {
+      const bmp = await createImageBitmap(file, { resizeWidth: maxPx, resizeQuality: 'low', imageOrientation: 'from-image' });
+      if(bmp && bmp.width && bmp.height) return { src: bmp, width: bmp.width, height: bmp.height, close: () => { try { bmp.close(); } catch(_) {} } };
+    } catch(_) {}
+    try {
+      const bmp = await createImageBitmap(file);
+      if(bmp && bmp.width && bmp.height) return { src: bmp, width: bmp.width, height: bmp.height, close: () => { try { bmp.close(); } catch(_) {} } };
+    } catch(_) {}
+  }
   const objectUrl = URL.createObjectURL(file);
   const img = new Image();
-
   try {
     await new Promise((resolve, reject) => {
       img.onload = resolve;
       img.onerror = () => reject(new Error('No se pudo leer la imagen'));
       img.src = objectUrl;
     });
+  } catch(e) {
+    URL.revokeObjectURL(objectUrl);
+    throw e;
+  }
+  return { src: img, width: img.naturalWidth || img.width || 1, height: img.naturalHeight || img.height || 1,
+           close: () => { URL.revokeObjectURL(objectUrl); img.src = ''; } };
+}
 
-    let width = img.naturalWidth || img.width || 1;
-    let height = img.naturalHeight || img.height || 1;
+async function compressImageLowMemoryBlob(file, tipo = 'placa') {
+  const cfg = getPhotoProfile_(tipo);
+  const decoded = await decodePhotoLowMemory_(file, cfg.maxPx);
+  const img = decoded.src;
+
+  try {
+    let width = decoded.width || 1;
+    let height = decoded.height || 1;
     const baseScale = Math.min(1, cfg.maxPx / Math.max(width, height, 1));
     width = Math.max(1, Math.round(width * baseScale));
     height = Math.max(1, Math.round(height * baseScale));
@@ -6410,7 +6459,7 @@ async function compressImageLowMemoryBlob(file, tipo = 'placa') {
     let quality = cfg.qStart;
     let blob = null;
 
-    for(let attempt = 0; attempt < 20; attempt++) {
+    for(let attempt = 0; attempt < 10; attempt++) {
       canvas.width = width;
       canvas.height = height;
       ctx.clearRect(0, 0, width, height);
@@ -6422,8 +6471,8 @@ async function compressImageLowMemoryBlob(file, tipo = 'placa') {
       if(quality > cfg.qMin + 0.01) {
         quality = Math.max(cfg.qMin, quality - 0.07);
       } else {
-        width = Math.max(360, Math.round(width * 0.80));
-        height = Math.max(360, Math.round(height * 0.80));
+        width = Math.max(240, Math.round(width * 0.80));
+        height = Math.max(240, Math.round(height * 0.80));
         quality = cfg.qStart;
       }
       await yieldFrame_();
@@ -6435,8 +6484,7 @@ async function compressImageLowMemoryBlob(file, tipo = 'placa') {
     canvas.height = 1;
     return { blob, bytes: blob.size, width, height, previewUrl };
   } finally {
-    URL.revokeObjectURL(objectUrl);
-    img.src = '';
+    decoded.close();
   }
 }
 
@@ -6745,6 +6793,28 @@ async function saveDespacho() {
     ss2:    isDEH ? (existingEvidenceUrls.ss2 ? '' : (STATE.photos?.ss2 || '')) : ''
   };
 
+  // Respaldo de rescate: si el celular se congela o cierra la pestaña mientras
+  // procesa las fotos, el despacho NO se pierde; se envía después sin fotos.
+  const draftKey = `sgm_pending_${rid}`;
+  try {
+    const litrosD = Math.round(litros * 100) / 100, montoD = Math.round(monto * 100) / 100;
+    storageSetSafe_(draftKey, JSON.stringify({
+      FECHA: ahora.toLocaleDateString('es-MX'),
+      HORA: ahora.toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' }),
+      CLIENTE: clienteActual, PREFIX: prefActual, prefix: prefActual, cliente: clienteActual,
+      FOLIO_VALE: esAutz ? '' : (($('f-folio-vale')?.value || '').trim().toUpperCase() || 'DIRECTO-' + rid.slice(-8)),
+      CODIGO_AUTZ: esAutz ? (STATE.currFolio?.folio || '') : '',
+      TIPO_DOCUMENTO: esAutz ? 'AUTZ' : ((($('f-folio-vale')?.value || '').trim()) ? 'VALE' : 'DIRECTO'),
+      TICKET_EGAS: ($('f-ticket-egas')?.value || '').trim().toUpperCase(),
+      CHOFER: chofer, PLACAS: placas, PRODUCTO: PRODUCTOS_VALIDOS.includes(producto) ? producto : 'DIESEL',
+      CANTIDAD: litrosD, MONTO: montoD, PRECIO_UNIT: litros > 0 ? Math.round((monto/litros) * 100) / 100 : '',
+      AGENTE: STATE.session?.nombre || 'AGENTE SGM', ISLA: STATE.session?.isla || '1',
+      ID_REGISTRO: rid, id: rid, ORIGEN: 'APP', TIMESTAMP_MS: ahora.getTime(),
+      FOTO_PLACA: 'SIN FOTO (recuperado)', FOTO_TICKET: 'SIN FOTO (recuperado)', FIRMA_CHOFER: '',
+      _draftAt: Date.now(), _pending: true
+    }));
+  } catch(_) {}
+
   const uploadedEvidence = await prepareEvidenceBundleForAppend_(rawEvidence, isDEH, existingEvidenceUrls);
   const firmaUrl      = uploadedEvidence.firma;
   const fotoPlacaUrl  = uploadedEvidence.placa;
@@ -6852,29 +6922,13 @@ async function saveDespacho() {
     num_sello_s2:   numSelloS2
   };
 
+  // Antes: si una foto no se podía procesar (Android viejo / poca memoria) el
+  // despacho se retenía "localmente" y en la práctica se perdía. Ahora el
+  // despacho SIEMPRE se envía; la foto faltante queda marcada "SIN FOTO".
   const missingEvidence = evidenceMissingLabels_(uploadedEvidence, isDEH, prefActual);
   if(missingEvidence.length) {
-    const pendingRecord = {
-      ...record,
-      _pending: true,
-      _pendingReason: 'EVIDENCE_PREPARE',
-      _rawEvidence: null
-    };
-    try {
-      pendingRecord._rawEvidence = await serializeRawEvidenceForPending_(rawEvidence);
-      localStorage.setItem(`sgm_pending_${record.id || record.ID_REGISTRO}`, JSON.stringify(pendingRecord));
-    } catch(e) {
-      console.warn('[SGM] No se pudo guardar pendiente con evidencias:', e.message);
-    }
-    STATE.registros.unshift(pendingRecord);
-    descontarSaldo(record.prefix, record.monto);
-    applyFilters();
-    updateProgress(100, 'Evidencias pendientes — guardado local ⚠️');
-    showMsg('save-err', `⚠️ No se pudieron preparar todas las evidencias (${missingEvidence.join(', ')}).
-El despacho quedó guardado localmente y se sincronizará automáticamente cuando la conexión responda.`, 'warn');
-    btn.textContent = '✅ CONFIRMAR Y GUARDAR'; btn.disabled = false;
-    setTimeout(() => cancelForm(), 3200);
-    return;
+    markMissingEvidence_(record, uploadedEvidence, isDEH, prefActual);
+    console.warn('[SGM] Despacho enviado sin:', missingEvidence.join(', '));
   }
 
   updateProgress(55, 'Enviando a Google Sheets...');
@@ -6909,6 +6963,9 @@ El despacho quedó guardado localmente y se sincronizará automáticamente cuand
     const totalFotos = allFotos.length;
     const fotosTxt = fotosOk === totalFotos ? `📸 ${totalFotos} evidencias guardadas` : fotosOk > 0 ? `📸 ${fotosOk}/${totalFotos} evidencias guardadas` : '⚠️ Sin evidencias';
 
+    if(writeResult?.confirmed && missingEvidence.length) {
+      setTimeout(() => alert(`✅ Despacho guardado en Google Sheets\n\n⚠️ Sin: ${missingEvidence.join(', ')} (el celular no pudo procesar la foto).`), 100);
+    }
     if(writeResult?.confirmed) {
       if(STATE.currFolio?.valeRef) {
         try { marcarValeUsado_(record.folio_vale || record.folio, record.agente, record.id); }
