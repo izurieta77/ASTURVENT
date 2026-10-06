@@ -4680,6 +4680,19 @@ function sleep_(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// La fecha se manda como TEXTO ("'6/10/2026"): 6 hojas de clientes están en
+// configuración inglés (en_US) y Sheets convertía "6/10/2026" en 10 de junio.
+// El apóstrofo fuerza texto en cualquier configuración y no se ve en la celda.
+// Se aplica a FECHA y fecha porque el backend empata ambos a la misma columna.
+function rowForSheet_(data) {
+  const row = { ...data };
+  ['FECHA', 'fecha'].forEach(k => {
+    const v = row[k];
+    if(typeof v === 'string' && /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(v.trim())) row[k] = "'" + v.trim();
+  });
+  return row;
+}
+
 async function postDispatchViaNetlify_(data) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 60000);
@@ -4693,7 +4706,7 @@ async function postDispatchViaNetlify_(data) {
         payload: {
           action: 'append',
           sheet: C.HOJA_BITACORA,
-          row: data
+          row: rowForSheet_(data)
         }
       }),
       signal: controller.signal
@@ -4720,7 +4733,7 @@ async function postDispatchViaNetlify_(data) {
 async function postDispatchOpaque_(data) {
   await fetch(C.APPS_SCRIPT_URL, {
     method: 'POST',
-    body: JSON.stringify({ action: 'append', sheet: C.HOJA_BITACORA, row: data }),
+    body: JSON.stringify({ action: 'append', sheet: C.HOJA_BITACORA, row: rowForSheet_(data) }),
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     mode: 'no-cors'
   });

@@ -174,17 +174,33 @@ function tdcFilas_(sheet, prefijo, estructura) {
   const data = tdcReintento_(() => sheet.getDataRange().getValues());
   if (data.length <= 1) return [];
   const headers = data[0].map(tdcNorm_);
+  // Todas las columnas candidatas por campo; por fila se toma la primera NO vacía.
+  // (Las pestañas de la app tienen TICKET_EGAS con dato y una columna TICKET
+  //  vacía al final; antes ganaba la vacía y 131 tickets de DELTEX salían en blanco.)
   const idx = estructura.map(col => {
     const nombres = (TDC_ALIAS[tdcNorm_(col)] || [tdcNorm_(col)]);
-    for (const n of nombres) { const i = headers.indexOf(n); if (i !== -1) return i; }
-    return -1;
+    const lista = [];
+    for (const n of nombres) headers.forEach((h, i) => { if (h === n) lista.push(i); });
+    return lista;
   });
+  const iFecha = estructura.indexOf("FECHA");
+  const iTs = headers.indexOf("TIMESTAMP_MS");
   const out = [];
   for (let i = 1; i < data.length; i++) {
     const fila = data[i];
     if (fila[0] !== "" || fila[1] !== "") {
       const nueva = [prefijo];
-      for (let c = 0; c < idx.length; c++) nueva.push(idx[c] !== -1 ? fila[idx[c]] : "");
+      for (let c = 0; c < idx.length; c++) {
+        let v = "";
+        for (const j of idx[c]) { if (fila[j] !== "" && fila[j] !== null) { v = fila[j]; break; } }
+        nueva.push(v);
+      }
+      // Fecha real desde la marca de tiempo de la app (evita fechas invertidas
+      // por hojas en configuración inglés: "6/10" leído como 10 de junio).
+      const ts = iTs !== -1 ? Number(fila[iTs]) : 0;
+      if (iFecha !== -1 && ts > 1e12) {
+        nueva[iFecha + 1] = Utilities.formatDate(new Date(ts), "America/Mexico_City", "dd/MM/yyyy");
+      }
       out.push(nueva);
     }
   }
@@ -212,4 +228,50 @@ function tdcReintento_(fn) {
     try { return fn(); } catch (e) { ult = e; Utilities.sleep(1500 * Math.pow(2, i)); }
   }
   throw ult;
+}
+
+/**
+ * REPARACIÓN ÚNICA de fechas invertidas en Despachos_SGM_APP (hojas en inglés).
+ * Compara cada FECHA contra TIMESTAMP_MS y, si no coinciden, escribe la fecha
+ * real como texto dd/MM/yyyy. Solo toca filas con TIMESTAMP_MS válido.
+ *  1) Ejecuta repararFechasInvertidas_PREVIEW → revisa el registro (no cambia nada).
+ *  2) Ejecuta repararFechasInvertidas_APLICAR → corrige.
+ */
+function repararFechasInvertidas_PREVIEW() { tdcRepararFechas_(false); }
+function repararFechasInvertidas_APLICAR() { tdcRepararFechas_(true); }
+
+function tdcRepararFechas_(aplicar) {
+  const hojas = {
+    DEH: "1N5nIQd3zJDh-_tJidXBjD7VHJSv_7W0FhzF9WimhsOs",
+    DHAR: "1tbtLrtW4m_uGvt7niyU6RtBzAS5vl8yYBB2mNj-YlVw",
+    ECOM: "19Cfn1CKmcqycV1gmByEQCeHSzE9zzn727B4uFoIhgAk",
+    CEMI: "1inNYu9wgaHla2rGa2dt0VG-YNtumx0M7WVYgiMRNBWw",
+    TECNO: "15X4vSljJxS9l3srhsCht4vNUPsPXMbhooPHa6v9InCo",
+    ROG: "1wK8cYumTqCvsYD4-esHwJbLoHxKjnNSO0GdtMxpyEQc"
+  };
+  let total = 0;
+  Object.keys(hojas).forEach(p => {
+    const sh = tdcAbrir_(hojas[p]).getSheetByName("Despachos_SGM_APP");
+    if (!sh) return;
+    const data = sh.getDataRange().getValues();
+    const h = data[0].map(tdcNorm_);
+    const iF = h.indexOf("FECHA"), iT = h.indexOf("TIMESTAMP_MS");
+    if (iF === -1 || iT === -1) return;
+    let n = 0;
+    for (let r = 1; r < data.length; r++) {
+      const ts = Number(data[r][iT]);
+      if (!(ts > 1e12)) continue;
+      const real = Utilities.formatDate(new Date(ts), "America/Mexico_City", "dd/MM/yyyy");
+      const c = data[r][iF];
+      const actual = c instanceof Date ? Utilities.formatDate(c, "America/Mexico_City", "dd/MM/yyyy")
+        : (String(c).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/) ? String(c).replace(/^(\d{1,2})\/(\d{1,2})\/(\d{4}).*$/, (m, d, mo, y) => ("0" + d).slice(-2) + "/" + ("0" + mo).slice(-2) + "/" + y) : "");
+      if (actual === real) continue;
+      n++;
+      if (aplicar) sh.getRange(r + 1, iF + 1).setNumberFormat("@").setValue(real);
+      else if (n <= 5) Logger.log(p + " fila " + (r + 1) + ": " + actual + " -> " + real);
+    }
+    total += n;
+    Logger.log(p + ": " + n + (aplicar ? " fechas corregidas" : " fechas por corregir"));
+  });
+  Logger.log("TOTAL " + (aplicar ? "corregidas: " : "por corregir: ") + total);
 }
