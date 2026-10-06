@@ -1,394 +1,215 @@
 /**
- * ═══════════════════════════════════════════════════════════════
- *  consolidarTorreDeControl — v2 POR LOTES (anti-timeout)
- * ═══════════════════════════════════════════════════════════════
- *  Problema que corrige (correos de Apps Script 10-11/jun/2026):
- *    1) "Exceeded maximum execution time"
- *       La versión anterior consolidaba los 26 clientes en una sola
- *       ejecución y Google corta los triggers a los ~6 minutos.
- *    2) "Service Spreadsheets failed while accessing document with
- *        id 1xLF7C5A6p7dxlXDx7EiuQiR1MtEnwGeWRargX0tL5qE" (THD GIO)
- *       Error transitorio de la API de Sheets al abrir un documento
- *       grande. La versión anterior no reintentaba y abortaba todo.
+ * consolidarTorreDeControl v3 — misma lógica, endurecida
+ * ---------------------------------------------------------------
+ * Qué hace (igual que antes): reconstruye TORRE_DE_CONTROL en la hoja
+ * maestra (THD GIO) juntando los despachos de los 26 clientes, con las
+ * columnas de la hoja "Lavandería" + NOTA CRÉDITO.
  *
- *  Cómo funciona esta versión:
- *    • LockService        → evita dos ejecuciones simultáneas.
- *    • PropertiesService  → guarda cursor de cliente + última fila
- *                           consolidada por cliente (incremental).
- *    • Presupuesto 4.5min → sale limpio antes de que Google corte y
- *                           el siguiente trigger continúa donde quedó.
- *    • Reintentos con backoff (3x) para errores transitorios de
- *                           "Service Spreadsheets failed".
- *    • Incremental        → solo lee filas NUEVAS de cada cliente,
- *                           no todo el histórico en cada corrida.
+ * Qué cambia (5/oct/2026):
+ *  1) Además de la primera pestaña (histórica "Despachos_SGM") lee
+ *     "Despachos_SGM_APP", donde la app escribe desde 2026. La Torre
+ *     llevaba ~5 meses sin datos nuevos por leer solo la histórica.
+ *     Los nombres de columna distintos se mapean con alias.
+ *  2) Filas de la app que ya existan en la histórica (mismo cliente,
+ *     fecha, ticket y litros) no se duplican.
+ *  3) Si un cliente falla (antes: catch vacío y se perdía en silencio),
+ *     se reintenta y, si sigue fallando, se CONSERVAN sus filas
+ *     anteriores de la Torre y queda registrado en el log.
+ *  4) La Torre se sobrescribe sin hacer clear() antes: nunca queda vacía
+ *     si la ejecución se corta a la mitad.
+ *  5) LockService evita dos ejecuciones simultáneas; si se acerca el
+ *     límite de 6 min sale SIN tocar la Torre.
  *
- *  INSTALACIÓN (5 minutos):
- *    1) Abre la hoja de la Torre de Control → Extensiones → Apps Script
- *       (es el proyecto "Proyecto sin título" que manda los correos
- *        de fallo; también lo encuentras en script.google.com →
- *        busca la ejecución fallida de consolidarTorreDeControl).
- *    2) Respalda la función vieja: coméntala o renómbrala a
- *       consolidarTorreDeControl_OLD(). NO la borres todavía.
- *    3) Pega TODO este archivo.
- *    4) Revisa TDC_CFG abajo:
- *         - torreTab: nombre EXACTO de la pestaña consolidada.
- *         - Si la unidad de trabajo vieja era distinta (no copiar
- *           filas sino calcular resúmenes), pega esa lógica dentro
- *           de consolidarTorreDeControlCliente_ y listo: el motor
- *           de lotes/lock/cursor sigue funcionando igual.
- *    5) Ejecuta una vez manualmente consolidarTorreDeControl desde
- *       el editor para autorizar y validar.
- *    6) El trigger de tiempo existente NO se toca: puede quedarse
- *       cada hora; cada corrida avanza el cursor y termina el ciclo
- *       en 1..N corridas según el tamaño.
- *
- *  NO HACER (reglas del diagnóstico previo):
- *    - No borrar triggers sin revisar cuál alimenta el histórico.
- *    - No mover columnas ni renombrar pestañas como parte del fix.
- *    - No tocar los vales impresos de Don Harina.
- * ═══════════════════════════════════════════════════════════════
+ * INSTALAR: en el proyecto donde ya vive la función (archivo 2.gs),
+ * reemplaza TODO el contenido por este archivo. El trigger no se toca.
  */
 
-var TDC_CFG = {
-  // ID del spreadsheet de la Torre de Control. Vacío = el spreadsheet
-  // contenedor de este script (script vinculado).
-  torreSheetId: '',
-
-  // Pestaña destino del consolidado. ⚠ AJUSTA al nombre real.
-  // (Verificado 5/oct/2026: la pestaña vive en la hoja "THD GIO" y se llama
-  //  exactamente TORRE_DE_CONTROL; su última carga real es del 17/04/2026.)
-  torreTab: 'TORRE_DE_CONTROL',
-
-  // Solo se consolida desde esta fecha (cubre el hueco abril→hoy sin
-  // releer años de historia). Formato AAAA-MM-DD.
-  desdeFecha: '2026-04-01',
-
-  // Pestaña fuente en cada sheet de cliente (igual que en index.html).
-  hojaCliente: 'Despachos_SGM_APP',
-
-  // Presupuesto de tiempo por ejecución: 4.5 min (Google corta a ~6).
-  maxMs: 270000,
-
-  // Reintentos ante "Service Spreadsheets failed" (error transitorio).
-  maxReintentos: 3,
-
-  // Claves de estado en PropertiesService.
-  cursorKey: 'SGM_TDC_CURSOR_V2',   // índice del cliente en proceso
-  filasKey:  'SGM_TDC_FILAS_V2',    // JSON {prefix: últimaFilaLeída}
-
-  // Mapa cliente → spreadsheet (espejo de CLIENTE_SHEETS de index.html).
-  clientes: {
-    "TGIO":       { sheetId: "1xLF7C5A6p7dxlXDx7EiuQiR1MtEnwGeWRargX0tL5qE" },
-    "TALF":       { sheetId: "1gvG1BLhADJsfh1HiSrzoLGrOqcOgS-MEnLOn6NPpHb0" },
-    "GAJ":        { sheetId: "1yGDhpQtC_jIH7DbQQZd-oxwsGcS3q6hLM0OJ3lQjYQs" },
-    "DEH":        { sheetId: "1N5nIQd3zJDh-_tJidXBjD7VHJSv_7W0FhzF9WimhsOs" },
-    "DHAR":       { sheetId: "1tbtLrtW4m_uGvt7niyU6RtBzAS5vl8yYBB2mNj-YlVw" },
-    "RECA":       { sheetId: "1x1wxGCjtH7h1mFZBYZH3YC09lUrahE4W6YgwGeQKzMs" },
-    "MAC":        { sheetId: "1EblV9OeZNbv8JV72C2Ebahe9PsPsJCDy7-QU-FzCdqc" },
-    "ATZ":        { sheetId: "110sk87iQtj340XoCRM4kvJOjKPSmRdyhODxJquZkc7A" },
-    "SERI":       { sheetId: "1lyiW86RfNeJhj2cl_3v6z1aeFdTu6u8IrlWgpbnm1y4" },
-    "DEL":        { sheetId: "1J6JmQfbqptBIMxO-hgMNSRFH04vyGkrHaqr6VQ7d-34" },
-    "ECOM":       { sheetId: "19Cfn1CKmcqycV1gmByEQCeHSzE9zzn727B4uFoIhgAk" },
-    "LMAN":       { sheetId: "1p7SIxuTew9zvxsidhLNxKs3TGoPh4cCGMxtMAk1XLXQ" },
-    "LTOL":       { sheetId: "1GtblBP16gAau_rabpTJJ-hWz0c_eKG0rL5aMEmtSlHA" },
-    "PANF":       { sheetId: "1seX3vC7cMd9VGCZxhMeBS8MIlrE97l5VnNG4Zg-zBy4" },
-    "CEMI":       { sheetId: "1inNYu9wgaHla2rGa2dt0VG-YNtumx0M7WVYgiMRNBWw" },
-    "PORTUR":     { sheetId: "139uURtkXpEpiZQTD4ER6VfsWs6mw4nPFKc3Wxb6ly74" },
-    "TECNO":      { sheetId: "15X4vSljJxS9l3srhsCht4vNUPsPXMbhooPHa6v9InCo" },
-    "PUROSON":    { sheetId: "1dc67vnTRdBxjx6hnC6k0u6_58HqHU9A0iSpQV98wPXg" },
-    "AST":        { sheetId: "1avOiXQLECGG6ruy_YTAzngYvht7YZkAwzXsuNPq9NTM" },
-    "GZAR":       { sheetId: "1-130dHpLzOe1ZXU9FtOlJ8D-XmR-A1ph-LkZaVTaIzE" },
-    "GRUV":       { sheetId: "1pKBVQicx7vsc40r0D9CF48jk2DJ9QQcDyBe1jfMNHXU" },
-    "ISM":        { sheetId: "1UtgLrMwPvqMip3wTJ-n_6uOBXwhsIdvft5YfoAVJhSo" },
-    "ISA":        { sheetId: "174YYRnjF118YJtQvUoGCbAy3G2TDk0VfrQv_LsFo7O0" },
-    "ROG":        { sheetId: "1wK8cYumTqCvsYD4-esHwJbLoHxKjnNSO0GdtMxpyEQc" },
-    "VENETIAMOT": { sheetId: "1kmSyj5MJHQTcMKbvO0epfKBvYCZB_PuHjiPyY9l6Vbg" },
-    "TOLUT":      { sheetId: "101Oe1Ud9rzGWIPNoc8b_xIcbR4be4WeqOqjzDyNVlHE" }
-  }
-};
-
-// ═════════════════════════════════════════════════════════════
-//  ENTRY POINT — apunta aquí el trigger de tiempo existente
-// ═════════════════════════════════════════════════════════════
+var TDC_MAX_MS = 5 * 60 * 1000;
 
 function consolidarTorreDeControl() {
-  var lock = LockService.getScriptLock();
-  if (!lock.tryLock(2000)) {
-    Logger.log('TDC: otra ejecución sigue activa, salgo sin hacer nada.');
-    return;
-  }
-
-  var started = Date.now();
-  var props = PropertiesService.getScriptProperties();
-  var prefijos = Object.keys(TDC_CFG.clientes);
-  var cursor = Number(props.getProperty(TDC_CFG.cursorKey) || 0);
-  if (cursor >= prefijos.length) cursor = 0;   // ciclo nuevo
-
-  var procesados = 0, filasNuevas = 0, errores = [];
-
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(2000)) { Logger.log('TDC: otra ejecución activa, salgo.'); return; }
+  const t0 = Date.now();
   try {
-    while (cursor < prefijos.length && (Date.now() - started) < TDC_CFG.maxMs) {
-      var prefix = prefijos[cursor];
-      try {
-        filasNuevas += consolidarTorreDeControlCliente_(prefix);
-        procesados++;
-      } catch (err) {
-        // Un cliente con error no debe tumbar el ciclo completo.
-        errores.push(prefix + ': ' + (err && err.message || err));
-        Logger.log('TDC ERROR ' + prefix + ': ' + (err && err.message || err));
+    const masterId = "1xLF7C5A6p7dxlXDx7EiuQiR1MtEnwGeWRargX0tL5qE";
+    const idLavanderia = "1p7SIxuTew9zvxsidhLNxKs3TGoPh4cCGMxtMAk1XLXQ"; // se usa como mapa de columnas
+
+    const clientes = [
+  {id: "1xLF7C5A6p7dxlXDx7EiuQiR1MtEnwGeWRargX0tL5qE", prefijo: "TGIO"},
+  {id: "1gvG1BLhADJsfh1HiSrzoLGrOqcOgS-MEnLOn6NPpHb0", prefijo: "TALF"},
+  {id: "1yGDhpQtC_jIH7DbQQZd-oxwsGcS3q6hLM0OJ3lQjYQs", prefijo: "GAJ"},
+  {id: "1N5nIQd3zJDh-_tJidXBjD7VHJSv_7W0FhzF9WimhsOs", prefijo: "DEH"},
+  {id: "1tbtLrtW4m_uGvt7niyU6RtBzAS5vl8yYBB2mNj-YlVw", prefijo: "DHAR"},
+  {id: "1x1wxGCjtH7h1mFZBYZH3YC09lUrahE4W6YgwGeQKzMs", prefijo: "RECA"},
+  {id: "1EblV9OeZNbv8JV72C2Ebahe9PsPsJCDy7-QU-FzCdqc", prefijo: "MAC"},
+  {id: "110sk87iQtj340XoCRM4kvJOjKPSmRdyhODxJquZkc7A", prefijo: "ATZ"},
+  {id: "1lyiW86RfNeJhj2cl_3v6z1aeFdTu6u8IrlWgpbnm1y4", prefijo: "SERI"},
+  {id: "1J6JmQfbqptBIMxO-hgMNSRFH04vyGkrHaqr6VQ7d-34", prefijo: "DEL"},
+  {id: "19Cfn1CKmcqycV1gmByEQCeHSzE9zzn727B4uFoIhgAk", prefijo: "ECOM"},
+  {id: "1p7SIxuTew9zvxsidhLNxKs3TGoPh4cCGMxtMAk1XLXQ", prefijo: "LMAN"},
+  {id: "1GtblBP16gAau_rabpTJJ-hWz0c_eKG0rL5aMEmtSlHA", prefijo: "LTOL"},
+  {id: "1seX3vC7cMd9VGCZxhMeBS8MIlrE97l5VnNG4Zg-zBy4", prefijo: "PANF"},
+  {id: "1inNYu9wgaHla2rGa2dt0VG-YNtumx0M7WVYgiMRNBWw", prefijo: "CEMI"},
+  {id: "139uURtkXpEpiZQTD4ER6VfsWs6mw4nPFKc3Wxb6ly74", prefijo: "PORTUR"},
+  {id: "15X4vSljJxS9l3srhsCht4vNUPsPXMbhooPHa6v9InCo", prefijo: "TECNO"},
+  {id: "1dc67vnTRdBxjx6hnC6k0u6_58HqHU9A0iSpQV98wPXg", prefijo: "PUROSON"},
+  {id: "1avOiXQLECGG6ruy_YTAzngYvht7YZkAwzXsuNPq9NTM", prefijo: "AST"},
+  {id: "1-130dHpLzOe1ZXU9FtOlJ8D-XmR-A1ph-LkZaVTaIzE", prefijo: "GZAR"},
+  {id: "1pKBVQicx7vsc40r0D9CF48jk2DJ9QQcDyBe1jfMNHXU", prefijo: "GRUV"},
+  {id: "1UtgLrMwPvqMip3wTJ-n_6uOBXwhsIdvft5YfoAVJhSo", prefijo: "ISM"},
+  {id: "174YYRnjF118YJtQvUoGCbAy3G2TDk0VfrQv_LsFo7O0", prefijo: "ISA"},
+  {id: "1wK8cYumTqCvsYD4-esHwJbLoHxKjnNSO0GdtMxpyEQc", prefijo: "ROG"},
+  {id: "1kmSyj5MJHQTcMKbvO0epfKBvYCZB_PuHjiPyY9l6Vbg", prefijo: "VENETIAMOT"},
+  {id: "101Oe1Ud9rzGWIPNoc8b_xIcbR4be4WeqOqjzDyNVlHE", prefijo: "TOLUT"}
+    ];
+
+    // 1. Estructura maestra (igual que antes)
+    const ssLav = tdcAbrir_(idLavanderia);
+    const sheetLav = ssLav.getSheets()[0];
+    const headersLav = tdcReintento_(() => sheetLav.getRange(1, 1, 1, sheetLav.getMaxColumns()).getValues()[0]);
+    const estructuraMaestra = [];
+    for (let i = 0; i < headersLav.length; i++) {
+      if (String(headersLav[i]).trim() !== "") estructuraMaestra.push(String(headersLav[i]).trim().toUpperCase());
+    }
+    if (!estructuraMaestra.includes("NOTA CRÉDITO")) estructuraMaestra.push("NOTA CRÉDITO");
+
+    // 2. Recolectar clientes
+    const porCliente = {};
+    const fallidos = [];
+    for (const cliente of clientes) {
+      if (Date.now() - t0 > TDC_MAX_MS) {
+        Logger.log('TDC: se acerca el límite de tiempo; salgo SIN modificar la Torre.');
+        return;
       }
-      cursor++;
-      props.setProperty(TDC_CFG.cursorKey, String(cursor));
+      try {
+        porCliente[cliente.prefijo] = tdcLeerCliente_(cliente, estructuraMaestra);
+      } catch (e) {
+        fallidos.push(cliente.prefijo + ': ' + (e && e.message || e));
+      }
     }
 
-    if (cursor >= prefijos.length) {
-      props.deleteProperty(TDC_CFG.cursorKey);
-      Logger.log('TDC: CICLO COMPLETO. clientes=' + procesados +
-                 ' filasNuevas=' + filasNuevas +
-                 (errores.length ? ' errores=' + errores.join(' | ') : ''));
-    } else {
-      Logger.log('TDC: pausa segura por tiempo. cursor=' + cursor + '/' +
-                 prefijos.length + ' clientes=' + procesados +
-                 ' filasNuevas=' + filasNuevas +
-                 '. El siguiente trigger continúa aquí.');
+    // 3. Armar resultado; clientes fallidos conservan sus filas anteriores
+    const masterSS = tdcAbrir_(masterId);
+    let torre = masterSS.getSheetByName("TORRE_DE_CONTROL");
+    if (!torre) torre = masterSS.insertSheet("TORRE_DE_CONTROL");
+    const colsTorre = ["CLIENTE"].concat(estructuraMaestra);
+
+    const todos = [];
+    Object.keys(porCliente).forEach(p => porCliente[p].forEach(f => todos.push(f)));
+    if (fallidos.length) {
+      const prev = torre.getLastRow() > 1
+        ? tdcReintento_(() => torre.getRange(2, 1, torre.getLastRow() - 1, colsTorre.length).getValues()) : [];
+      const fallaron = {};
+      fallidos.forEach(x => fallaron[x.split(':')[0]] = true);
+      prev.forEach(f => { if (fallaron[f[0]]) todos.push(f); });
     }
+
+    // Seguridad: no sobrescribir con un resultado absurdamente chico
+    const filasPrevias = Math.max(0, torre.getLastRow() - 1);
+    if (filasPrevias > 1000 && todos.length < filasPrevias * 0.5) {
+      throw new Error('TDC: resultado (' + todos.length + ' filas) < 50% de la Torre actual (' + filasPrevias + '). No se sobrescribe.');
+    }
+
+    // 4. Escribir SIN clear previo
+    tdcReintento_(() => {
+      torre.getRange(1, 1, 1, colsTorre.length).setValues([colsTorre]).setFontWeight("bold").setBackground("#D9EAD3");
+      torre.setFrozenRows(1);
+      if (todos.length) {
+        if (torre.getMaxRows() < todos.length + 1) torre.insertRowsAfter(torre.getMaxRows(), todos.length + 1 - torre.getMaxRows());
+        torre.getRange(2, 1, todos.length, colsTorre.length).setValues(todos);
+      }
+      const ultima = torre.getLastRow();
+      if (ultima > todos.length + 1) torre.getRange(todos.length + 2, 1, ultima - todos.length - 1, torre.getMaxColumns()).clearContent();
+    });
+
+    PropertiesService.getScriptProperties().setProperty('TDC_LAST_OK', new Date().toISOString());
+    Logger.log('TDC OK: ' + todos.length + ' filas, ' + Math.round((Date.now() - t0) / 1000) + 's' +
+      (fallidos.length ? ' | CLIENTES CON ERROR (filas previas conservadas): ' + fallidos.join(' | ') : ''));
   } finally {
     lock.releaseLock();
   }
 }
 
-// ═════════════════════════════════════════════════════════════
-//  UNIDAD DE TRABAJO POR CLIENTE (incremental)
-//  Si tu lógica vieja hacía algo distinto a copiar filas, pega esa
-//  lógica aquí adentro y conserva el motor de lotes de arriba.
-// ═════════════════════════════════════════════════════════════
+// Lee la pestaña histórica (primera) + Despachos_SGM_APP de un cliente
+function tdcLeerCliente_(cliente, estructura) {
+  const ss = tdcAbrir_(cliente.id);
+  const hojas = ss.getSheets();
+  let historica = hojas[0];
+  if (historica.getName() === "SGM_Saldos" && hojas.length > 1) historica = hojas[1];
+  const app = ss.getSheetByName("Despachos_SGM_APP");
 
-function consolidarTorreDeControlCliente_(prefix) {
-  var cfg = TDC_CFG.clientes[prefix];
-  if (!cfg || !cfg.sheetId) return 0;
+  const filasHist = tdcFilas_(historica, cliente.prefijo, estructura);
+  const vistos = {};
+  filasHist.forEach(f => { vistos[tdcClave_(estructura, f)] = true; });
 
-  var props = PropertiesService.getScriptProperties();
-  var filasIdx = JSON.parse(props.getProperty(TDC_CFG.filasKey) || '{}');
-  var ultimaLeida = Number(filasIdx[prefix] || 1);   // 1 = solo header
-
-  var ssCliente = tdcAbrirConReintento_(cfg.sheetId);
-  var hoja = ssCliente.getSheetByName(cfg.hoja || TDC_CFG.hojaCliente);
-  if (!hoja) {
-    Logger.log('TDC ' + prefix + ': no existe pestaña ' +
-               (cfg.hoja || TDC_CFG.hojaCliente) + ', omitido.');
-    return 0;
+  const out = filasHist.slice();
+  if (app && app.getSheetId() !== historica.getSheetId()) {
+    tdcFilas_(app, cliente.prefijo, estructura).forEach(f => {
+      const k = tdcClave_(estructura, f);
+      if (k && vistos[k]) return;
+      if (k) vistos[k] = true;
+      out.push(f);
+    });
   }
-
-  var lastRow = hoja.getLastRow();
-  var lastCol = hoja.getLastColumn();
-  if (lastRow <= 1 || lastCol === 0) return 0;       // vacío
-  if (ultimaLeida >= lastRow) return 0;              // sin filas nuevas
-
-  var headers = tdcConReintento_(function () {
-    return hoja.getRange(1, 1, 1, lastCol).getValues()[0];
-  });
-  var nuevas = tdcConReintento_(function () {
-    return hoja.getRange(ultimaLeida + 1, 1,
-                         lastRow - ultimaLeida, lastCol).getValues();
-  });
-
-  var torre = tdcHojaTorre_();
-  var escritas = tdcAppendPorHeader_(torre, headers, nuevas, prefix);
-
-  filasIdx[prefix] = lastRow;
-  props.setProperty(TDC_CFG.filasKey, JSON.stringify(filasIdx));
-  return escritas;
+  return out;
 }
 
-// Reintenta una operación de Sheets ante errores transitorios de Google
-// ("server error occurred", "Error code INTERNAL", "Service Spreadsheets
-// failed"): 2s, 4s, 8s y relanza el último si persiste.
-function tdcConReintento_(fn) {
-  var ultimoError;
-  for (var i = 0; i < TDC_CFG.maxReintentos; i++) {
-    try { return fn(); }
-    catch (err) {
-      ultimoError = err;
-      Utilities.sleep(2000 * Math.pow(2, i));
-    }
-  }
-  throw ultimoError;
-}
-
-// Apertura con reintentos: cubre el error transitorio
-// "Service Spreadsheets failed while accessing document with id ..."
-function tdcAbrirConReintento_(sheetId) {
-  var ultimoError;
-  for (var i = 0; i < TDC_CFG.maxReintentos; i++) {
-    try {
-      return SpreadsheetApp.openById(sheetId);
-    } catch (err) {
-      ultimoError = err;
-      Utilities.sleep(2000 * Math.pow(2, i));   // 2s, 4s, 8s
-    }
-  }
-  throw ultimoError;
-}
-
-function tdcHojaTorre_() {
-  var ss = TDC_CFG.torreSheetId
-    ? tdcAbrirConReintento_(TDC_CFG.torreSheetId)
-    : SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName(TDC_CFG.torreTab);
-  if (!sheet) {
-    throw new Error('Pestaña destino no encontrada: "' + TDC_CFG.torreTab +
-                    '". Ajusta TDC_CFG.torreTab al nombre real.');
-  }
-  return sheet;
-}
-
-// Alias: columna de la Torre (normalizada) → columnas posibles del origen.
-// La Torre usa TICKET / FOTO_SELLO_1 / PRECINTO_1_ENTRADA; las hojas de
-// cliente (Despachos_SGM_APP) usan TICKET_EGAS / FOTO_SELLO_E1 / NUM_SELLO_E1.
-var TDC_ALIAS = {
-  cliente:           ['prefix', 'prefijo'],
-  ticket:            ['ticketegas', 'numerodeticket', 'ticket'],
-  placas:            ['placas', 'placa'],
-  cantidad:          ['cantidad', 'litros'],
-  fotoplaca:         ['fotoplaca'],
-  fototicket:        ['fototicket'],
-  precinto1entrada:  ['numselloe1'],
-  precinto2entrada:  ['numselloe2'],
-  precinto1salida:   ['numselloS1'.toLowerCase()],
-  precinto2salida:   ['numselloS2'.toLowerCase()],
-  fotosello1:        ['fotoselloe1'],
-  fotosello2:        ['fotoselloe2'],
-  fotosello3:        ['fotoselloS1'.toLowerCase()],
-  fotosello4:        ['fotoselloS2'.toLowerCase()]
+const TDC_ALIAS = {
+  "TICKET": ["TICKET", "TICKET_EGAS", "NUMERO_DE_TICKET"],
+  "PLACAS": ["PLACAS", "PLACA"],
+  "CANTIDAD": ["CANTIDAD", "LITROS"],
+  "PRECINTO_1_ENTRADA": ["PRECINTO_1_ENTRADA", "NUM_SELLO_E1"],
+  "PRECINTO_2_ENTRADA": ["PRECINTO_2_ENTRADA", "NUM_SELLO_E2"],
+  "PRECINTO_1_SALIDA": ["PRECINTO_1_SALIDA", "NUM_SELLO_S1"],
+  "PRECINTO_2_SALIDA": ["PRECINTO_2_SALIDA", "NUM_SELLO_S2"],
+  "FOTO_SELLO_1": ["FOTO_SELLO_1", "FOTO_SELLO_E1"],
+  "FOTO_SELLO_2": ["FOTO_SELLO_2", "FOTO_SELLO_E2"],
+  "FOTO_SELLO_3": ["FOTO_SELLO_3", "FOTO_SELLO_S1"],
+  "FOTO_SELLO_4": ["FOTO_SELLO_4", "FOTO_SELLO_S2"]
 };
 
-function tdcNorm_(k) {
-  return String(k || '').toLowerCase().replace(/[\s_\-]/g, '');
-}
+function tdcNorm_(h) { return String(h).trim().toUpperCase().replace(/\s+/g, "_"); }
 
-// "5/4/2026" | "05/04/2026" | Date → Date (o null)
-function tdcParseFecha_(v) {
-  if (v instanceof Date && !isNaN(v)) return v;
-  var m = String(v || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (!m) return null;
-  var d = new Date(+m[3], +m[2] - 1, +m[1]);
-  return isNaN(d) ? null : d;
-}
-
-function tdcClave_(cliente, fecha, ticket, extra) {
-  var d = tdcParseFecha_(fecha);
-  var f = d ? (d.getDate() + '/' + (d.getMonth() + 1) + '/' + d.getFullYear()) : String(fecha);
-  var t = String(ticket || '').trim();
-  return String(cliente).toUpperCase() + '|' + f + '|' + (t || extra);
-}
-
-// Claves ya presentes en la Torre (cliente|fecha|ticket), una vez por ejecución.
-var _tdcClavesCache = null;
-function tdcClavesTorre_(torre, headersTorre) {
-  if (_tdcClavesCache) return _tdcClavesCache;
-  var n = headersTorre.map(tdcNorm_);
-  var iC = n.indexOf('cliente'), iF = n.indexOf('fecha'), iT = n.indexOf('ticket');
-  var set = {};
-  var last = torre.getLastRow();
-  if (last > 1 && iC >= 0 && iF >= 0 && iT >= 0) {
-    var datos = tdcConReintento_(function () {
-      return torre.getRange(2, 1, last - 1, Math.max(iC, iF, iT) + 1).getValues();
-    });
-    datos.forEach(function (r) { set[tdcClave_(r[iC], r[iF], r[iT], '')] = true; });
-  }
-  _tdcClavesCache = set;
-  return set;
-}
-
-// Escribe filas mapeando por NOMBRE de header (con alias), solo desde
-// TDC_CFG.desdeFecha y sin duplicar lo que la Torre ya tiene.
-function tdcAppendPorHeader_(torre, headersOrigen, filas, prefix) {
-  var lastCol = torre.getLastColumn();
-  if (lastCol === 0) {
-    torre.getRange(1, 1, 1, headersOrigen.length).setValues([headersOrigen]);
-    lastCol = headersOrigen.length;
-  }
-  var headersTorre = torre.getRange(1, 1, 1, lastCol).getValues()[0];
-
-  var idxOrigen = {};
-  headersOrigen.forEach(function (h, i) { idxOrigen[tdcNorm_(h)] = i; });
-  var valor = function (fila, nombres) {
-    for (var k = 0; k < nombres.length; k++) {
-      var ix = idxOrigen[nombres[k]];
-      if (ix !== undefined && fila[ix] !== '' && fila[ix] !== null) return fila[ix];
+function tdcFilas_(sheet, prefijo, estructura) {
+  const data = tdcReintento_(() => sheet.getDataRange().getValues());
+  if (data.length <= 1) return [];
+  const headers = data[0].map(tdcNorm_);
+  const idx = estructura.map(col => {
+    const nombres = (TDC_ALIAS[tdcNorm_(col)] || [tdcNorm_(col)]);
+    for (const n of nombres) { const i = headers.indexOf(n); if (i !== -1) return i; }
+    return -1;
+  });
+  const out = [];
+  for (let i = 1; i < data.length; i++) {
+    const fila = data[i];
+    if (fila[0] !== "" || fila[1] !== "") {
+      const nueva = [prefijo];
+      for (let c = 0; c < idx.length; c++) nueva.push(idx[c] !== -1 ? fila[idx[c]] : "");
+      out.push(nueva);
     }
-    return '';
-  };
-
-  var piso = tdcParseFecha_(TDC_CFG.desdeFecha.split('-').reverse().join('/'));
-  var vistas = tdcClavesTorre_(torre, headersTorre);
-  var out = [];
-
-  filas.forEach(function (fila) {
-    var fecha = valor(fila, ['fecha']);
-    var fd = tdcParseFecha_(fecha);
-    if (!fd || (piso && fd < piso)) return;                 // sin fecha válida / anterior al piso
-    var cliente = valor(fila, TDC_ALIAS.cliente) || prefix;
-    var ticket = valor(fila, TDC_ALIAS.ticket);
-    var clave = tdcClave_(cliente, fecha, ticket,
-      valor(fila, ['hora']) + '#' + valor(fila, TDC_ALIAS.placas) + '#' + valor(fila, TDC_ALIAS.cantidad));
-    if (vistas[clave]) return;                              // ya está en la Torre
-    vistas[clave] = true;
-
-    out.push(headersTorre.map(function (h) {
-      var nh = tdcNorm_(h);
-      return valor(fila, (TDC_ALIAS[nh] || []).concat([nh]));
-    }));
-  });
-
-  if (!out.length) return 0;
-  var destino = torre.getLastRow() + 1;
-  tdcConReintento_(function () {
-    torre.getRange(destino, 1, out.length, headersTorre.length).setValues(out);
-  });
-  return out.length;
+  }
+  return out;
 }
 
-// ═════════════════════════════════════════════════════════════
-//  UTILIDADES MANUALES
-// ═════════════════════════════════════════════════════════════
-
-// Borra cursores y vuelve a empezar el ciclo desde cero.
-// ⚠ NO borra datos de la Torre; solo el estado de avance. Si la Torre
-// ya tiene filas y reinicias, se pueden duplicar: úsalo solo tras
-// limpiar la pestaña destino o en la primera instalación.
-function tdcReset() {
-  var props = PropertiesService.getScriptProperties();
-  props.deleteProperty(TDC_CFG.cursorKey);
-  props.deleteProperty(TDC_CFG.filasKey);
-  Logger.log('TDC: estado reiniciado.');
+// Clave para no duplicar: cliente|d/m/aaaa|ticket|litros (vacía si no hay ticket)
+function tdcClave_(estructura, f) {
+  const iF = estructura.indexOf("FECHA") + 1, iT = estructura.indexOf("TICKET") + 1, iC = estructura.indexOf("CANTIDAD") + 1;
+  const ticket = iT > 0 ? String(f[iT]).trim() : "";
+  if (!ticket) return "";
+  let fecha = iF > 0 ? f[iF] : "";
+  if (fecha instanceof Date) fecha = fecha.getDate() + "/" + (fecha.getMonth() + 1) + "/" + fecha.getFullYear();
+  else { const m = String(fecha).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); fecha = m ? (+m[1]) + "/" + (+m[2]) + "/" + m[3] : String(fecha); }
+  const lit = iC > 0 ? Number(String(f[iC]).replace(",", ".")) : "";
+  return f[0] + "|" + fecha + "|" + ticket + "|" + (isNaN(lit) ? "" : Math.round(lit * 10) / 10);
 }
 
-// Marca todo el histórico actual como "ya consolidado" sin copiarlo.
-// Útil en la primera instalación si la Torre YA contiene el histórico:
-// a partir de aquí solo se consolidará lo nuevo.
-function tdcMarcarHistoricoComoConsolidado() {
-  var props = PropertiesService.getScriptProperties();
-  var filasIdx = {};
-  Object.keys(TDC_CFG.clientes).forEach(function (prefix) {
-    try {
-      var cfg = TDC_CFG.clientes[prefix];
-      var hoja = tdcAbrirConReintento_(cfg.sheetId)
-        .getSheetByName(cfg.hoja || TDC_CFG.hojaCliente);
-      filasIdx[prefix] = hoja ? hoja.getLastRow() : 1;
-    } catch (e) {
-      filasIdx[prefix] = 1;
-    }
-  });
-  props.setProperty(TDC_CFG.filasKey, JSON.stringify(filasIdx));
-  props.deleteProperty(TDC_CFG.cursorKey);
-  Logger.log('TDC: histórico marcado como consolidado: ' +
-             JSON.stringify(filasIdx));
-}
+function tdcAbrir_(id) { return tdcReintento_(() => SpreadsheetApp.openById(id)); }
 
-// Muestra el estado actual del avance en el log.
-function tdcEstado() {
-  var props = PropertiesService.getScriptProperties();
-  Logger.log('cursor=' + (props.getProperty(TDC_CFG.cursorKey) || '(ciclo completo)'));
-  Logger.log('filas=' + (props.getProperty(TDC_CFG.filasKey) || '{}'));
+// Reintenta errores transitorios de Google (INTERNAL, server error, Service Spreadsheets failed)
+function tdcReintento_(fn) {
+  let ult;
+  for (let i = 0; i < 3; i++) {
+    try { return fn(); } catch (e) { ult = e; Utilities.sleep(1500 * Math.pow(2, i)); }
+  }
+  throw ult;
 }
