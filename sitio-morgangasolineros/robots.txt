@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /cgi-bin/
+Disallow: /private/
+Disallow: /secure/
+Disallow: /databases/
+Disallow: /logs/
+Disallow: /enviar.php
+Disallow: /gemini-proxy.php
+
+Sitemap: https://morgangasolineros.com.mx/sitemap.xml
